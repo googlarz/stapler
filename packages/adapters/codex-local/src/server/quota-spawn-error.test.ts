@@ -1,6 +1,9 @@
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { ChildProcess } from "node:child_process";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 const { mockSpawn } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
@@ -34,8 +37,33 @@ function createChildThatErrorsOnMicrotask(err: Error): ChildProcess {
 }
 
 describe("CodexRpcClient spawn failures", () => {
+  let previousCodexHome: string | undefined;
+  let isolatedCodexHome: string | undefined;
+
   beforeEach(() => {
     mockSpawn.mockReset();
+    // After the RPC path fails, getQuotaWindows() calls readCodexToken() which
+    // reads $CODEX_HOME/auth.json (default ~/.codex). Point CODEX_HOME at an
+    // empty temp directory so we never hit real host auth or the WHAM network.
+    previousCodexHome = process.env.CODEX_HOME;
+    isolatedCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-codex-spawn-test-"));
+    process.env.CODEX_HOME = isolatedCodexHome;
+  });
+
+  afterEach(() => {
+    if (isolatedCodexHome) {
+      try {
+        fs.rmSync(isolatedCodexHome, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+      isolatedCodexHome = undefined;
+    }
+    if (previousCodexHome === undefined) {
+      delete process.env.CODEX_HOME;
+    } else {
+      process.env.CODEX_HOME = previousCodexHome;
+    }
   });
 
   it("does not crash the process when codex is missing; getQuotaWindows returns ok: false", async () => {
