@@ -739,6 +739,11 @@ function shouldRequireIssueCommentForWake(
     wakeReason === "execution_approval_requested" ||
     wakeReason === "execution_changes_requested"
   );
+export function shouldUseAgentRuntimeSessionForTaskScope(input: {
+  taskKey: string | null | undefined;
+  resetTaskSession: boolean;
+}) {
+  return !readNonEmptyString(input.taskKey) && !input.resetTaskSession;
 }
 
 export function formatRuntimeWorkspaceWarningLog(warning: string) {
@@ -3077,17 +3082,22 @@ export function heartbeatService(db: Db) {
     if (executionWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = executionWorkspace.projectId;
     }
-    const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
+    const allowAgentRuntimeSessionFallback = shouldUseAgentRuntimeSessionForTaskScope({
+      taskKey,
+      resetTaskSession,
+    });
+    const runtimeSessionParamsForFallback = allowAgentRuntimeSessionFallback ? runtimeSessionParams : null;
+    const runtimeSessionFallback = allowAgentRuntimeSessionFallback ? runtime.sessionId : null;
     let previousSessionDisplayId = truncateDisplayId(
       explicitResumeSessionDisplayId ??
         taskSessionForRun?.sessionDisplayId ??
-        (sessionCodec.getDisplayId ? sessionCodec.getDisplayId(runtimeSessionParams) : null) ??
-        readNonEmptyString(runtimeSessionParams?.sessionId) ??
+        (sessionCodec.getDisplayId ? sessionCodec.getDisplayId(runtimeSessionParamsForFallback) : null) ??
+        readNonEmptyString(runtimeSessionParamsForFallback?.sessionId) ??
         runtimeSessionFallback,
     );
     let runtimeSessionIdForAdapter =
-      readNonEmptyString(runtimeSessionParams?.sessionId) ?? runtimeSessionFallback;
-    let runtimeSessionParamsForAdapter = runtimeSessionParams;
+      readNonEmptyString(runtimeSessionParamsForFallback?.sessionId) ?? runtimeSessionFallback;
+    let runtimeSessionParamsForAdapter = runtimeSessionParamsForFallback;
 
     const sessionCompaction = await evaluateSessionCompaction({
       agent,
