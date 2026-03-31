@@ -7,13 +7,12 @@ import {
   asNumber,
   parseObject,
   buildPaperclipEnv,
-  buildInvocationEnvForLogs,
+  redactEnvForLogs,
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePaperclipSkillSymlink,
   ensurePathInEnv,
   readPaperclipRuntimeSkillEntries,
-  resolveCommandForLogs,
   resolvePaperclipDesiredSkillNames,
   renderTemplate,
   renderPaperclipWakePrompt,
@@ -380,12 +379,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const billingType = resolveCodexBillingType(effectiveEnv);
   const runtimeEnv = ensurePathInEnv(effectiveEnv);
   await ensureCommandResolvable(command, cwd, runtimeEnv);
-  const resolvedCommand = await resolveCommandForLogs(command, cwd, runtimeEnv);
-  const loggedEnv = buildInvocationEnvForLogs(env, {
-    runtimeEnv,
-    includeRuntimeKeys: ["HOME"],
-    resolvedCommand,
-  });
 
   const timeoutSec = asNumber(config.timeoutSec, 0);
   const graceSec = asNumber(config.graceSec, 20);
@@ -494,14 +487,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (onMeta) {
       await onMeta({
         adapterType: "codex_local",
-        command: resolvedCommand,
+        command,
         cwd,
         commandNotes: commandNotesWithFastMode,
         commandArgs: args.map((value, idx) => {
           if (idx === args.length - 1 && value !== "-") return `<prompt ${prompt.length} chars>`;
           return value;
         }),
-        env: loggedEnv,
+        env: redactEnvForLogs(env),
         prompt,
         promptMetrics,
         context,
@@ -550,7 +543,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       };
     }
 
-    const resolvedSessionId = attempt.parsed.sessionId ?? runtimeSessionId ?? runtime.sessionId ?? null;
+    const fallbackSessionId =
+      clearSessionOnMissingSession
+        ? null
+        : (runtimeSessionId || runtime.sessionId || null);
+    const resolvedSessionId = attempt.parsed.sessionId ?? fallbackSessionId;
     const resolvedSessionParams = resolvedSessionId
       ? ({
         sessionId: resolvedSessionId,
