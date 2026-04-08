@@ -4454,6 +4454,31 @@ export function heartbeatService(db: Db) {
       await releaseIssueExecutionAndPromote(run);
     }
 
+    const now = new Date();
+    const pendingWakeups = await db
+      .select({ id: agentWakeupRequests.id })
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.agentId, agentId),
+          inArray(agentWakeupRequests.status, ["queued", "deferred_issue_execution"]),
+          sql`${agentWakeupRequests.runId} is null`,
+        ),
+      )
+      .then((rows) => rows.map((row) => row.id));
+
+    if (pendingWakeups.length > 0) {
+      await db
+        .update(agentWakeupRequests)
+        .set({
+          status: "cancelled",
+          finishedAt: now,
+          error: reason,
+          updatedAt: now,
+        })
+        .where(inArray(agentWakeupRequests.id, pendingWakeups));
+    }
+
     return runs.length;
   }
 
