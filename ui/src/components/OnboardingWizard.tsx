@@ -39,6 +39,7 @@ import {
   DEFAULT_CODEX_LOCAL_MODEL
 } from "@paperclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
+import { DEFAULT_OLLAMA_MODEL } from "@paperclipai/adapter-ollama-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import { resolveRouteOnboardingOptions } from "../lib/onboarding-route";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
@@ -239,6 +240,7 @@ export function OnboardingWizard() {
     pi_local: "pi",
     cursor: "agent",
     opencode_local: "opencode",
+    ollama_local: "ollama",
   };
   const effectiveAdapterCommand =
     command.trim() ||
@@ -341,6 +343,8 @@ export function OnboardingWizard() {
             ? model || DEFAULT_GEMINI_LOCAL_MODEL
           : adapterType === "cursor"
           ? model || DEFAULT_CURSOR_LOCAL_MODEL
+          : adapterType === "ollama_local"
+          ? model || DEFAULT_OLLAMA_MODEL
           : model,
       command,
       args,
