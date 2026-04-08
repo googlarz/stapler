@@ -344,7 +344,6 @@ describe("shouldResetTaskSessionForWake", () => {
   });
 });
 
-<<<<<<< HEAD
 describe("deriveTaskKeyWithHeartbeatFallback", () => {
   it("returns explicit taskKey when present", () => {
     expect(deriveTaskKeyWithHeartbeatFallback({ taskKey: "issue-123" }, null)).toBe("issue-123");
