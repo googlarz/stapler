@@ -4,6 +4,7 @@ import pino from "pino";
 import { pinoHttp } from "pino-http";
 import { readConfigFile } from "../config-file.js";
 import { resolveDefaultLogsDir, resolveHomeAwarePath } from "../home-paths.js";
+import { sanitizeRecord } from "../redaction.js";
 
 function resolveServerLogDir(): string {
   const envOverride = process.env.PAPERCLIP_LOG_DIR?.trim();
@@ -65,21 +66,21 @@ export const httpLogger = pinoHttp({
       if (ctx) {
         return {
           errorContext: ctx.error,
-          reqBody: ctx.reqBody,
-          reqParams: ctx.reqParams,
-          reqQuery: ctx.reqQuery,
+          reqBody: ctx.reqBody && typeof ctx.reqBody === "object" ? sanitizeRecord(ctx.reqBody) : ctx.reqBody,
+          reqParams: ctx.reqParams && typeof ctx.reqParams === "object" ? sanitizeRecord(ctx.reqParams) : ctx.reqParams,
+          reqQuery: ctx.reqQuery && typeof ctx.reqQuery === "object" ? sanitizeRecord(ctx.reqQuery) : ctx.reqQuery,
         };
       }
       const props: Record<string, unknown> = {};
       const { body, params, query } = req as any;
       if (body && typeof body === "object" && Object.keys(body).length > 0) {
-        props.reqBody = body;
+        props.reqBody = sanitizeRecord(body);
       }
       if (params && typeof params === "object" && Object.keys(params).length > 0) {
-        props.reqParams = params;
+        props.reqParams = sanitizeRecord(params);
       }
       if (query && typeof query === "object" && Object.keys(query).length > 0) {
-        props.reqQuery = query;
+        props.reqQuery = sanitizeRecord(query);
       }
       if ((req as any).route?.path) {
         props.routePath = (req as any).route.path;
