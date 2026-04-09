@@ -1,3 +1,6 @@
+/** Default timeout (seconds) for adapters that don't specify one. Prevents indefinite hangs (#3173). */
+export const DEFAULT_ADAPTER_TIMEOUT_SEC = 1800;
+
 export const COMPANY_STATUSES = ["active", "paused", "archived"] as const;
 export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
 

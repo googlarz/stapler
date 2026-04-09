@@ -1,3 +1,4 @@
+import { DEFAULT_ADAPTER_TIMEOUT_SEC } from "@paperclipai/shared";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "../types.js";
 import {
   asString,
@@ -31,7 +32,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     resolvedCommand,
   });
 
-  const timeoutSec = asNumber(config.timeoutSec, 0);
+  // timeoutSec: undefined/missing → default (prevents hangs, #3173).
+  //             explicit 0        → unlimited (preserves existing semantics).
+  const timeoutSec =
+    config.timeoutSec === undefined || config.timeoutSec === null
+      ? DEFAULT_ADAPTER_TIMEOUT_SEC
+      : asNumber(config.timeoutSec, DEFAULT_ADAPTER_TIMEOUT_SEC);
   const graceSec = asNumber(config.graceSec, 15);
 
   if (onMeta) {

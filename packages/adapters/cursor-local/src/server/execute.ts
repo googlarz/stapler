@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+/** Default timeout when adapter config specifies 0 or omits the value (#3173). */
+const DEFAULT_ADAPTER_TIMEOUT_SEC = 1800;
 import { inferOpenAiCompatibleBiller, type AdapterExecutionContext, type AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import {
   asString,
@@ -285,7 +287,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     resolvedCommand,
   });
 
-  const timeoutSec = asNumber(config.timeoutSec, 0);
+  // timeoutSec: undefined/missing → default (prevents hangs, #3173).
+  //             explicit 0        → unlimited (preserves existing semantics).
+  const timeoutSec =
+    config.timeoutSec === undefined || config.timeoutSec === null
+      ? DEFAULT_ADAPTER_TIMEOUT_SEC
+      : asNumber(config.timeoutSec, DEFAULT_ADAPTER_TIMEOUT_SEC);
   const graceSec = asNumber(config.graceSec, 20);
   const extraArgs = (() => {
     const fromExtraArgs = asStringArray(config.extraArgs);
