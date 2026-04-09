@@ -73,6 +73,10 @@ export function OnboardingWizard() {
   const location = useLocation();
   const { companyPrefix } = useParams<{ companyPrefix?: string }>();
   const [routeDismissed, setRouteDismissed] = useState(false);
+  // Keep wizard open during the launch flow (steps 3-4) even if the route
+  // changes after company creation causes resolveRouteOnboardingOptions to
+  // return null (#2304 P1).
+  const [launchInProgress, setLaunchInProgress] = useState(false);
 
   // Sync disabled adapter types from server so adapter grid filters them out
   const disabledTypes = useDisabledAdaptersSync();
@@ -97,6 +101,7 @@ export function OnboardingWizard() {
 
   const effectiveOnboardingOpen =
     onboardingOpen ||
+    launchInProgress ||
     ((routeOnboardingOptions !== null || routeOnboardingSnapshot !== null) &&
       !routeDismissed);
   const effectiveOnboardingOptions = onboardingOpen
@@ -546,6 +551,7 @@ export function OnboardingWizard() {
 
   async function handleLaunch() {
     if (!createdCompanyId || !createdAgentId) return;
+    setLaunchInProgress(true);
     setLoading(true);
     setError(null);
     try {
@@ -600,6 +606,7 @@ export function OnboardingWizard() {
       setError(err instanceof Error ? err.message : "Failed to create task");
     } finally {
       setLoading(false);
+      setLaunchInProgress(false);
     }
   }
 
