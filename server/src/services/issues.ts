@@ -1607,6 +1607,28 @@ export function issueService(db: Db) {
       }
       if (issueData.assigneeAgentId) {
         await assertAssignableAgent(existing.companyId, issueData.assigneeAgentId);
+      } else if (
+        nextAssigneeAgentId &&
+        (existing.status === "done" || existing.status === "cancelled") &&
+        issueData.status &&
+        issueData.status !== "done" &&
+        issueData.status !== "cancelled"
+      ) {
+        // Re-opening a closed issue: check whether the inherited assignee is
+        // still assignable. If terminated or pending approval, clear it instead
+        // of blocking the re-open with a 409 (#3167).
+        const inheritedAgent = await db
+          .select({ status: agents.status })
+          .from(agents)
+          .where(eq(agents.id, nextAssigneeAgentId))
+          .then((rows) => rows[0] ?? null);
+        if (!inheritedAgent || inheritedAgent.status === "terminated" || inheritedAgent.status === "pending_approval") {
+          patch.assigneeAgentId = null;
+          // If re-opening to in_progress, downgrade to todo since there's no valid assignee
+          if (issueData.status === "in_progress") {
+            patch.status = "todo";
+          }
+        }
       }
       if (issueData.assigneeUserId) {
         await assertAssignableUser(existing.companyId, issueData.assigneeUserId);
@@ -1623,7 +1645,7 @@ export function issueService(db: Db) {
         await assertValidExecutionWorkspace(existing.companyId, nextProjectId, nextExecutionWorkspaceId);
       }
 
-      applyStatusSideEffects(issueData.status, patch);
+      applyStatusSideEffects(patch.status ?? issueData.status, patch);
       if (issueData.status && issueData.status !== "done") {
         patch.completedAt = null;
       }
@@ -1980,6 +2002,7 @@ export function issueService(db: Db) {
           status: "todo",
           assigneeAgentId: null,
           checkoutRunId: null,
+          executionRunId: null,
           updatedAt: new Date(),
         })
         .where(eq(issues.id, id))
