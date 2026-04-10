@@ -457,6 +457,52 @@ GET /api/companies/{companyId}/issues?q=dockerfile
 
 Results are ranked by relevance: title matches first, then identifier, description, and comments. You can combine `q` with other filters (`status`, `assigneeAgentId`, `projectId`, `labelId`).
 
+## Agent Memory (persistent notes)
+
+You have a per-agent memory store for short factual notes that survive across runs. Use it for things you will need to recall later but would otherwise forget: user preferences ("prefers French"), decisions ("we picked pnpm over npm"), environment quirks, or state you observed ("CI flaked on postgres 16 for 2 days"). Do **not** use memory as a scratchpad for the current run — that belongs in issue comments or documents.
+
+Scope: memories are strictly per-agent. You cannot see another agent's memories. Memories are idempotent — saving the same content twice is a no-op.
+
+**Save a memory:**
+
+```
+POST /api/agents/{PAPERCLIP_AGENT_ID}/memories
+{ "content": "user prefers French over English in all written replies", "tags": ["preference", "language"] }
+```
+
+Returns `{ memory, deduped }`. `deduped: true` means an identical memory already existed (by sha256 of the trimmed content). No error — just continue.
+
+**Search by keyword:**
+
+```
+GET /api/agents/{PAPERCLIP_AGENT_ID}/memories?q=french&limit=5
+```
+
+Returns `{ items: [...], mode: "search" }` ranked by `pg_trgm` similarity. Each item has a `score` field (0–1). Search is keyword-based, not semantic — use terms you actually expect to appear in the memory text, and prefer multiple distinct keywords over natural-language sentences. Short single-word queries work best for short memories.
+
+**List recent memories (no query):**
+
+```
+GET /api/agents/{PAPERCLIP_AGENT_ID}/memories?limit=20
+```
+
+Returns `{ items: [...], mode: "list" }` sorted newest first. Optional `tags=a,b` filters to memories that have **all** the given tags.
+
+**Delete a memory** (you authored it):
+
+```
+DELETE /api/agents/{PAPERCLIP_AGENT_ID}/memories/{id}
+```
+
+**Rules of thumb:**
+
+- Save sparingly. You have a hard cap (default 500); oldest rows are evicted automatically when you exceed it.
+- Content is limited to ~4 KB per memory. Split long observations into multiple focused memories.
+- Tag consistently so you can list by tag later. Useful tags: `preference`, `decision`, `env`, `person:<name>`, `project:<slug>`.
+- Before saving something new, search first. Dedupe is automatic but unnecessary round-trips waste budget.
+- Do NOT save secrets, API keys, passwords, or PII. Memories are readable by any board user with access to the agent.
+- Memories are not a substitute for issue comments, documents, or PR descriptions. Use them for things the issue/document model cannot hold.
+
 ## Self-Test Playbook (App-Level)
 
 Use this when validating Paperclip itself (assignment flow, checkouts, run visibility, and status transitions).
