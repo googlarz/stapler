@@ -98,23 +98,25 @@ export function goalRoutes(db: Db) {
 
     const issueSvc = issueService(db);
     const verificationSvc = goalVerificationService(db, issueSvc);
+    const actor = getActorInfo(req);
+    // The service writes its own goal.verification_requested audit row
+    // with the full state transition context on the `created` path —
+    // we pass the actor through so the entry is attributed to the
+    // board user / agent that invoked the manual retrigger rather than
+    // to the `system` stand-in used by the auto-fire hook path.
     const result = await verificationSvc.maybeCreateVerificationIssue(
       existing.companyId,
       existing.id,
-      { manualTrigger: true },
+      {
+        manualTrigger: true,
+        actor: {
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+        },
+      },
     );
-
-    const actor = getActorInfo(req);
-    await logActivity(db, {
-      companyId: existing.companyId,
-      actorType: actor.actorType,
-      actorId: actor.actorId,
-      agentId: actor.agentId,
-      action: "goal.verification_requested",
-      entityType: "goal",
-      entityId: existing.id,
-      details: result,
-    });
 
     if (result.kind === "skipped") {
       res.status(409).json({ error: "verification_skipped", reason: result.reason });

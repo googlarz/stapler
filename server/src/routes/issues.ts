@@ -1670,6 +1670,18 @@ export function issueRoutes(
       if (issue.goalId) {
         try {
           const verificationSvc = goalVerificationService(db, svc);
+          // The audit actor for verification-driven goal transitions is
+          // the agent (or user) who PATCHed the triggering issue to
+          // done. This is semantically right for both branches: the
+          // verification agent who posted the outcome in Branch A, and
+          // the issue-completing agent whose done-transition triggered
+          // the new verification cycle in Branch B.
+          const verificationActor = {
+            actorType: actor.actorType,
+            actorId: actor.actorId,
+            agentId: actor.agentId,
+            runId: actor.runId,
+          };
           if (issue.originKind === "goal_verification") {
             // Branch A — parse the latest comment and apply the outcome.
             // `commentBody` is the comment from THIS request; if the agent
@@ -1683,7 +1695,9 @@ export function issueRoutes(
                 .catch(() => null));
             if (outcomeComment) {
               verificationSvc
-                .applyVerificationOutcome(issue.companyId, issue.id, outcomeComment)
+                .applyVerificationOutcome(issue.companyId, issue.id, outcomeComment, {
+                  actor: verificationActor,
+                })
                 .catch((err) =>
                   logger.warn(
                     { err, issueId: issue.id, goalId: issue.goalId },
@@ -1694,7 +1708,9 @@ export function issueRoutes(
           } else {
             // Branch B — maybe start a new verification cycle.
             verificationSvc
-              .maybeCreateVerificationIssue(issue.companyId, issue.goalId)
+              .maybeCreateVerificationIssue(issue.companyId, issue.goalId, {
+                actor: verificationActor,
+              })
               .catch((err) =>
                 logger.warn(
                   { err, goalId: issue.goalId },

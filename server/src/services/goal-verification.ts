@@ -10,7 +10,29 @@ import {
   type LinkedIssueSnapshot,
   type VerificationOutcome,
 } from "../lib/goal-verification-prompt.js";
+import { logActivity } from "./activity-log.js";
 import type { issueService } from "./issues.js";
+
+/**
+ * Actor context used by the verification service to write activity-log
+ * entries for state transitions it performs. The service itself has no
+ * request, so callers pass the resolved actor (from `getActorInfo(req)`
+ * on the route side, or a `system` stand-in when the mutation is a
+ * background consequence of an observed agent outcome).
+ */
+export interface VerificationActor {
+  actorType: "agent" | "user" | "system";
+  actorId: string;
+  agentId?: string | null;
+  runId?: string | null;
+}
+
+const SYSTEM_ACTOR: VerificationActor = {
+  actorType: "system",
+  actorId: "goal-verification",
+  agentId: null,
+  runId: null,
+};
 
 /**
  * Goal verification orchestration service.
@@ -148,7 +170,17 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
   async function maybeCreateVerificationIssue(
     companyId: string,
     goalId: string,
-    opts?: { manualTrigger?: boolean; actorAgentId?: string | null; actorUserId?: string | null },
+    opts?: {
+      manualTrigger?: boolean;
+      actorAgentId?: string | null;
+      actorUserId?: string | null;
+      /**
+       * Audit actor. If omitted, defaults to a `system` stand-in —
+       * appropriate for the auto-fire hook path where no user action
+       * directly triggered the mutation.
+       */
+      actor?: VerificationActor;
+    },
   ): Promise<MaybeCreateResult> {
     const snapshot = await buildGoalSnapshot(companyId, goalId);
     if (!snapshot) return { kind: "skipped", reason: "goal_not_found" };
@@ -214,15 +246,39 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
     // Update the goal in a single statement: bump attempts, set pending,
     // point to the new issue. We do this AFTER issueService.create() so
     // if creation fails the goal is unchanged.
+    const nextAttempt = goal.verificationAttempts + 1;
     await db
       .update(goals)
       .set({
         verificationStatus: "pending",
-        verificationAttempts: goal.verificationAttempts + 1,
+        verificationAttempts: nextAttempt,
         verificationIssueId: verificationIssue.id,
         updatedAt: new Date(),
       })
       .where(and(eq(goals.id, goalId), eq(goals.companyId, companyId)));
+
+    // Audit: record the verification request against the GOAL (not the
+    // issue — the issue's creation is logged separately by
+    // issueService.create). This captures the goal-side state
+    // transition (attempts++, status=pending) for the audit trail.
+    const actor = opts?.actor ?? SYSTEM_ACTOR;
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId ?? null,
+      runId: actor.runId ?? null,
+      action: "goal.verification_requested",
+      entityType: "goal",
+      entityId: goalId,
+      details: {
+        verificationIssueId: verificationIssue.id,
+        attemptNumber: nextAttempt,
+        manualTrigger: opts?.manualTrigger === true,
+        criteriaCount: criteria.length,
+        ownerAgentId: goal.ownerAgentId,
+      },
+    });
 
     return { kind: "created", verificationIssueId: verificationIssue.id };
   }
@@ -237,7 +293,9 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
     companyId: string,
     verificationIssueId: string,
     agentCommentBody: string,
+    opts?: { actor?: VerificationActor },
   ): Promise<ApplyOutcomeResult> {
+    const actor = opts?.actor ?? SYSTEM_ACTOR;
     // Resolve the goal this verification was for.
     const issueRow = await db
       .select({
@@ -274,6 +332,28 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
           updatedAt: new Date(),
         })
         .where(and(eq(goals.id, goal.id), eq(goals.companyId, companyId)));
+
+      // Audit: the ACHIEVED transition is the critical auditable event
+      // here. It moves a goal from pending/active to achieved without
+      // direct human approval (per the tree's governance semantics) —
+      // the audit row captures which verification issue drove it and
+      // who was acting.
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId ?? null,
+        runId: actor.runId ?? null,
+        action: "goal.achieved",
+        entityType: "goal",
+        entityId: goal.id,
+        details: {
+          verificationIssueId,
+          criteriaCount: criteria.length,
+          previousStatus: goal.status,
+          via: "verification_outcome",
+        },
+      });
       return { kind: "passed" };
     }
 
@@ -285,12 +365,44 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
           updatedAt: new Date(),
         })
         .where(and(eq(goals.id, goal.id), eq(goals.companyId, companyId)));
+
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId ?? null,
+        runId: actor.runId ?? null,
+        action: "goal.verification_incomplete",
+        entityType: "goal",
+        entityId: goal.id,
+        details: {
+          verificationIssueId,
+          missingCriterionIds: verdict.missingCriterionIds,
+          attemptNumber: goal.verificationAttempts,
+        },
+      });
       return { kind: "incomplete", missingCriterionIds: verdict.missingCriterionIds };
     }
 
     if (verdict.kind === "unclear") {
       // Treat unclear as "not achieved, don't count as a full failure".
-      // Status stays pending; the UI surfaces the reasons.
+      // Status stays pending; the UI surfaces the reasons. Still audit
+      // the event so a human can see why the verification didn't
+      // conclude.
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId ?? null,
+        runId: actor.runId ?? null,
+        action: "goal.verification_unclear",
+        entityType: "goal",
+        entityId: goal.id,
+        details: {
+          verificationIssueId,
+          attemptNumber: goal.verificationAttempts,
+        },
+      });
       return { kind: "unclear" };
     }
 
@@ -331,6 +443,23 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
         updatedAt: new Date(),
       })
       .where(and(eq(goals.id, goal.id), eq(goals.companyId, companyId)));
+
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId ?? null,
+      runId: actor.runId ?? null,
+      action: "goal.verification_failed",
+      entityType: "goal",
+      entityId: goal.id,
+      details: {
+        verificationIssueId,
+        attemptNumber: goal.verificationAttempts,
+        failingCriterionIds: verdict.failingCriteria.map((c) => c.criterionId),
+        followUpIssueId: followUp?.id ?? null,
+      },
+    });
 
     return { kind: "failed", followUpIssueId: followUp?.id ?? null };
   }
