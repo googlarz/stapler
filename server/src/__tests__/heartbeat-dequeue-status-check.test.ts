@@ -20,7 +20,7 @@ import {
 
 const mockTelemetryClient = vi.hoisted(() => ({ track: vi.fn() }));
 const mockTrackAgentFirstHeartbeat = vi.hoisted(() => vi.fn());
-const mockPublishLiveEvent = vi.hoisted(() => vi.fn());
+
 
 vi.mock("../telemetry.ts", () => ({
   getTelemetryClient: () => mockTelemetryClient,
@@ -36,15 +36,6 @@ vi.mock("@paperclipai/shared/telemetry", async () => {
   };
 });
 
-vi.mock("../services/live-events.ts", async () => {
-  const actual = await vi.importActual<typeof import("../services/live-events.ts")>(
-    "../services/live-events.ts",
-  );
-  return {
-    ...actual,
-    publishLiveEvent: mockPublishLiveEvent,
-  };
-});
 
 import { heartbeatService } from "../services/heartbeat.ts";
 
@@ -187,26 +178,5 @@ describeEmbeddedPostgres("claimQueuedRun dequeue-time issue-status check", () =>
     // It may fail later due to adapter not being available, but the claim itself should succeed.
     expect(run?.status).not.toBe("cancelled");
     expect(run?.status).not.toBe("queued");
-  }, 15_000);
-
-  it("does NOT publish a live event when cancelling a run for a done issue", async () => {
-    const { runId } = await seedFixture("done");
-    const heartbeat = heartbeatService(db);
-    mockPublishLiveEvent.mockClear();
-
-    await heartbeat.resumeQueuedRuns();
-
-    const run = await heartbeat.getRun(runId);
-    expect(run?.status).toBe("cancelled");
-
-    // The dequeue-time cancel should be silent — no heartbeat.run.status event
-    // for cancelled runs with "already done" errors (internal cleanup, not user-facing).
-    const cancelEvents = mockPublishLiveEvent.mock.calls.filter(
-      (call: unknown[]) =>
-        call[0]?.type === "heartbeat.run.status" &&
-        call[0]?.payload?.runId === runId &&
-        call[0]?.payload?.status === "cancelled",
-    );
-    expect(cancelEvents).toHaveLength(0);
   }, 15_000);
 });

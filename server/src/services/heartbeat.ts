@@ -2451,7 +2451,9 @@ export function heartbeatService(db: Db) {
     }
 
     // Dequeue-time issue-status check: cancel runs for done/cancelled issues.
-    // skipEvent suppresses the toast — this is an internal cleanup, not user-facing.
+    // Uses low-level setRunStatus/setWakeupStatus instead of cancelRunInternal
+    // to avoid deadlock — cancelRunInternal calls startNextQueuedRunForAgent,
+    // which holds the agent start lock that is already held by our caller.
     const issueId = readNonEmptyString(context.issueId);
     if (issueId) {
       const issue = await db
@@ -2460,10 +2462,16 @@ export function heartbeatService(db: Db) {
         .where(eq(issues.id, issueId))
         .then((rows) => rows[0] ?? null);
       if (issue && (issue.status === "done" || issue.status === "cancelled")) {
-        await cancelQueuedRun(
-          `Cancelled because the issue is already ${issue.status}`,
-          { skipEvent: true },
-        );
+        const reason = `Cancelled because the issue is already ${issue.status}`;
+        await setRunStatus(run.id, "cancelled", {
+          finishedAt: new Date(),
+          error: reason,
+          errorCode: "cancelled",
+        });
+        await setWakeupStatus(run.wakeupRequestId, "cancelled", {
+          finishedAt: new Date(),
+          error: reason,
+        });
         return null;
       }
     }
