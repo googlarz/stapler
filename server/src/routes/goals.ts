@@ -26,7 +26,8 @@ export function goalRoutes(db: Db) {
       return;
     }
     assertCompanyAccess(req, goal.companyId);
-    res.json(goal);
+    const progress = await svc.getProgress(goal.companyId, goal.id);
+    res.json({ ...goal, progress });
   });
 
   router.post("/companies/:companyId/goals", validate(createGoalSchema), async (req, res) => {
