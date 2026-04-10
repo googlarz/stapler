@@ -186,6 +186,17 @@ export {
 } from "./goal.js";
 
 export {
+  createAgentMemorySchema,
+  listAgentMemoriesQuerySchema,
+  agentMemoryTagsSchema,
+  MAX_AGENT_MEMORY_CONTENT_CHARS,
+  MAX_AGENT_MEMORY_TAGS,
+  MAX_AGENT_MEMORY_TAG_LENGTH,
+  type CreateAgentMemoryInput,
+  type ListAgentMemoriesQuery,
+} from "./agent-memory.js";
+
+export {
   createApprovalSchema,
   resolveApprovalSchema,
   requestApprovalRevisionSchema,

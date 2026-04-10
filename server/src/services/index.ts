@@ -2,6 +2,14 @@ export { companyService } from "./companies.js";
 export { feedbackService } from "./feedback.js";
 export { companySkillService } from "./company-skills.js";
 export { agentService, deduplicateAgentName } from "./agents.js";
+export {
+  agentMemoryService,
+  MemoryContentTooLargeError,
+  getMemoryLimits,
+  DEFAULT_MAX_MEMORIES_PER_AGENT,
+  DEFAULT_MAX_CONTENT_BYTES,
+  DEFAULT_SEARCH_THRESHOLD,
+} from "./agent-memories.js";
 export { agentInstructionsService, syncInstructionsBundleConfigFromFilePath } from "./agent-instructions.js";
 export { assetService } from "./assets.js";
 export { documentService, extractLegacyPlanBody } from "./documents.js";
