@@ -1580,6 +1580,17 @@ export function issueRoutes(
     if (commentBody && reopenRequested === true && isClosed && updateFields.status === undefined) {
       updateFields.status = "todo";
     }
+    // Platform guardrail: only creator/delegator can set status to "done" (board users exempt)
+    if (updateFields.status === "done" && req.actor.type === "agent") {
+      if (req.actor.agentId !== existing.createdByAgentId) {
+        res.status(422).json({
+          error: "Only the creator/delegator can close this task. Use in_review instead.",
+          code: "DONE_NOT_CREATOR",
+        });
+        return;
+      }
+    }
+
     if (req.body.executionPolicy !== undefined) {
       updateFields.executionPolicy = normalizeIssueExecutionPolicy(req.body.executionPolicy);
     }
