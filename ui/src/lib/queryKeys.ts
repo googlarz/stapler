@@ -27,6 +27,14 @@ export const queryKeys = {
       ["agents", companyId, "adapter-models", adapterType] as const,
     detectModel: (companyId: string, adapterType: string) =>
       ["agents", companyId, "detect-model", adapterType] as const,
+    memories: (agentId: string, q: string | null, tags: string[] | null) =>
+      [
+        "agents",
+        agentId,
+        "memories",
+        q ?? "__no-q__",
+        tags && tags.length > 0 ? tags.join(",") : "__no-tags__",
+      ] as const,
   },
   issues: {
     list: (companyId: string) => ["issues", companyId] as const,

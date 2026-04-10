@@ -124,6 +124,39 @@ const apiRequestSchema = z.object({
   jsonBody: z.string().optional(),
 });
 
+// Agent memory tools. These all operate on the calling agent's own
+// memory store — there is no tool-level `agentId` parameter because
+// the server would reject cross-agent calls anyway (see
+// `assertAgentIdentity` in `server/src/routes/authz.ts`). The tools
+// resolve the target agent from `client.resolveAgentId()`, which
+// reads `PAPERCLIP_AGENT_ID` from the MCP config and throws if
+// missing — same pattern as the existing `paperclipMe` tool.
+
+const memorySaveSchema = z.object({
+  content: z
+    .string()
+    .trim()
+    .min(1, "content is required")
+    .max(4096, "content must be at most 4096 characters"),
+  tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+});
+
+const memorySearchSchema = z.object({
+  q: z.string().trim().min(1).max(512),
+  limit: z.number().int().positive().max(100).optional(),
+  tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+});
+
+const memoryListSchema = z.object({
+  limit: z.number().int().positive().max(100).optional(),
+  offset: z.number().int().min(0).max(10_000).optional(),
+  tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+});
+
+const memoryDeleteSchema = z.object({
+  id: z.string().uuid(),
+});
+
 export function createToolDefinitions(client: PaperclipApiClient): ToolDefinition[] {
   return [
     makeTool(
@@ -421,6 +454,64 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         return client.requestJson(method, path, {
           body: parseOptionalJson(jsonBody),
         });
+      },
+    ),
+    makeTool(
+      "paperclipMemorySave",
+      "Save a short factual memory for your agent (idempotent by content hash). Use for user preferences, decisions, observations you will need later. Do not use as a run scratchpad — use issue comments for that.",
+      memorySaveSchema,
+      async ({ content, tags }) => {
+        const agentId = client.resolveAgentId();
+        return client.requestJson(
+          "POST",
+          `/agents/${encodeURIComponent(agentId)}/memories`,
+          { body: { content, tags } },
+        );
+      },
+    ),
+    makeTool(
+      "paperclipMemorySearch",
+      "Keyword search your agent's memories via pg_trgm similarity. Returns items ranked by score. Use multiple distinct keywords rather than natural-language sentences.",
+      memorySearchSchema,
+      async ({ q, limit, tags }) => {
+        const agentId = client.resolveAgentId();
+        const params = new URLSearchParams();
+        params.set("q", q);
+        if (limit !== undefined) params.set("limit", String(limit));
+        if (tags && tags.length > 0) params.set("tags", tags.join(","));
+        return client.requestJson(
+          "GET",
+          `/agents/${encodeURIComponent(agentId)}/memories?${params.toString()}`,
+        );
+      },
+    ),
+    makeTool(
+      "paperclipMemoryList",
+      "List your agent's most recent memories. Optional tag AND filter and pagination.",
+      memoryListSchema,
+      async ({ limit, offset, tags }) => {
+        const agentId = client.resolveAgentId();
+        const params = new URLSearchParams();
+        if (limit !== undefined) params.set("limit", String(limit));
+        if (offset !== undefined) params.set("offset", String(offset));
+        if (tags && tags.length > 0) params.set("tags", tags.join(","));
+        const qs = params.toString();
+        return client.requestJson(
+          "GET",
+          `/agents/${encodeURIComponent(agentId)}/memories${qs ? `?${qs}` : ""}`,
+        );
+      },
+    ),
+    makeTool(
+      "paperclipMemoryDelete",
+      "Delete one of your agent's memories by id. No-op returns 404 if the id is not yours or does not exist.",
+      memoryDeleteSchema,
+      async ({ id }) => {
+        const agentId = client.resolveAgentId();
+        return client.requestJson(
+          "DELETE",
+          `/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(id)}`,
+        );
       },
     ),
   ];

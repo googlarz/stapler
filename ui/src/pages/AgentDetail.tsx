@@ -23,6 +23,7 @@ import { useDialog } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { AgentConfigForm } from "../components/AgentConfigForm";
+import { AgentMemoryList } from "../components/AgentMemoryList";
 import { PageTabBar } from "../components/PageTabBar";
 import { adapterLabels, roleLabels, help } from "../components/agent-config-primitives";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
@@ -223,13 +224,14 @@ function scrollToContainerBottom(container: ScrollContainer, behavior: ScrollBeh
   container.scrollTo({ top: container.scrollHeight, behavior });
 }
 
-type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget";
+type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget" | "memories";
 
 function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "instructions" || value === "prompts") return "instructions";
   if (value === "configure" || value === "configuration") return "configuration";
   if (value === "skills") return "skills";
   if (value === "budget") return "budget";
+  if (value === "memories") return "memories";
   if (value === "runs") return value;
   return "dashboard";
 }
@@ -748,7 +750,9 @@ export function AgentDetail() {
               ? "runs"
               : activeView === "budget"
                 ? "budget"
-              : "dashboard";
+                : activeView === "memories"
+                  ? "memories"
+                  : "dashboard";
     if (routeAgentRef !== canonicalAgentRef || urlTab !== canonicalTab) {
       navigate(`/agents/${canonicalAgentRef}/${canonicalTab}`, { replace: true });
       return;
@@ -1010,6 +1014,7 @@ export function AgentDetail() {
               { value: "skills", label: "Skills" },
               { value: "configuration", label: "Configuration" },
               { value: "runs", label: "Runs" },
+              { value: "memories", label: "Memories" },
               { value: "budget", label: "Budget" },
             ]}
             value={activeView}
@@ -1146,6 +1151,8 @@ export function AgentDetail() {
           />
         </div>
       ) : null}
+
+      {activeView === "memories" && <AgentMemoryList agentId={agent.id} />}
     </div>
   );
 }
