@@ -143,10 +143,24 @@ export function agentMemoryService(db: Db) {
       const tags = normalizeTags(input.tags);
 
       return db.transaction(async (tx) => {
-        // Insert-or-skip. RETURNING * is empty when the unique index
-        // on (agent_id, content_hash) collides, which tells us the row
-        // already existed.
-        const inserted = await tx
+        // Serialize concurrent saves for the same agent so the post-insert
+        // prune count is always accurate. Without this lock, two parallel
+        // saves can both read the count before either prunes and leave the
+        // agent over the cap. The lock is transaction-scoped and released
+        // automatically on commit/rollback.
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext('agent_memories'::text), hashtext(${input.agentId}))`,
+        );
+
+        // Insert-or-update. ON CONFLICT DO UPDATE with a no-op set ensures
+        // RETURNING always yields the row — either the newly inserted row or
+        // the existing conflicting row — eliminating the INSERT + separate
+        // SELECT pattern that had a narrow race window where a concurrent
+        // DELETE could remove the row between the two statements.
+        //
+        // Bumping updated_at on conflict is intentional: it records when the
+        // memory was last encountered, which is useful for UI display.
+        const [memoryRow] = await tx
           .insert(agentMemories)
           .values({
             companyId: input.companyId,
@@ -157,35 +171,17 @@ export function agentMemoryService(db: Db) {
             tags,
             createdInRunId: input.runId ?? null,
           })
-          .onConflictDoNothing({
+          .onConflictDoUpdate({
             target: [agentMemories.agentId, agentMemories.contentHash],
+            set: { updatedAt: sql`now()` },
           })
           .returning();
 
-        let memoryRow: typeof agentMemories.$inferSelect;
-        let deduped = false;
-        if (inserted.length > 0) {
-          memoryRow = inserted[0];
-        } else {
-          deduped = true;
-          const existing = await tx
-            .select()
-            .from(agentMemories)
-            .where(
-              and(
-                eq(agentMemories.agentId, input.agentId),
-                eq(agentMemories.contentHash, contentHash),
-              ),
-            )
-            .limit(1)
-            .then((rows) => rows[0] ?? null);
-          if (!existing) {
-            // Shouldn't happen — unique index guarantees either insert
-            // or existing row. Treat as a real error.
-            throw new Error("agent memory save: conflict but no existing row found");
-          }
-          memoryRow = existing;
-        }
+        // Detect duplicate: on a fresh INSERT both timestamps are set to the
+        // same transaction-start `now()`. On a conflict DO UPDATE, createdAt
+        // is the original timestamp while updatedAt becomes the current
+        // transaction's now(), so they differ.
+        const deduped = memoryRow.createdAt.getTime() !== memoryRow.updatedAt.getTime();
 
         // Prune oldest if we're over cap. This is a no-op on dedupe
         // inserts (the count didn't change). It's O(1) SELECT count +
