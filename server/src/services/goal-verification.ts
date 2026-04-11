@@ -406,9 +406,20 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
       return { kind: "unclear" };
     }
 
-    // verdict.kind === "failed" — create a follow-up issue describing the
-    // failing criteria and leave the goal's attempts unchanged (next
-    // cycle of issue completions may trigger another attempt).
+    // verdict.kind === "failed" — flip the goal to "failed" first so that
+    // a crash between this update and the follow-up issue create leaves the
+    // goal in a valid terminal state rather than stuck in "pending" forever
+    // (which would cause the next verification cycle to see "already_pending"
+    // and silently skip). The follow-up issue is created after the goal update
+    // so the audit trail is correct on crash recovery.
+    await db
+      .update(goals)
+      .set({
+        verificationStatus: "failed",
+        updatedAt: new Date(),
+      })
+      .where(and(eq(goals.id, goal.id), eq(goals.companyId, companyId)));
+
     const failingText = verdict.failingCriteria
       .map((v) => {
         const c = criteria.find((cc) => cc.id === v.criterionId);
@@ -435,14 +446,6 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
         originKind: "manual",
       });
     }
-
-    await db
-      .update(goals)
-      .set({
-        verificationStatus: "failed",
-        updatedAt: new Date(),
-      })
-      .where(and(eq(goals.id, goal.id), eq(goals.companyId, companyId)));
 
     await logActivity(db, {
       companyId,
