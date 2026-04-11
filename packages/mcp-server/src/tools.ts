@@ -448,8 +448,19 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       "Make a JSON request to an existing Paperclip /api endpoint for unsupported operations",
       apiRequestSchema,
       async ({ method, path, jsonBody }) => {
-        if (!path.startsWith("/") || path.includes("..")) {
-          throw new Error("path must start with / and be relative to /api, and must not contain '..'");
+        if (!path.startsWith("/")) {
+          throw new Error("path must start with / and be relative to /api");
+        }
+        // Decode percent-encoded characters before checking for traversal so
+        // that %2e%2e and other encoded variants are caught alongside literal '..'.
+        let decodedPath: string;
+        try {
+          decodedPath = decodeURIComponent(path);
+        } catch {
+          throw new Error("path contains invalid percent-encoding");
+        }
+        if (decodedPath.includes("..")) {
+          throw new Error("path must not contain '..'");
         }
         return client.requestJson(method, path, {
           body: parseOptionalJson(jsonBody),

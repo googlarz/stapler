@@ -157,6 +157,18 @@ describe("paperclip MCP tools", () => {
     expect(response.content[0]?.text).toContain("must not contain '..'");
   });
 
+  it("rejects percent-encoded path traversal attempts", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+
+    const tool = getTool("paperclipApiRequest");
+    const response = await tool.execute({
+      method: "GET",
+      path: "/%2e%2e/secret",
+    });
+
+    expect(response.content[0]?.text).toContain("must not contain '..'");
+  });
+
   describe("agent memory tools", () => {
     it("paperclipMemorySave POSTs to the resolved agent's memories endpoint with run id", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
