@@ -23,7 +23,7 @@ export { executionWorkspaces } from "./execution_workspaces.js";
 export { workspaceOperations } from "./workspace_operations.js";
 export { workspaceRuntimeServices } from "./workspace_runtime_services.js";
 export { projectGoals } from "./project_goals.js";
-export { goals } from "./goals.js";
+export { goals, type GoalAcceptanceCriterion } from "./goals.js";
 export { issues } from "./issues.js";
 export { issueRelations } from "./issue_relations.js";
 export { routines, routineTriggers, routineRuns } from "./routines.js";

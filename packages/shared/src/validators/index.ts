@@ -181,8 +181,10 @@ export {
 export {
   createGoalSchema,
   updateGoalSchema,
+  goalAcceptanceCriterionSchema,
   type CreateGoal,
   type UpdateGoal,
+  type GoalAcceptanceCriterionInput,
 } from "./goal.js";
 
 export {
