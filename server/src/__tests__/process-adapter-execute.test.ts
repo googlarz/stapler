@@ -114,4 +114,52 @@ describe("process adapter execute", () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("keeps injected auth token and canonical run id when config env uses empty or stale values", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-process-execute-empty-key-"));
+    const scriptPath = path.join(root, "capture.js");
+    const capturePath = path.join(root, "capture.json");
+    await writeEnvCaptureScript(scriptPath);
+
+    try {
+      const result = await execute({
+        runId: "run-789",
+        agent: {
+          id: "agent-3",
+          companyId: "company-3",
+          name: "Process Agent",
+          adapterType: "process",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: process.execPath,
+          args: [scriptPath, capturePath],
+          cwd: root,
+          env: {
+            PAPERCLIP_API_KEY: "",
+            PAPERCLIP_RUN_ID: "stale-run-id",
+          },
+        },
+        context: {},
+        authToken: "fallback-run-token",
+        onLog: async () => {},
+        onMeta: async () => {},
+      } as any);
+
+      expect(result.errorMessage).toBeUndefined();
+      expect(result.exitCode).toBe(0);
+
+      const payload = JSON.parse(await fs.readFile(capturePath, "utf8")) as Record<string, string | null>;
+      expect(payload.PAPERCLIP_RUN_ID).toBe("run-789");
+      expect(payload.PAPERCLIP_API_KEY).toBe("fallback-run-token");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });
