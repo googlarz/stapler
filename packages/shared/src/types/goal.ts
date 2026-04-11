@@ -1,4 +1,4 @@
-import type { GoalLevel, GoalStatus } from "../constants.js";
+import type { GoalLevel, GoalStatus, GoalVerificationStatus } from "../constants.js";
 
 /**
  * Structured acceptance criterion attached to a goal. Turns a goal from
@@ -33,6 +33,10 @@ export interface Goal {
   ownerAgentId: string | null;
   acceptanceCriteria: GoalAcceptanceCriterion[];
   targetDate: string | null;
+  verificationStatus: GoalVerificationStatus;
+  verificationAttempts: number;
+  verifiedAt: Date | null;
+  verificationIssueId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

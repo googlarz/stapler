@@ -135,8 +135,19 @@ export const INBOX_MINE_ISSUE_STATUS_FILTER = INBOX_MINE_ISSUE_STATUSES.join(","
 export const ISSUE_PRIORITIES = ["critical", "high", "medium", "low"] as const;
 export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
 
-export const ISSUE_ORIGIN_KINDS = ["manual", "routine_execution"] as const;
+export const ISSUE_ORIGIN_KINDS = ["manual", "routine_execution", "goal_verification"] as const;
 export type IssueOriginKind = (typeof ISSUE_ORIGIN_KINDS)[number];
+
+export const GOAL_VERIFICATION_STATUSES = [
+  "not_started",
+  "pending",
+  "passed",
+  "failed",
+] as const;
+export type GoalVerificationStatus = (typeof GOAL_VERIFICATION_STATUSES)[number];
+
+/** Max auto verification cycles before we require manual retrigger. */
+export const MAX_GOAL_VERIFICATION_ATTEMPTS = 3;
 
 export const ISSUE_RELATION_TYPES = ["blocks"] as const;
 export type IssueRelationType = (typeof ISSUE_RELATION_TYPES)[number];

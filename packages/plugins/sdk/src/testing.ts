@@ -580,6 +580,10 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
           ownerAgentId: input.ownerAgentId ?? null,
           acceptanceCriteria: [],
           targetDate: null,
+          verificationStatus: "not_started",
+          verificationAttempts: 0,
+          verifiedAt: null,
+          verificationIssueId: null,
           createdAt: now,
           updatedAt: now,
         };

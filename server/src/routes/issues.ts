@@ -35,6 +35,7 @@ import {
   executionWorkspaceService,
   feedbackService,
   goalService,
+  goalVerificationService,
   heartbeatService,
   instanceSettingsService,
   issueApprovalService,
@@ -1654,6 +1655,58 @@ export function issueRoutes(
         const actorAgent = await agentsSvc.getById(actor.agentId);
         if (actorAgent) {
           trackAgentTaskCompleted(tc, { agentRole: actorAgent.role });
+        }
+      }
+
+      // Goal verification hook (fire-and-forget, never blocks the response).
+      //
+      // Two branches:
+      //   A) The issue being marked done IS a verification issue
+      //      (originKind = goal_verification). Apply the agent's outcome
+      //      to the parent goal.
+      //   B) The issue has a goalId but is NOT a verification issue.
+      //      If the goal has acceptance criteria, maybe create a
+      //      verification issue assigned to the owner agent.
+      if (issue.goalId) {
+        try {
+          const verificationSvc = goalVerificationService(db, svc);
+          if (issue.originKind === "goal_verification") {
+            // Branch A — parse the latest comment and apply the outcome.
+            // `commentBody` is the comment from THIS request; if the agent
+            // posted the outcome as a prior comment, read the latest from
+            // the issue.
+            const outcomeComment =
+              commentBody ??
+              (await svc
+                .listComments(issue.id, { limit: 1, order: "desc" })
+                .then((rows) => (rows.length > 0 ? rows[0].body : null))
+                .catch(() => null));
+            if (outcomeComment) {
+              verificationSvc
+                .applyVerificationOutcome(issue.companyId, issue.id, outcomeComment)
+                .catch((err) =>
+                  logger.warn(
+                    { err, issueId: issue.id, goalId: issue.goalId },
+                    "failed to apply goal verification outcome",
+                  ),
+                );
+            }
+          } else {
+            // Branch B — maybe start a new verification cycle.
+            verificationSvc
+              .maybeCreateVerificationIssue(issue.companyId, issue.goalId)
+              .catch((err) =>
+                logger.warn(
+                  { err, goalId: issue.goalId },
+                  "failed to maybe-create verification issue",
+                ),
+              );
+          }
+        } catch (err) {
+          logger.warn(
+            { err, goalId: issue.goalId },
+            "goal verification hook threw synchronously",
+          );
         }
       }
     }

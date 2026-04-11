@@ -11,6 +11,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { GoalProperties } from "../components/GoalProperties";
 import { GoalAcceptanceCriteria } from "../components/GoalAcceptanceCriteria";
+import { GoalVerificationPanel } from "../components/GoalVerificationPanel";
 import { GoalTree } from "../components/GoalTree";
 import { StatusBadge } from "../components/StatusBadge";
 import { InlineEditor } from "../components/InlineEditor";
@@ -176,6 +177,13 @@ export function GoalDetail() {
           }}
         />
       </div>
+
+      <GoalVerificationPanel
+        goal={goal}
+        onVerificationRequested={() =>
+          queryClient.invalidateQueries({ queryKey: queryKeys.goals.detail(goalId!) })
+        }
+      />
 
       {/* Progress bar — only shown when the goal has linked issues */}
       {goal.progress && goal.progress.totalIssues > 0 && (

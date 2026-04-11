@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { GOAL_LEVELS, GOAL_STATUSES } from "../constants.js";
+import { GOAL_LEVELS, GOAL_STATUSES, GOAL_VERIFICATION_STATUSES } from "../constants.js";
 
 /** Guards against unbounded criteria lists that could bloat JSONB payloads. */
 export const MAX_GOAL_ACCEPTANCE_CRITERIA = 50;

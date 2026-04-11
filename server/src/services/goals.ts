@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { goals, issues } from "@paperclipai/db";
 
@@ -91,13 +91,22 @@ export function goalService(db: Db) {
      * in the total with the cancelled work still open).
      */
     getProgress: async (companyId: string, goalId: string) => {
+      // Exclude goal_verification issues so the progress bar reflects
+      // "real" work only. Including them would make verification issues
+      // self-count and trigger infinite verification cycles.
       const rows = await db
         .select({
           totalIssues: sql<number>`count(*) filter (where ${issues.status} <> 'cancelled')::int`,
           doneIssues: sql<number>`count(*) filter (where ${issues.status} = 'done')::int`,
         })
         .from(issues)
-        .where(and(eq(issues.goalId, goalId), eq(issues.companyId, companyId)));
+        .where(
+          and(
+            eq(issues.goalId, goalId),
+            eq(issues.companyId, companyId),
+            ne(issues.originKind, "goal_verification"),
+          ),
+        );
 
       const row = rows[0] ?? { totalIssues: 0, doneIssues: 0 };
       const total = Number(row.totalIssues) || 0;

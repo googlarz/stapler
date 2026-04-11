@@ -3,9 +3,15 @@ import type { Db } from "@paperclipai/db";
 import { createGoalSchema, updateGoalSchema } from "@paperclipai/shared";
 import { trackGoalCreated } from "@paperclipai/shared/telemetry";
 import { validate } from "../middleware/validate.js";
-import { goalService, logActivity } from "../services/index.js";
+import {
+  goalService,
+  goalVerificationService,
+  issueService,
+  logActivity,
+} from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { getTelemetryClient } from "../telemetry.js";
+import { logger } from "../middleware/logger.js";
 
 export function goalRoutes(db: Db) {
   const router = Router();
@@ -79,6 +85,43 @@ export function goalRoutes(db: Db) {
     });
 
     res.json(goal);
+  });
+
+  router.post("/goals/:id/verify", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Goal not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const issueSvc = issueService(db);
+    const verificationSvc = goalVerificationService(db, issueSvc);
+    const result = await verificationSvc.maybeCreateVerificationIssue(
+      existing.companyId,
+      existing.id,
+      { manualTrigger: true },
+    );
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: existing.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "goal.verification_requested",
+      entityType: "goal",
+      entityId: existing.id,
+      details: result,
+    });
+
+    if (result.kind === "skipped") {
+      res.status(409).json({ error: "verification_skipped", reason: result.reason });
+      return;
+    }
+
+    res.json({ verificationIssueId: result.verificationIssueId });
   });
 
   router.delete("/goals/:id", async (req, res) => {

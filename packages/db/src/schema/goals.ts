@@ -8,6 +8,7 @@ import {
   index,
   jsonb,
   date,
+  integer,
 } from "drizzle-orm/pg-core";
 import { agents } from "./agents.js";
 import { companies } from "./companies.js";
@@ -41,6 +42,23 @@ export const goals = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     targetDate: date("target_date"),
+    /**
+     * Verification state. See `server/src/services/goal-verification.ts`.
+     * not_started  → never tried
+     * pending      → verification issue is open and assigned to the owner agent
+     * passed       → criteria judged passed; goal.status should be "achieved"
+     * failed       → criteria judged failed; a follow-up issue was created
+     */
+    verificationStatus: text("verification_status").notNull().default("not_started"),
+    verificationAttempts: integer("verification_attempts").notNull().default(0),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    /**
+     * Loose reference — no FK constraint, since `issues.goalId` already
+     * references `goals.id` and we avoid a circular FK at the schema level.
+     * The issues service clears this column when the referenced issue is
+     * deleted.
+     */
+    verificationIssueId: uuid("verification_issue_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
