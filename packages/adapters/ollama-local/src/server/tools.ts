@@ -95,7 +95,7 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
             enum: ["urgent", "high", "medium", "low"],
             description: "Issue priority (default: medium)",
           },
-          assigneeId: {
+          assigneeAgentId: {
             type: "string",
             description: "Agent ID to assign the issue to (leave blank to leave unassigned)",
           },
@@ -121,7 +121,7 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
           },
           title: { type: "string", description: "Updated title" },
           description: { type: "string", description: "Updated description" },
-          assigneeId: { type: "string", description: "Agent ID to reassign to" },
+          assigneeAgentId: { type: "string", description: "Agent ID to reassign to" },
           priority: {
             type: "string",
             enum: ["urgent", "high", "medium", "low"],
@@ -280,8 +280,8 @@ export async function executePaperclipTool(
         description: typeof args.description === "string" ? args.description : undefined,
         priority: typeof args.priority === "string" ? args.priority : "medium",
       };
-      if (typeof args.assigneeId === "string" && args.assigneeId.trim()) {
-        body.assigneeId = args.assigneeId.trim();
+      if (typeof args.assigneeAgentId === "string" && args.assigneeAgentId.trim()) {
+        body.assigneeAgentId = args.assigneeAgentId.trim();
       }
       return paperclipFetch(`${base}/api/companies/${encodeURIComponent(companyId)}/issues`, {
         method: "POST",
@@ -297,7 +297,7 @@ export async function executePaperclipTool(
       if (typeof args.status === "string") updates.status = args.status;
       if (typeof args.title === "string") updates.title = args.title;
       if (typeof args.description === "string") updates.description = args.description;
-      if (typeof args.assigneeId === "string") updates.assigneeId = args.assigneeId;
+      if (typeof args.assigneeAgentId === "string") updates.assigneeAgentId = args.assigneeAgentId;
       if (typeof args.priority === "string") updates.priority = args.priority;
       return paperclipFetch(`${base}/api/issues/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -340,10 +340,11 @@ export async function executePaperclipTool(
         name: String(args.name ?? "New Agent"),
         role: typeof args.role === "string" ? args.role : "general",
         adapterType,
-        config,
+        adapterConfig: config,
       };
+      // Use /agent-hires — the agent-safe endpoint that respects canCreateAgents permission
       const result = await paperclipFetch(
-        `${base}/api/companies/${encodeURIComponent(companyId)}/agents`,
+        `${base}/api/companies/${encodeURIComponent(companyId)}/agent-hires`,
         { method: "POST", body: JSON.stringify(body), authToken },
       );
       return result;
