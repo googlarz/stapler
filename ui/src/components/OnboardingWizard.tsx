@@ -794,7 +794,7 @@ export function OnboardingWizard() {
 
         const cpoAgent = await agentsApi.create(createdCompanyId, {
           name: "CPO",
-          role: "cpo",
+          role: "pm",
           adapterType: cpoAdapterType,
           adapterConfig: {
             ...buildCpoAdapterConfig(),

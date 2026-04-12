@@ -92,7 +92,7 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
           description: { type: "string", description: "Full issue description (markdown supported)" },
           priority: {
             type: "string",
-            enum: ["urgent", "high", "medium", "low"],
+            enum: ["critical", "high", "medium", "low"],
             description: "Issue priority (default: medium)",
           },
           assigneeAgentId: {
@@ -124,7 +124,7 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
           assigneeAgentId: { type: "string", description: "Agent ID to reassign to" },
           priority: {
             type: "string",
-            enum: ["urgent", "high", "medium", "low"],
+            enum: ["critical", "high", "medium", "low"],
           },
         },
       },
