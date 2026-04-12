@@ -426,13 +426,18 @@ export async function executePaperclipTool(
       // Disable raw skill injection for new agents by default so they start lean
       config.paperclipRuntimeSkills = [];
 
+      const agentName = String(args.name ?? "").trim();
+      if (!agentName) return { error: "name is required" };
+
       const body: Record<string, unknown> = {
-        name: String(args.name ?? "New Agent"),
+        name: agentName,
         role: typeof args.role === "string" ? args.role : "general",
         adapterType,
         adapterConfig: config,
-        // Enable heartbeat so the agent automatically picks up assigned work
-        runtimeConfig: { heartbeat: { enabled: true }, heartbeatIntervalSec: 300 },
+        // Enable heartbeat so the agent automatically picks up assigned work.
+        // intervalSec must be nested inside heartbeat — parseHeartbeatPolicy
+        // reads runtimeConfig.heartbeat.intervalSec, not a top-level field.
+        runtimeConfig: { heartbeat: { enabled: true, intervalSec: 300 } },
       };
       // Use /agent-hires — the agent-safe endpoint that respects canCreateAgents permission
       const result = await paperclipFetch(

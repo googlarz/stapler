@@ -381,13 +381,16 @@ export async function maybeLoadMemoriesForInjection(
   // Prefer structured wake payload issue title (the common heartbeat path),
   // then fall back to flat top-level fields for other callers.
   const wakePayload = context.paperclipWake;
-  const wakeIssueTitle =
+  // Narrow the issue field safely: check it is a non-null object before
+  // accessing .title, avoiding the unsafe double-cast pattern.
+  const wakeIssueObj =
     wakePayload !== null &&
     typeof wakePayload === "object" &&
     typeof (wakePayload as Record<string, unknown>).issue === "object" &&
     (wakePayload as Record<string, unknown>).issue !== null
-      ? ((wakePayload as Record<string, Record<string, unknown>>).issue.title as string | undefined)
-      : undefined;
+      ? (wakePayload as Record<string, unknown>).issue as Record<string, unknown>
+      : null;
+  const wakeIssueTitle = typeof wakeIssueObj?.title === "string" ? wakeIssueObj.title : undefined;
   if (typeof wakeIssueTitle === "string" && wakeIssueTitle.trim()) {
     queryParts.push(wakeIssueTitle.trim());
   } else if (typeof context.taskTitle === "string" && context.taskTitle.trim()) {
@@ -396,7 +399,14 @@ export async function maybeLoadMemoriesForInjection(
     queryParts.push(context.issueTitle.trim());
   }
 
-  const q = queryParts.join(" ").trim();
+  // pg_trgm similarity degrades on very long query strings (O(n) trigrams).
+  // Cap to 200 chars — enough for a wake reason + issue title, trimmed at a
+  // word boundary where possible so we don't cut in the middle of a keyword.
+  const rawQ = queryParts.join(" ").trim();
+  const MAX_QUERY_CHARS = 200;
+  const q = rawQ.length > MAX_QUERY_CHARS
+    ? rawQ.slice(0, MAX_QUERY_CHARS).replace(/\s\S*$/, "").trim() || rawQ.slice(0, MAX_QUERY_CHARS)
+    : rawQ;
   if (!q) return [];
 
   const svc = agentMemoryService(db);

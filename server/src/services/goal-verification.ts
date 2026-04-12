@@ -321,6 +321,8 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc, heartbeat?: 
 
     // Wake the assigned owner agent so they pick up the verification issue
     // immediately instead of waiting for their heartbeat timer.
+    // queueIssueAssignmentWakeup returns void | Promise and has its own
+    // internal .catch() that logs errors — no outer handler needed.
     if (heartbeat && result.ownerAgentId) {
       void queueIssueAssignmentWakeup({
         heartbeat,

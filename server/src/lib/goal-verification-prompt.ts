@@ -148,15 +148,19 @@ export function buildVerificationIssueDescription(input: VerificationPromptInput
         ]
       : [];
 
+  // Use spread for conditional blocks so we never insert an empty-string
+  // placeholder that would need to be filtered — filtering strips the
+  // intentional blank-line spacers between sections.
   return [
     "# Goal verification",
     "",
     `You are verifying whether the goal **"${input.goalTitle}"** has been achieved.`,
     "",
     ...retryBlock,
-    input.goalDescription
-      ? `**Goal description:**\n${input.goalDescription.trim()}\n`
-      : "",
+    // Goal description is optional; if present, include it followed by a blank line.
+    ...(input.goalDescription
+      ? [`**Goal description:**\n${input.goalDescription.trim()}`, ""]
+      : []),
     "## Acceptance criteria",
     "",
     "Judge each criterion independently against the linked issues below. A criterion passes if the deliverables clearly demonstrate that it was met. If you can't tell, mark it `unclear` — don't guess.",
@@ -184,7 +188,7 @@ export function buildVerificationIssueDescription(input: VerificationPromptInput
     "Use `pass`, `fail`, or `unclear` for each outcome. Include a one-sentence reason. Do not include any other JSON blocks in your comment — we parse the first block with this infostring.",
     "",
     "After posting the comment, mark this issue `done`.",
-  ].filter((line) => line !== "").join("\n");
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
