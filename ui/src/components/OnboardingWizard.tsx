@@ -191,6 +191,13 @@ export function OnboardingWizard() {
   const [cpoFrequency, setCpoFrequency] = useState<"weekly" | "biweekly" | "monthly">("weekly");
   const [cpoAdapterType, setCpoAdapterType] = useState("claude_local");
   const [cpoModel, setCpoModel] = useState("");
+  const [cpoModelOpen, setCpoModelOpen] = useState(false);
+  const [cpoModelSearch, setCpoModelSearch] = useState("");
+  const [cpoAdapterEnvResult, setCpoAdapterEnvResult] =
+    useState<AdapterEnvironmentTestResult | null>(null);
+  const [cpoAdapterEnvError, setCpoAdapterEnvError] = useState<string | null>(null);
+  const [cpoAdapterEnvLoading, setCpoAdapterEnvLoading] = useState(false);
+  const [cpoShowMoreAdapters, setCpoShowMoreAdapters] = useState(false);
 
   // Step 4 — Task
   const [taskTitle, setTaskTitle] = useState(DEFAULT_TASK_TITLE);
@@ -275,6 +282,19 @@ export function OnboardingWizard() {
   const NONLOCAL_TYPES = new Set(["process", "http", "openclaw_gateway"]);
   const isLocalAdapter = !NONLOCAL_TYPES.has(adapterType);
 
+  const {
+    data: cpoAdapterModels,
+    isLoading: cpoAdapterModelsLoading,
+    isFetching: cpoAdapterModelsFetching
+  } = useQuery({
+    queryKey: createdCompanyId
+      ? queryKeys.agents.adapterModels(createdCompanyId, cpoAdapterType)
+      : ["agents", "none", "adapter-models", cpoAdapterType],
+    queryFn: () => agentsApi.adapterModels(createdCompanyId!, cpoAdapterType),
+    enabled: Boolean(createdCompanyId) && effectiveOnboardingOpen && step === 3 && cpoEnabled
+  });
+  const isCpoLocalAdapter = !NONLOCAL_TYPES.has(cpoAdapterType);
+
   // Build adapter grids dynamically from the UI registry + display metadata.
   // External/plugin adapters automatically appear with generic defaults.
   const { recommendedAdapters, moreAdapters } = useMemo(() => {
@@ -306,6 +326,12 @@ export function OnboardingWizard() {
     setAdapterEnvResult(null);
     setAdapterEnvError(null);
   }, [step, adapterType, model, command, args, url]);
+
+  useEffect(() => {
+    if (step !== 3) return;
+    setCpoAdapterEnvResult(null);
+    setCpoAdapterEnvError(null);
+  }, [step, cpoAdapterType, cpoModel]);
 
   const selectedModel = (adapterModels ?? []).find((m) => m.id === model);
   const hasAnthropicApiKeyOverrideCheck =
@@ -353,6 +379,44 @@ export function OnboardingWizard() {
       }));
   }, [filteredModels, adapterType]);
 
+  // CPO model picker derived values
+  const cpoSelectedModel = (cpoAdapterModels ?? []).find((m) => m.id === cpoModel);
+  const cpoFilteredModels = useMemo(() => {
+    const query = cpoModelSearch.trim().toLowerCase();
+    return (cpoAdapterModels ?? []).filter((entry) => {
+      if (!query) return true;
+      const provider = extractProviderIdWithFallback(entry.id, "");
+      return (
+        entry.id.toLowerCase().includes(query) ||
+        entry.label.toLowerCase().includes(query) ||
+        provider.toLowerCase().includes(query)
+      );
+    });
+  }, [cpoAdapterModels, cpoModelSearch]);
+  const cpoGroupedModels = useMemo(() => {
+    if (cpoAdapterType !== "opencode_local") {
+      return [
+        {
+          provider: "models",
+          entries: [...cpoFilteredModels].sort((a, b) => a.id.localeCompare(b.id))
+        }
+      ];
+    }
+    const groups = new Map<string, Array<{ id: string; label: string }>>();
+    for (const entry of cpoFilteredModels) {
+      const provider = extractProviderIdWithFallback(entry.id);
+      const bucket = groups.get(provider) ?? [];
+      bucket.push(entry);
+      groups.set(provider, bucket);
+    }
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([provider, entries]) => ({
+        provider,
+        entries: [...entries].sort((a, b) => a.id.localeCompare(b.id))
+      }));
+  }, [cpoFilteredModels, cpoAdapterType]);
+
   function reset() {
     setRouteOnboardingSnapshot(routeOnboardingOptions);
     setStep(1);
@@ -375,6 +439,12 @@ export function OnboardingWizard() {
     setCpoFrequency("weekly");
     setCpoAdapterType("claude_local");
     setCpoModel("");
+    setCpoModelOpen(false);
+    setCpoModelSearch("");
+    setCpoAdapterEnvResult(null);
+    setCpoAdapterEnvError(null);
+    setCpoAdapterEnvLoading(false);
+    setCpoShowMoreAdapters(false);
     setTaskTitle(DEFAULT_TASK_TITLE);
     setTaskDescription(DEFAULT_TASK_DESCRIPTION);
     setCreatedCompanyId(null);
@@ -457,6 +527,58 @@ export function OnboardingWizard() {
       return null;
     } finally {
       setAdapterEnvLoading(false);
+    }
+  }
+
+  function buildCpoAdapterConfig(): Record<string, unknown> {
+    const adapter = getUIAdapter(cpoAdapterType);
+    return adapter.buildAdapterConfig({
+      ...defaultCreateValues,
+      adapterType: cpoAdapterType,
+      model:
+        cpoAdapterType === "codex_local"
+          ? cpoModel || DEFAULT_CODEX_LOCAL_MODEL
+          : cpoAdapterType === "gemini_local"
+            ? cpoModel || DEFAULT_GEMINI_LOCAL_MODEL
+            : cpoAdapterType === "cursor"
+              ? cpoModel || DEFAULT_CURSOR_LOCAL_MODEL
+              : cpoAdapterType === "ollama_local"
+                ? cpoModel || DEFAULT_OLLAMA_MODEL
+                : cpoModel,
+      command: "",
+      args: "",
+      url: "",
+      dangerouslySkipPermissions:
+        cpoAdapterType === "claude_local" || cpoAdapterType === "opencode_local",
+      dangerouslyBypassSandbox:
+        cpoAdapterType === "codex_local"
+          ? DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX
+          : defaultCreateValues.dangerouslyBypassSandbox
+    });
+  }
+
+  async function runCpoAdapterEnvironmentTest(): Promise<AdapterEnvironmentTestResult | null> {
+    if (!createdCompanyId) {
+      setCpoAdapterEnvError("Create a company before testing the CPO adapter.");
+      return null;
+    }
+    setCpoAdapterEnvLoading(true);
+    setCpoAdapterEnvError(null);
+    try {
+      const result = await agentsApi.testEnvironment(
+        createdCompanyId,
+        cpoAdapterType,
+        { adapterConfig: buildCpoAdapterConfig() }
+      );
+      setCpoAdapterEnvResult(result);
+      return result;
+    } catch (err) {
+      setCpoAdapterEnvError(
+        err instanceof Error ? err.message : "Adapter environment test failed"
+      );
+      return null;
+    } finally {
+      setCpoAdapterEnvLoading(false);
     }
   }
 
@@ -664,12 +786,18 @@ export function OnboardingWizard() {
     setError(null);
     try {
       if (cpoEnabled) {
+        // Run env check for local adapters (same gate as CEO step)
+        if (isCpoLocalAdapter) {
+          const result = cpoAdapterEnvResult ?? (await runCpoAdapterEnvironmentTest());
+          if (!result) return;
+        }
+
         const cpoAgent = await agentsApi.create(createdCompanyId, {
           name: "CPO",
           role: "cpo",
           adapterType: cpoAdapterType,
           adapterConfig: {
-            ...(cpoModel ? { model: cpoModel } : {}),
+            ...buildCpoAdapterConfig(),
             enableMemoryInjection: true,
           },
         });
@@ -1348,10 +1476,10 @@ export function OnboardingWizard() {
                         </div>
                       </div>
 
-                      {/* Adapter type */}
+                      {/* Adapter type radio cards */}
                       <div>
                         <label className="text-xs text-muted-foreground mb-2 block">
-                          Model adapter
+                          Adapter type
                         </label>
                         <div className="grid grid-cols-2 gap-2">
                           {recommendedAdapters.map((opt) => (
@@ -1359,22 +1487,220 @@ export function OnboardingWizard() {
                               key={opt.type}
                               type="button"
                               className={cn(
-                                "flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors",
+                                "flex flex-col items-center gap-1.5 rounded-md border p-3 text-xs transition-colors relative",
                                 cpoAdapterType === opt.type
                                   ? "border-foreground bg-accent"
                                   : "border-border hover:bg-accent/50"
                               )}
                               onClick={() => {
-                                setCpoAdapterType(opt.type);
-                                setCpoModel("");
+                                const nextType = opt.type;
+                                setCpoAdapterType(nextType);
+                                if (nextType === "codex_local") {
+                                  setCpoModel(DEFAULT_CODEX_LOCAL_MODEL);
+                                } else {
+                                  setCpoModel("");
+                                }
                               }}
                             >
-                              <opt.icon className="h-3.5 w-3.5 shrink-0" />
-                              <span className="font-medium truncate">{opt.label}</span>
+                              <opt.icon className="h-4 w-4" />
+                              <span className="font-medium">{opt.label}</span>
+                              <span className="text-muted-foreground text-[10px]">
+                                {opt.description}
+                              </span>
                             </button>
                           ))}
                         </div>
+
+                        <button
+                          className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setCpoShowMoreAdapters((v) => !v)}
+                        >
+                          <ChevronDown
+                            className={cn(
+                              "h-3 w-3 transition-transform",
+                              cpoShowMoreAdapters ? "rotate-0" : "-rotate-90"
+                            )}
+                          />
+                          More Adapter Types
+                        </button>
+
+                        {cpoShowMoreAdapters && (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            {moreAdapters.map((opt) => (
+                              <button
+                                key={opt.type}
+                                disabled={!!opt.comingSoon}
+                                type="button"
+                                className={cn(
+                                  "flex flex-col items-center gap-1.5 rounded-md border p-3 text-xs transition-colors relative",
+                                  opt.comingSoon
+                                    ? "border-border opacity-40 cursor-not-allowed"
+                                    : cpoAdapterType === opt.type
+                                    ? "border-foreground bg-accent"
+                                    : "border-border hover:bg-accent/50"
+                                )}
+                                onClick={() => {
+                                  if (opt.comingSoon) return;
+                                  const nextType = opt.type;
+                                  setCpoAdapterType(nextType);
+                                  if (nextType === "gemini_local") {
+                                    setCpoModel(DEFAULT_GEMINI_LOCAL_MODEL);
+                                    return;
+                                  }
+                                  if (nextType === "cursor") {
+                                    setCpoModel(DEFAULT_CURSOR_LOCAL_MODEL);
+                                    return;
+                                  }
+                                  setCpoModel("");
+                                }}
+                              >
+                                <opt.icon className="h-4 w-4" />
+                                <span className="font-medium">{opt.label}</span>
+                                <span className="text-muted-foreground text-[10px]">
+                                  {opt.comingSoon
+                                    ? opt.disabledLabel ?? "Coming soon"
+                                    : opt.description}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
+
+                      {/* Model picker */}
+                      {isCpoLocalAdapter && (
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">
+                            Model
+                          </label>
+                          <Popover
+                            open={cpoModelOpen}
+                            onOpenChange={(next) => {
+                              setCpoModelOpen(next);
+                              if (!next) setCpoModelSearch("");
+                            }}
+                          >
+                            <PopoverTrigger asChild>
+                              <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
+                                <span className={cn(!cpoModel && "text-muted-foreground")}>
+                                  {cpoSelectedModel
+                                    ? cpoSelectedModel.label
+                                    : cpoModel || "Default"}
+                                </span>
+                                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-[var(--radix-popover-trigger-width)] p-1"
+                              align="start"
+                            >
+                              <input
+                                className="w-full px-2 py-1.5 text-xs bg-transparent outline-none border-b border-border mb-1 placeholder:text-muted-foreground/50"
+                                placeholder="Search models..."
+                                value={cpoModelSearch}
+                                onChange={(e) => setCpoModelSearch(e.target.value)}
+                                autoFocus
+                              />
+                              <button
+                                className={cn(
+                                  "flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50",
+                                  !cpoModel && "bg-accent"
+                                )}
+                                onClick={() => {
+                                  setCpoModel("");
+                                  setCpoModelOpen(false);
+                                }}
+                              >
+                                Default
+                              </button>
+                              <div className="max-h-[240px] overflow-y-auto">
+                                {(cpoAdapterModelsLoading || cpoAdapterModelsFetching) && (
+                                  <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                                    Loading models...
+                                  </p>
+                                )}
+                                {cpoGroupedModels.map((group) => (
+                                  <div key={group.provider} className="mb-1 last:mb-0">
+                                    {cpoAdapterType === "opencode_local" && (
+                                      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                        {group.provider} ({group.entries.length})
+                                      </div>
+                                    )}
+                                    {group.entries.map((m) => (
+                                      <button
+                                        key={m.id}
+                                        className={cn(
+                                          "flex items-center w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50",
+                                          m.id === cpoModel && "bg-accent"
+                                        )}
+                                        onClick={() => {
+                                          setCpoModel(m.id);
+                                          setCpoModelOpen(false);
+                                        }}
+                                      >
+                                        <span
+                                          className="block w-full text-left truncate"
+                                          title={m.id}
+                                        >
+                                          {cpoAdapterType === "opencode_local"
+                                            ? extractModelName(m.id)
+                                            : m.label}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                              {!cpoAdapterModelsLoading && cpoFilteredModels.length === 0 && (
+                                <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                                  No models discovered.
+                                </p>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      )}
+
+                      {/* Adapter environment check */}
+                      {isCpoLocalAdapter && (
+                        <div className="space-y-2 rounded-md border border-border p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-medium">
+                                Adapter environment check
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Runs a live probe to confirm the CPO adapter is reachable.
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2.5 text-xs"
+                              disabled={cpoAdapterEnvLoading}
+                              onClick={() => void runCpoAdapterEnvironmentTest()}
+                            >
+                              {cpoAdapterEnvLoading ? "Testing..." : "Test now"}
+                            </Button>
+                          </div>
+
+                          {cpoAdapterEnvError && (
+                            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">
+                              {cpoAdapterEnvError}
+                            </div>
+                          )}
+
+                          {cpoAdapterEnvResult &&
+                          cpoAdapterEnvResult.status === "pass" ? (
+                            <div className="flex items-center gap-2 rounded-md border border-green-300 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-300 animate-in fade-in slide-in-from-bottom-1 duration-300">
+                              <Check className="h-3.5 w-3.5 shrink-0" />
+                              <span className="font-medium">Passed</span>
+                            </div>
+                          ) : cpoAdapterEnvResult ? (
+                            <AdapterEnvironmentResult result={cpoAdapterEnvResult} />
+                          ) : null}
+                        </div>
+                      )}
                     </>
                   )}
 
