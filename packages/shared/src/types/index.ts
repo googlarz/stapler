@@ -117,6 +117,11 @@ export type {
   IssueAttachment,
   IssueLabel,
 } from "./issue.js";
+export type {
+  CompanyDocument,
+  CompanyDocumentSummary,
+  CompanyDocumentRevision,
+} from "./document.js";
 export type { Goal, GoalWithProgress, GoalProgress, GoalAcceptanceCriterion } from "./goal.js";
 export type {
   AgentMemory,
