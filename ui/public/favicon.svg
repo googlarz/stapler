@@ -1,25 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" stroke-linecap="round" stroke-linejoin="round">
   <style>
-    :root { --fg: #18181b; --bg: #ffffff; }
-    @media (prefers-color-scheme: dark) { :root { --fg: #e4e4e7; --bg: #18181b; } }
-    .body  { fill: var(--bg); stroke: var(--fg); stroke-width: 26; stroke-linejoin: round; }
-    .inner { fill: none; stroke: var(--fg); stroke-width: 24; stroke-linecap: round; }
+    .body  { stroke: #18181b; fill: #ffffff; stroke-width: 26; stroke-linejoin: round; }
+    .inner { stroke: #18181b; fill: none; stroke-width: 24; stroke-linecap: round; }
+    @media (prefers-color-scheme: dark) {
+      .body  { stroke: #e4e4e7; fill: #18181b; }
+      .inner { stroke: #e4e4e7; }
+    }
   </style>
-
-  <!-- Base (drawn first so arm renders on top) -->
   <path class="body" d="M24 388 L24 432 Q24 458 54 458 L462 458 Q494 458 494 434 L478 388 Z"/>
-
-  <!-- Top arm -->
   <path class="body" d="M46 292 L46 138 Q46 66 140 66 L428 66 Q490 66 490 130 L490 292 Z"/>
-
-  <!-- Interior ceiling of arm -->
   <line class="inner" x1="148" y1="108" x2="466" y2="108"/>
-
-  <!-- Interior diagonal separator (arm body / staple channel) -->
   <line class="inner" x1="140" y1="292" x2="468" y2="262"/>
-
-  <!-- Hinge outer ring -->
   <circle class="body" cx="72" cy="338" r="54"/>
-  <!-- Hinge inner dot -->
   <circle class="body" cx="72" cy="338" r="22"/>
 </svg>
