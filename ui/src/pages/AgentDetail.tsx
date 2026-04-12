@@ -6,6 +6,7 @@ import {
   type AgentKey,
   type ClaudeLoginResult,
   type AgentPermissionUpdate,
+  type TaskProposal,
 } from "../api/agents";
 import { companySkillsApi } from "../api/companySkills";
 import { budgetsApi } from "../api/budgets";
@@ -53,6 +54,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import {
   MoreHorizontal,
   CheckCircle2,
   XCircle,
@@ -72,6 +80,7 @@ import {
   ArrowLeft,
   HelpCircle,
   FolderOpen,
+  Sparkles,
 } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -629,6 +638,9 @@ export function AgentDetail() {
   const navigate = useNavigate();
   const [actionError, setActionError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [proposeOpen, setProposeOpen] = useState(false);
+  const [proposing, setProposing] = useState(false);
+  const [proposals, setProposals] = useState<TaskProposal[]>([]);
   const activeView = urlRunId ? "runs" as AgentDetailView : parseAgentDetailView(urlTab ?? null);
   const needsDashboardData = activeView === "dashboard";
   const needsRunData = activeView === "runs" || Boolean(urlRunId);
@@ -853,6 +865,21 @@ export function AgentDetail() {
     },
   });
 
+  const handleProposeTasks = useCallback(async () => {
+    if (!agent) return;
+    setProposing(true);
+    setProposeOpen(true);
+    setProposals([]);
+    try {
+      const result = await agentsApi.proposeTasks(agentLookupRef, resolvedCompanyId ?? undefined);
+      setProposals(result.proposals ?? []);
+    } catch {
+      setProposeOpen(false);
+    } finally {
+      setProposing(false);
+    }
+  }, [agent, agentLookupRef, resolvedCompanyId]);
+
   useEffect(() => {
     const crumbs: { label: string; href?: string }[] = [
       { label: "Agents", href: "/agents" },
@@ -933,6 +960,17 @@ export function AgentDetail() {
           >
             <Plus className="h-3.5 w-3.5 sm:mr-1" />
             <span className="hidden sm:inline">Assign Task</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleProposeTasks}
+            disabled={proposing}
+          >
+            {proposing
+              ? <Loader2 className="h-3.5 w-3.5 sm:mr-1 animate-spin" />
+              : <Sparkles className="h-3.5 w-3.5 sm:mr-1" />}
+            <span className="hidden sm:inline">Propose Tasks</span>
           </Button>
           <RunButton
             onClick={() => agentAction.mutate("invoke")}
@@ -1153,11 +1191,85 @@ export function AgentDetail() {
       ) : null}
 
       {activeView === "memories" && <AgentMemoryList agentId={agent.id} />}
+
+      {/* Propose Tasks Dialog */}
+      <Dialog open={proposeOpen} onOpenChange={setProposeOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Proposed Tasks for {agent.name}
+            </DialogTitle>
+          </DialogHeader>
+          {proposing && (
+            <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <p className="text-sm">Generating task proposals...</p>
+            </div>
+          )}
+          {!proposing && proposals.length === 0 && (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              No proposals returned. Try again or check the model configuration.
+            </p>
+          )}
+          {!proposing && proposals.length > 0 && (
+            <div className="space-y-3 mt-2">
+              {proposals.map((proposal, i) => (
+                <div key={i} className="border border-border rounded-lg p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-sm leading-snug">{proposal.title}</p>
+                    <PriorityBadge priority={proposal.priority} />
+                  </div>
+                  <p className="text-sm text-muted-foreground">{proposal.description}</p>
+                  {proposal.goalTitle && (
+                    <p className="text-xs text-muted-foreground">
+                      Tied to: <span className="font-medium text-foreground">{proposal.goalTitle}</span>
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground italic">{proposal.rationale}</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-1"
+                    onClick={() => {
+                      openNewIssue({
+                        assigneeAgentId: agent.id,
+                        title: proposal.title,
+                        description: proposal.description,
+                        priority: proposal.priority,
+                        ...(proposal.goalId ? { goalId: proposal.goalId } : {}),
+                      });
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Create Issue
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 /* ---- Helper components ---- */
+
+const PRIORITY_STYLES: Record<string, string> = {
+  urgent: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  high: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
+  medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400",
+  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+};
+
+function PriorityBadge({ priority }: { priority: string }) {
+  return (
+    <Badge className={cn("capitalize shrink-0", PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.medium)}>
+      {priority}
+    </Badge>
+  );
+}
 
 function SummaryRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (

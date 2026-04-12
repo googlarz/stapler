@@ -42,6 +42,7 @@ export function CompanySettings() {
   const [brandColor, setBrandColor] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [defaultModel, setDefaultModel] = useState("");
 
   // Sync local state from selected company
   useEffect(() => {
@@ -50,6 +51,7 @@ export function CompanySettings() {
     setDescription(selectedCompany.description ?? "");
     setBrandColor(selectedCompany.brandColor ?? "");
     setLogoUrl(selectedCompany.logoUrl ?? "");
+    setDefaultModel(selectedCompany.defaultModel ?? "");
   }, [selectedCompany]);
 
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -61,13 +63,15 @@ export function CompanySettings() {
     !!selectedCompany &&
     (companyName !== selectedCompany.name ||
       description !== (selectedCompany.description ?? "") ||
-      brandColor !== (selectedCompany.brandColor ?? ""));
+      brandColor !== (selectedCompany.brandColor ?? "") ||
+      defaultModel !== (selectedCompany.defaultModel ?? ""));
 
   const generalMutation = useMutation({
     mutationFn: (data: {
       name: string;
       description: string | null;
       brandColor: string | null;
+      defaultModel: string | null;
     }) => companiesApi.update(selectedCompanyId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
@@ -241,7 +245,8 @@ export function CompanySettings() {
     generalMutation.mutate({
       name: companyName.trim(),
       description: description.trim() || null,
-      brandColor: brandColor || null
+      brandColor: brandColor || null,
+      defaultModel: defaultModel.trim() || null,
     });
   }
 
@@ -276,6 +281,18 @@ export function CompanySettings() {
               value={description}
               placeholder="Optional company description"
               onChange={(e) => setDescription(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Default model"
+            hint="Pre-filled when hiring a new agent. Agents can override this in their own config. Example: gemma4:27b, claude-sonnet-4-5."
+          >
+            <input
+              className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 font-mono text-sm outline-none"
+              type="text"
+              value={defaultModel}
+              placeholder="e.g. gemma4:27b"
+              onChange={(e) => setDefaultModel(e.target.value)}
             />
           </Field>
         </div>

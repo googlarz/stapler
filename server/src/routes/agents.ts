@@ -31,11 +31,14 @@ import { trackAgentCreated } from "@paperclipai/shared/telemetry";
 import { validate } from "../middleware/validate.js";
 import {
   agentService,
+  agentMemoryService,
   agentInstructionsService,
   accessService,
   approvalService,
+  companyService,
   companySkillService,
   budgetService,
+  goalService,
   heartbeatService,
   issueApprovalService,
   issueService,
@@ -2508,6 +2511,169 @@ export function agentRoutes(db: Db) {
       agentName: agent.name,
       adapterType: agent.adapterType,
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Propose Tasks — AI-generated task suggestions for an agent
+  // ---------------------------------------------------------------------------
+  router.post("/agents/:id/propose-tasks", async (req, res) => {
+    const id = req.params.id as string;
+    const agent = await svc.getById(id);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+
+    const companyId = agent.companyId;
+
+    // Gather context in parallel
+    const [company, allGoals, allAgents, recentIssues, agentMemories] = await Promise.all([
+      companyService(db).getById(companyId),
+      goalService(db).list(companyId),
+      db.select({
+        id: agentsTable.id,
+        name: agentsTable.name,
+        role: agentsTable.role,
+        status: agentsTable.status,
+      }).from(agentsTable).where(eq(agentsTable.companyId, companyId)),
+      db.select({
+        id: issuesTable.id,
+        title: issuesTable.title,
+        status: issuesTable.status,
+        assigneeAgentId: issuesTable.assigneeAgentId,
+        goalId: issuesTable.goalId,
+        priority: issuesTable.priority,
+      })
+        .from(issuesTable)
+        .where(
+          and(
+            eq(issuesTable.companyId, companyId),
+            inArray(issuesTable.status, ["todo", "in_progress"]),
+          ),
+        )
+        .orderBy(desc(issuesTable.createdAt))
+        .limit(50),
+      agentMemoryService(db).list({ agentId: id, limit: 10, offset: 0 }),
+    ]);
+
+    // Separate this agent's issues from others'
+    const myIssues = recentIssues.filter((i) => i.assigneeAgentId === id);
+    const otherIssues = recentIssues.filter((i) => i.assigneeAgentId !== id);
+
+    // Determine default model: agent config > company default > fallback
+    const agentCfg = (agent.adapterConfig ?? {}) as Record<string, unknown>;
+    const ollamaBaseUrl = typeof agentCfg.baseUrl === "string"
+      ? agentCfg.baseUrl.replace(/\/$/, "")
+      : "http://localhost:11434";
+    const model = typeof agentCfg.model === "string" && agentCfg.model
+      ? agentCfg.model
+      : (company?.defaultModel ?? "llama3.2");
+
+    // Build context prompt
+    const goalsSection = allGoals.length === 0 ? "No goals defined yet." : allGoals.map((g) => {
+      const criteria = Array.isArray(g.acceptanceCriteria) && g.acceptanceCriteria.length > 0
+        ? `\n  Criteria: ${(g.acceptanceCriteria as Array<{ text: string }>).map((c) => c.text).join("; ")}`
+        : "";
+      return `- [${g.status}] ${g.title}${g.description ? ` — ${g.description}` : ""}${criteria}`;
+    }).join("\n");
+
+    const myIssuesSection = myIssues.length === 0 ? "None" : myIssues
+      .map((i) => `- [${i.status}] ${i.title}`)
+      .join("\n");
+
+    const otherIssuesSection = otherIssues.length === 0 ? "None" : otherIssues
+      .slice(0, 20)
+      .map((i) => {
+        const assignee = allAgents.find((a) => a.id === i.assigneeAgentId);
+        return `- [${i.status}] ${i.title}${assignee ? ` (handled by ${assignee.name})` : ""}`;
+      })
+      .join("\n");
+
+    const memoriesSection = agentMemories.length === 0 ? "None" : agentMemories
+      .map((m) => `- ${(m as { content: string }).content}`)
+      .join("\n");
+
+    const prompt = `You are a task-planning assistant for an AI agent team.
+
+COMPANY: ${company?.name ?? companyId}
+${company?.description ? `DESCRIPTION: ${company.description}` : ""}
+
+AGENT TO PLAN FOR:
+- Name: ${agent.name}
+- Role: ${agent.role}${agent.title ? ` (${agent.title})` : ""}
+
+COMPANY GOALS:
+${goalsSection}
+
+THIS AGENT'S CURRENT ISSUES (already in progress or assigned):
+${myIssuesSection}
+
+OTHER OPEN ISSUES (being handled by other agents or unassigned):
+${otherIssuesSection}
+
+THIS AGENT'S MEMORIES (things it has learned):
+${memoriesSection}
+
+TASK: Propose exactly 5 specific, actionable tasks this agent should work on next.
+
+Rules:
+1. Do NOT duplicate anything already in the agent's current issues list.
+2. Do NOT duplicate work already being handled by other agents.
+3. Each task must be concrete enough to create a GitHub issue — not vague like "improve things".
+4. Tie tasks to company goals where possible.
+5. Prioritize: (a) goal-critical gaps with no linked work, (b) momentum continuations, (c) near-completion pushes, (d) strategic new work.
+6. Tasks should be self-contained — one agent can execute each alone.
+
+Respond with ONLY a JSON object in this exact format, no other text:
+{
+  "proposals": [
+    {
+      "title": "Short action-oriented title (max 80 chars)",
+      "description": "2-3 sentences explaining what to do and how to verify it's done.",
+      "rationale": "One sentence: why this agent, why now.",
+      "goalTitle": "Exact goal title this advances, or null if not tied to a goal",
+      "priority": "high" | "medium" | "low"
+    }
+  ]
+}`;
+
+    try {
+      const ollamaRes = await fetch(`${ollamaBaseUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          stream: false,
+          format: "json",
+          messages: [{ role: "user", content: prompt }],
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+
+      if (!ollamaRes.ok) {
+        const errText = await ollamaRes.text().catch(() => "");
+        res.status(502).json({ error: `Ollama error: ${ollamaRes.status}`, detail: errText });
+        return;
+      }
+
+      const ollamaData = (await ollamaRes.json()) as { message?: { content?: string } };
+      const rawContent = ollamaData?.message?.content ?? "";
+
+      let proposals: unknown;
+      try {
+        const parsed = JSON.parse(rawContent) as Record<string, unknown>;
+        proposals = Array.isArray(parsed.proposals) ? parsed.proposals : [];
+      } catch {
+        res.status(502).json({ error: "Model returned invalid JSON", raw: rawContent.slice(0, 500) });
+        return;
+      }
+
+      res.json({ proposals });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      res.status(502).json({ error: `Failed to reach Ollama: ${message}` });
+    }
   });
 
   return router;
