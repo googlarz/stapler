@@ -4,6 +4,7 @@ import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclip
 import {
   asNumber,
   asString,
+  asBoolean,
   buildPaperclipEnv,
   parseObject,
   renderTemplate,
@@ -12,6 +13,12 @@ import {
 } from "@paperclipai/adapter-utils/server-utils";
 import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MAX_HISTORY_TURNS, DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_TIMEOUT_SEC } from "../index.js";
 import { resolveOllamaDesiredSkillNames } from "./skills.js";
+import {
+  PAPERCLIP_TOOLS,
+  buildPaperclipApiContext,
+  executePaperclipTool,
+  type OllamaToolCall,
+} from "./tools.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,8 +47,25 @@ export interface OllamaErrorLine {
 
 export type OllamaStdoutLine = OllamaChunkLine | OllamaDoneLine | OllamaErrorLine;
 
-const DEFAULT_SYSTEM_PROMPT =
-  "You are a helpful AI assistant integrated into the Paperclip control plane. Respond concisely and helpfully.";
+const DEFAULT_SYSTEM_PROMPT = `\
+You are an AI agent running inside Paperclip — an autonomous agent management platform.
+
+## How you operate
+- You run in **single-turn mode**: you receive one message and produce one response. There are no follow-up turns.
+- Your response is posted as a **comment on your assigned issue**. That comment is your deliverable for this run.
+- You cannot call external APIs, run shell commands, browse the web, or create files. You work with what you know and what is given to you in this message.
+
+## How to be useful every run
+- **Read the task first.** Understand what is being asked before writing anything.
+- **Complete the work NOW, in full.** Never say "I will do X in the next step" or "I'll check back later" — there is no later turn.
+- **Write concrete output.** Plans, decisions, analysis, recommendations — not narration about what you're going to do.
+- **Be direct.** Skip filler phrases like "As an AI agent, I will assist you with…"
+
+## What Paperclip is
+Paperclip orchestrates AI agents across goals and issues. Each agent is assigned to issues,
+wakes up when triggered, produces a text response, and the response is recorded as a comment.
+Humans and other agents can then react to that comment in subsequent runs.\
+`;
 
 function buildContextNote(context: Record<string, unknown>): string {
   const parts: string[] = [];
@@ -168,7 +192,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const promptTemplate = asString(
     config.promptTemplate,
-    "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
+    // Default: surface the task title + description so the model always knows what it's doing.
+    // Agents can override this via config.promptTemplate for custom framing.
+    `You are {{agent.name}}, a Paperclip agent.
+
+## Your current task
+**{{context.paperclipWake.issue.title}}**
+
+{{context.paperclipWake.issue.description}}
+
+---
+Complete this task in full in your response. Do not defer to a future turn.`,
   );
   const templateData = {
     agentId: agent.id,
@@ -250,13 +284,170 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         }, timeoutSec * 1000)
       : null;
 
+  // Whether to enable Paperclip tool calling (default on; set enableTools:false in config to opt out).
+  const enableTools = asBoolean(config.enableTools, true);
+  const maxToolIterations = asNumber(config.maxToolIterations, 10);
+  const apiContext = buildPaperclipApiContext(agent, ctx.authToken);
+
   let assistantContent = "";
   let promptEvalCount = 0;
   let evalCount = 0;
   let exitCode: number | null = null;
   let errorMessage: string | null = null;
+  // Tracks the full message history for session persistence.
+  let sessionMessages: Array<Record<string, unknown>> = [];
 
   try {
+    // -------------------------------------------------------------------------
+    // Path A — Agentic tool loop (non-streaming, multi-turn tool calls).
+    // Allows the model to call Paperclip APIs (create issues, hire agents, etc.)
+    // and receive results before producing its final text response.
+    // Falls back to Path B if the model reports it doesn't support tools.
+    // -------------------------------------------------------------------------
+    let toolsUsed = false;
+
+    if (enableTools) {
+      const loopMessages: Array<Record<string, unknown>> = [
+        { role: "system", content: systemPrompt },
+        ...(priorMessages as unknown as Array<Record<string, unknown>>),
+        { role: "user", content: userContent },
+      ];
+
+      let toolsSupported = true;
+
+      for (let iteration = 0; iteration < maxToolIterations; iteration++) {
+        if (timedOut) break;
+
+        const reqBody: Record<string, unknown> = {
+          model,
+          messages: loopMessages,
+          tools: PAPERCLIP_TOOLS,
+          stream: false,
+        };
+        if (temperature !== undefined) reqBody.options = { temperature };
+
+        const res = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(reqBody),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const bodyText = await res.text().catch(() => "");
+          // Graceful fallback: model doesn't support tool calling → use streaming path.
+          if (
+            res.status === 400 &&
+            (bodyText.toLowerCase().includes("does not support tools") ||
+              bodyText.toLowerCase().includes("tool") ||
+              bodyText.toLowerCase().includes("function"))
+          ) {
+            toolsSupported = false;
+            break;
+          }
+          const errMsg = bodyText.trim() || `HTTP ${res.status} ${res.statusText}`;
+          const errLine: OllamaErrorLine = { type: "error", message: errMsg };
+          await onLog("stderr", JSON.stringify(errLine) + "\n");
+          return {
+            exitCode: 1,
+            signal: null,
+            timedOut: false,
+            errorMessage: `Ollama returned ${res.status}: ${errMsg}`,
+            provider: "ollama",
+            model,
+            resultJson: { error: errMsg },
+          };
+        }
+
+        const json = (await res.json()) as Record<string, unknown>;
+        promptEvalCount += asNumber(json.prompt_eval_count, 0);
+        evalCount += asNumber(json.eval_count, 0);
+
+        const msgObj =
+          typeof json.message === "object" && json.message !== null
+            ? (json.message as Record<string, unknown>)
+            : {};
+
+        const rawToolCalls = Array.isArray(msgObj.tool_calls) ? msgObj.tool_calls : [];
+        const toolCalls = rawToolCalls.filter(
+          (tc): tc is OllamaToolCall =>
+            typeof tc === "object" &&
+            tc !== null &&
+            typeof (tc as Record<string, unknown>).function === "object",
+        );
+
+        if (toolCalls.length === 0) {
+          // No tool calls — model produced its final text response.
+          assistantContent = typeof msgObj.content === "string" ? msgObj.content : "";
+          // Emit as a chunk so the UI sees the response token.
+          if (assistantContent) {
+            await onLog(
+              "stdout",
+              JSON.stringify({ type: "chunk", content: assistantContent } satisfies OllamaChunkLine) + "\n",
+            );
+          }
+          await onLog(
+            "stdout",
+            JSON.stringify({
+              type: "done",
+              model,
+              prompt_eval_count: promptEvalCount,
+              eval_count: evalCount,
+              total_duration_ns: 0,
+            } satisfies OllamaDoneLine) + "\n",
+          );
+          toolsUsed = true;
+          exitCode = 0;
+          // Build session history: exclude system message, include tool turns.
+          sessionMessages = loopMessages.slice(1); // drop system
+          if (assistantContent) {
+            sessionMessages.push({ role: "assistant", content: assistantContent });
+          }
+          break;
+        }
+
+        // Add the assistant turn (with tool_calls) to loop history.
+        loopMessages.push({ ...msgObj, role: "assistant" });
+
+        // Execute each tool call against the Paperclip API.
+        for (const tc of toolCalls) {
+          await onLog(
+            "stdout",
+            JSON.stringify({ type: "tool_call", name: tc.function.name, args: tc.function.arguments }) + "\n",
+          );
+
+          const result = await executePaperclipTool(tc, apiContext);
+          const resultStr = JSON.stringify(result);
+
+          await onLog(
+            "stdout",
+            JSON.stringify({
+              type: "tool_result",
+              name: tc.function.name,
+              result: resultStr.slice(0, 1000),
+            }) + "\n",
+          );
+
+          // Feed result back to the model as a tool message.
+          loopMessages.push({ role: "tool", content: resultStr });
+        }
+      }
+
+      if (!toolsSupported) {
+        // Model doesn't support tools → fall through to the streaming path.
+        toolsUsed = false;
+      } else if (exitCode !== 0 && !timedOut) {
+        // Max iterations hit without a clean text response — treat as success with whatever we have.
+        exitCode = 0;
+        toolsUsed = true;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Path B — Streaming text-only path (no tool calls).
+    // Used when tools are disabled, or when the model doesn't support tools.
+    // -------------------------------------------------------------------------
+    if (!toolsUsed) {
     const requestBody: Record<string, unknown> = {
       model,
       messages,
@@ -373,6 +564,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     }
 
     exitCode = 0;
+    } // end Path B
   } catch (err) {
     if (timeoutHandle) clearTimeout(timeoutHandle);
     if (timedOut) {
@@ -433,12 +625,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     };
   }
 
-  // Build updated session params with appended message history
-  const updatedMessages: OllamaMessage[] = [
-    ...priorMessages,
-    { role: "user", content: userContent },
-    ...(assistantContent ? [{ role: "assistant" as const, content: assistantContent }] : []),
-  ];
+  // Build updated session params with appended message history.
+  // When tools were used, sessionMessages already contains the full loop history
+  // (user turn + tool turns + final assistant turn), so use that directly.
+  // Otherwise fall back to the simple prior + user + assistant structure.
+  const updatedMessages: Array<Record<string, unknown>> =
+    sessionMessages.length > 0
+      ? sessionMessages
+      : [
+          ...(priorMessages as unknown as Array<Record<string, unknown>>),
+          { role: "user", content: userContent },
+          ...(assistantContent ? [{ role: "assistant", content: assistantContent }] : []),
+        ];
 
   return {
     exitCode,
