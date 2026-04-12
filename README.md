@@ -1,71 +1,41 @@
 # Stapler
 
-**A curated, friendly fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip) — with the features upstream hasn't merged yet.**
-
-> Paperclip slips off. A stapler commits.
-
-Stapler is Paperclip with a set of contribution PRs pre-merged and kept current against upstream. It is **not** a hostile fork — no renaming of packages, no divergent architecture, no competing branding. All the hard work is still `paperclipai/paperclip`. Stapler just gives you a place to run production against a tree where good fixes actually land.
+My personal build of [paperclipai/paperclip](https://github.com/paperclipai/paperclip). Kept in sync with upstream, with a few extra features on top.
 
 ---
 
-## Why this fork exists
+## Recent upstream changes (also in Stapler)
 
-I contribute fixes and features upstream. Most go through review and merge. Some get stuck — closed without comment, caught in review limbo, or blocked behind a decision that isn't coming. Rather than babysit every PR through upstream's process, Stapler bundles them into a single branch I can ship from, with upstream tracked as a remote so I can pull in their changes whenever I want.
-
-If you contribute to Paperclip too and you've ever watched a clean PR sit untouched for days, this fork exists for you.
-
----
-
-## What's different from `paperclipai/paperclip`
-
-This fork carries 6 commits on top of upstream master. Each one is a direct port of an open or closed upstream PR, squashed for clean history:
-
-| Commit | Feature | Upstream PR | Status upstream |
-|---|---|---|---|
-| `1e5afa4f` | `fix: validate assigneeAgentId issue filters before querying` | [paperclipai/paperclip#3198](https://github.com/paperclipai/paperclip/pull/3198) | **Closed without comment** by maintainer. Second attempt at the same fix (first was [#2302](https://github.com/paperclipai/paperclip/pull/2302), also closed). |
-| `3289907c` | `feat(goals): acceptance criteria + target date` | [paperclipai/paperclip#3278](https://github.com/paperclipai/paperclip/pull/3278) | **Open**, all Greptile findings resolved. |
-| `0886fdd1` | `feat(goals): automatic verification loop for acceptance criteria` | [paperclipai/paperclip#3280](https://github.com/paperclipai/paperclip/pull/3280) | **Draft**, chained on #3278. |
-| `0dd128f4` | `fix(goals): audit every verification state transition` | [paperclipai/paperclip#3280](https://github.com/paperclipai/paperclip/pull/3280) | Follow-up fix addressing Gardener bot's activity-log audit gap. |
-| `86d4a503` | `feat(agents): per-agent memory store with keyword search` | [paperclipai/paperclip#3289](https://github.com/paperclipai/paperclip/pull/3289) | **Open**, all Greptile findings resolved. |
-| `1f250d0d` | `feat(agents): MCP tools, skill docs, and UI panel for agent memory` | Not yet opened upstream (chained on #3289). | Branch ready at `googlarz/paperclip:feat/agent-memory-mcp-ui`. |
-
-### What you actually get over upstream
-
-- **Agents can call `memory.save(...)` and `memory.search(...)` during runs.** Per-agent keyword-searchable notes store via `pg_trgm`. HTTP API at `/agents/:agentId/memories` that every adapter can already reach via `PAPERCLIP_API_KEY`. Four new MCP tools for adapters that support MCP natively. Read-only "Memories" tab on the agent detail page. Hard agent-identity isolation via new `assertAgentIdentity` authz guard — closes the `paperclipApiRequest` raw-URL escape hatch.
-- **Goals have acceptance criteria and target dates.** Editable criteria list, progress bar based on linked issues (cancelled excluded), with a proper inline text editor that doesn't clobber your keystrokes mid-edit.
-- **Goals get automatically verified when their linked issues all reach `done`.** Server auto-creates a verification issue assigned to the goal's owner agent, who judges each criterion and posts a fenced `json verification_outcome` block. On pass, the goal flips to `achieved` with a full audit trail. On fail, a follow-up issue is created. Max 3 attempts, manual retrigger button as an escape hatch.
-- **Query parameter validation on the issues list endpoint.** No more silent "DB error on `assigneeAgentId=undefined`" — you get a clean 400 with a zod error.
-
-### What's NOT different
-
-- **Branding, package names, env vars, licensing.** All still `paperclipai`, `PAPERCLIP_API_KEY`, `@paperclipai/shared`, MIT license. Stapler is the repo name, nothing else. The underlying system is still Paperclip.
-- **Upstream Paperclip itself.** This fork tracks `upstream/master` as a remote. Pulling in their changes is a standard `git fetch upstream && git rebase upstream/master` away.
-- **Contribution direction.** I still open PRs upstream first. This fork exists because some of them get stuck, not because I'm trying to route around the project.
+- **fix(logger):** redact cookies from server log
+- **fix:** serialize Date to ISO string in comment cursor query
+- **fix(plugins):** pass pluginDbId through tool registration; forward `issue.comment_added` events with full body
+- **fix(process-adapter):** inject run ID and auth token as env defaults; preserve injected run env precedence
 
 ---
 
-## Syncing with upstream
+## What you actually get over upstream
 
-```bash
-git remote add upstream https://github.com/paperclipai/paperclip.git
-git fetch upstream master
+- **Agents can save and search memories during runs.** Per-agent keyword-searchable notes backed by `pg_trgm`. HTTP API at `/agents/:agentId/memories` that every adapter can reach via `PAPERCLIP_API_KEY`. Four MCP tools for adapters that support MCP natively. A read-only "Memories" tab on the agent detail page.
 
-# Option A — rebase my commits on top of new upstream
-git checkout main
-git rebase upstream/master
+- **Memories are automatically injected at run-start.** Set `enableMemoryInjection: true` in agent config and the server fetches the top-K relevant memories before calling `execute()` — no tool call needed. Works with both Claude and Ollama adapters.
 
-# Option B — merge upstream into main (preserves merge commits)
-git checkout main
-git merge upstream/master
-```
+- **Run agents on a local Ollama instance.** Full agentic loop with tool calling, conversation history, and streaming. Pick any model Ollama has installed.
 
-Conflicts are likely in `packages/db/src/migrations/meta/_journal.json` and the `migrations/*.sql` numbering when upstream adds new migrations. The pattern is: rename any of my migrations that collide with upstream's new ones, bump journal `idx`, done.
+- **Onboarding wizard suggests the best setup for your goal.** Type your company mission in step 1 and the wizard recommends an adapter, pre-fills the first task title, and generates a structured task description tailored to what you're trying to build.
+
+- **Goals have acceptance criteria and target dates.** Editable criteria list per goal, progress bar driven by linked issues (cancelled excluded), with an inline editor that doesn't clobber keystrokes mid-edit.
+
+- **Goals get automatically verified when their linked issues all reach `done`.** The server creates a verification issue assigned to the goal's owner agent, who judges each criterion and posts a structured result. On pass, the goal flips to `achieved` with a full audit trail. Max 3 attempts, manual retrigger as an escape hatch.
+
+- **Goal properties are fully editable after creation.** Change the parent goal, clear the description, or delete a goal — all from the properties panel.
+
+- **Query parameter validation on the issues list endpoint.** No more silent DB errors on `assigneeAgentId=undefined` — clean 400 with a structured error instead.
 
 ---
 
 ## Quickstart
 
-Stapler runs exactly like Paperclip. See the upstream [Quickstart](https://github.com/paperclipai/paperclip#quickstart) — no setup differences.
+Same as upstream. See the [Paperclip docs](https://github.com/paperclipai/paperclip#quickstart).
 
 ```bash
 git clone https://github.com/googlarz/stapler.git
@@ -74,41 +44,35 @@ pnpm install
 pnpm dev
 ```
 
-For the agent memory feature specifically:
+Agent memory quickstart:
 
 ```bash
-# As an authenticated agent
+# Save a memory (as an authenticated agent)
 curl -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -X POST "$PAPERCLIP_API_URL/agents/$PAPERCLIP_AGENT_ID/memories" \
   -d '{"content":"user prefers French over English","tags":["preference","language"]}'
 
-# Later, same or future run
+# Search memories in a later run
 curl -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   "$PAPERCLIP_API_URL/agents/$PAPERCLIP_AGENT_ID/memories?q=french&limit=5"
 ```
 
-See `skills/paperclip/SKILL.md` for the full agent-facing contract.
+See `skills/paperclip/SKILL.md` for the full agent-facing API contract.
+
+---
+
+## Syncing with upstream
+
+```bash
+git remote add upstream https://github.com/paperclipai/paperclip.git
+git fetch upstream master
+git rebase upstream/master
+```
+
+Migration conflicts (`packages/db/src/migrations/`) are the most common — rename any colliding migration files and bump the journal `idx`.
 
 ---
 
 ## License
 
-MIT, same as upstream. Copyright 2025 Paperclip AI (upstream original) plus contributor attributions per commit. See [LICENSE](./LICENSE).
-
----
-
-## Credits
-
-- **[paperclipai/paperclip](https://github.com/paperclipai/paperclip)** — the real project. Stapler is a thin layer on top.
-- **[@davison](https://github.com/davison)** — mempalace / memory adapter framework in [paperclipai/paperclip#3250](https://github.com/paperclipai/paperclip/pull/3250). Complementary to the agent memory primitive in this fork.
-- **[@cryppadotta](https://github.com/cryppadotta)** — paperclipai maintainer. Most of the code you're running came from their reviews.
-
----
-
-## Open upstream PRs
-
-If you want any of these features landed in `paperclipai/paperclip` itself (which would make this fork smaller), a thumbs-up or review on any of these helps:
-
-- [#3278 — feat(goals): acceptance criteria](https://github.com/paperclipai/paperclip/pull/3278)
-- [#3280 — feat(goals): verification loop](https://github.com/paperclipai/paperclip/pull/3280) (draft, chained on #3278)
-- [#3289 — feat(agents): memory store](https://github.com/paperclipai/paperclip/pull/3289)
+MIT, same as upstream. See [LICENSE](./LICENSE).

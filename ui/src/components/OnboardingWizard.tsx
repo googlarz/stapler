@@ -43,6 +43,7 @@ import { DEFAULT_OLLAMA_MODEL } from "@paperclipai/adapter-ollama-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import { resolveRouteOnboardingOptions } from "../lib/onboarding-route";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
+import { suggestFromGoal, type OnboardingSuggestion } from "../lib/onboarding-suggestion";
 import {
   Building2,
   Bot,
@@ -53,13 +54,15 @@ import {
   Check,
   Loader2,
   ChevronDown,
-  X
+  X,
+  Sparkles
 } from "lucide-react";
 
 
 type Step = 1 | 2 | 3 | 4;
 type AdapterType = string;
 
+const DEFAULT_TASK_TITLE = "Hire your first engineer and create a hiring plan";
 const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the company.
 
 - hire a founding engineer
@@ -139,12 +142,13 @@ export function OnboardingWizard() {
   const [showMoreAdapters, setShowMoreAdapters] = useState(false);
 
   // Step 3
-  const [taskTitle, setTaskTitle] = useState(
-    "Hire your first engineer and create a hiring plan"
-  );
+  const [taskTitle, setTaskTitle] = useState(DEFAULT_TASK_TITLE);
   const [taskDescription, setTaskDescription] = useState(
     DEFAULT_TASK_DESCRIPTION
   );
+
+  // Goal-based suggestion
+  const [suggestion, setSuggestion] = useState<OnboardingSuggestion | null>(null);
 
   // Auto-grow textarea for task description
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -316,7 +320,7 @@ export function OnboardingWizard() {
     setAdapterEnvLoading(false);
     setForceUnsetAnthropicApiKey(false);
     setUnsetAnthropicLoading(false);
-    setTaskTitle("Hire your first engineer and create a hiring plan");
+    setTaskTitle(DEFAULT_TASK_TITLE);
     setTaskDescription(DEFAULT_TASK_DESCRIPTION);
     setCreatedCompanyId(null);
     setCreatedCompanyPrefix(null);
@@ -324,6 +328,7 @@ export function OnboardingWizard() {
     setCreatedAgentId(null);
     setCreatedProjectId(null);
     setCreatedIssueRef(null);
+    setSuggestion(null);
   }
 
   function handleClose() {
@@ -403,6 +408,14 @@ export function OnboardingWizard() {
   async function handleStep1Next() {
     const companyId = await ensureCompanyCreated();
     if (companyId) {
+      const s = suggestFromGoal(companyGoal);
+      setSuggestion(s);
+      if (s) {
+        // Only pre-fill if the user hasn't edited the task fields away from
+        // their defaults — guards against back→next discarding user edits.
+        if (taskTitle === DEFAULT_TASK_TITLE) setTaskTitle(s.taskTitle);
+        if (taskDescription === DEFAULT_TASK_DESCRIPTION) setTaskDescription(s.taskDescription);
+      }
       setStep(2);
     }
   }
@@ -809,9 +822,17 @@ export function OnboardingWizard() {
 
                   {/* Adapter type radio cards */}
                   <div>
-                    <label className="text-xs text-muted-foreground mb-2 block">
-                      Adapter type
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-muted-foreground">
+                        Adapter type
+                      </label>
+                      {suggestion && (
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Sparkles className="h-3 w-3" />
+                          {suggestion.adapterHint}
+                        </span>
+                      )}
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       {recommendedAdapters.map((opt) => (
                         <button
@@ -833,11 +854,15 @@ export function OnboardingWizard() {
                             }
                           }}
                         >
-                          {opt.recommended && (
+                          {suggestion && suggestion.adapterType === opt.type ? (
+                            <span className="absolute -top-1.5 right-1.5 bg-blue-500 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
+                              For your goal
+                            </span>
+                          ) : opt.recommended ? (
                             <span className="absolute -top-1.5 right-1.5 bg-green-500 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
                               Recommended
                             </span>
-                          )}
+                          ) : null}
                           <opt.icon className="h-4 w-4" />
                           <span className="font-medium">{opt.label}</span>
                           <span className="text-muted-foreground text-[10px]">
