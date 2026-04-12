@@ -2598,72 +2598,44 @@ export function agentRoutes(db: Db) {
     }
 
     // Build context prompt
-    const goalsSection = allGoals.length === 0 ? "No goals defined yet." : allGoals.map((g) => {
-      const criteria = Array.isArray(g.acceptanceCriteria) && g.acceptanceCriteria.length > 0
-        ? `\n  Criteria: ${(g.acceptanceCriteria as Array<{ text: string }>).map((c) => c.text).join("; ")}`
-        : "";
-      return `- [${g.status}] ${g.title}${g.description ? ` — ${g.description}` : ""}${criteria}`;
-    }).join("\n");
+    const goalsSection = allGoals.length === 0 ? "No goals defined yet." : allGoals.slice(0, 8).map((g) =>
+      `- [${g.status}] ${g.title}${g.description ? ` — ${g.description.slice(0, 120)}` : ""}`
+    ).join("\n");
 
-    const myIssuesSection = myIssues.length === 0 ? "None" : myIssues
+    const myIssuesSection = myIssues.length === 0 ? "None" : myIssues.slice(0, 8)
       .map((i) => `- [${i.status}] ${i.title}`)
       .join("\n");
 
-    const otherIssuesSection = otherIssues.length === 0 ? "None" : otherIssues
-      .slice(0, 20)
+    const otherIssuesSection = otherIssues.length === 0 ? "None" : otherIssues.slice(0, 10)
       .map((i) => {
         const assignee = allAgents.find((a) => a.id === i.assigneeAgentId);
-        return `- [${i.status}] ${i.title}${assignee ? ` (handled by ${assignee.name})` : ""}`;
+        return `- ${i.title}${assignee ? ` (${assignee.name})` : ""}`;
       })
       .join("\n");
 
-    const memoriesSection = agentMemories.length === 0 ? "None" : agentMemories
-      .map((m) => `- ${(m as { content: string }).content}`)
+    const memoriesSection = agentMemories.length === 0 ? "None" : agentMemories.slice(0, 5)
+      .map((m) => `- ${(m as { content: string }).content.slice(0, 200)}`)
       .join("\n");
 
-    const prompt = `You are a task-planning assistant for an AI agent team.
+    const prompt = `Plan 5 tasks for an AI agent. Reply ONLY with JSON, no other text.
 
-COMPANY: ${company?.name ?? companyId}
-${company?.description ? `DESCRIPTION: ${company.description}` : ""}
+Agent: ${agent.name} (${agent.role}${agent.title ? `, ${agent.title}` : ""})
+Company: ${company?.name ?? companyId}
 
-AGENT TO PLAN FOR:
-- Name: ${agent.name}
-- Role: ${agent.role}${agent.title ? ` (${agent.title})` : ""}
-
-COMPANY GOALS:
+Goals:
 ${goalsSection}
 
-THIS AGENT'S CURRENT ISSUES (already in progress or assigned):
+Agent's current work:
 ${myIssuesSection}
 
-OTHER OPEN ISSUES (being handled by other agents or unassigned):
+Other agents' work (do not duplicate):
 ${otherIssuesSection}
 
-THIS AGENT'S MEMORIES (things it has learned):
+Agent memories:
 ${memoriesSection}
 
-TASK: Propose exactly 5 specific, actionable tasks this agent should work on next.
-
-Rules:
-1. Do NOT duplicate anything already in the agent's current issues list.
-2. Do NOT duplicate work already being handled by other agents.
-3. Each task must be concrete enough to create a GitHub issue — not vague like "improve things".
-4. Tie tasks to company goals where possible.
-5. Prioritize: (a) goal-critical gaps with no linked work, (b) momentum continuations, (c) near-completion pushes, (d) strategic new work.
-6. Tasks should be self-contained — one agent can execute each alone.
-
-Respond with ONLY a JSON object in this exact format, no other text:
-{
-  "proposals": [
-    {
-      "title": "Short action-oriented title (max 80 chars)",
-      "description": "2-3 sentences explaining what to do and how to verify it's done.",
-      "rationale": "One sentence: why this agent, why now.",
-      "goalTitle": "Exact goal title this advances, or null if not tied to a goal",
-      "priority": "high" | "medium" | "low"
-    }
-  ]
-}`;
+Return exactly this JSON structure:
+{"proposals":[{"title":"<80 chars","description":"1-2 sentences on what to do","rationale":"why this agent now","goalTitle":"goal title or null","priority":"high"|"medium"|"low"}]}`;
 
     try {
       const ollamaRes = await fetch(`${ollamaBaseUrl}/api/chat`, {
@@ -2674,6 +2646,7 @@ Respond with ONLY a JSON object in this exact format, no other text:
           stream: false,
           format: "json",
           messages: [{ role: "user", content: prompt }],
+          options: { num_predict: 1200, num_ctx: 4096 },
         }),
         signal: AbortSignal.timeout(180_000),
       });
