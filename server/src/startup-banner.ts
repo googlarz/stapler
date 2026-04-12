@@ -30,6 +30,7 @@ type StartupBannerOptions = {
   migrationSummary: string;
   heartbeatSchedulerEnabled: boolean;
   heartbeatSchedulerIntervalMs: number;
+  orphanReapStaleThresholdMs: number;
   databaseBackupEnabled: boolean;
   databaseBackupIntervalMinutes: number;
   databaseBackupRetentionDays: number;
@@ -128,7 +129,7 @@ export function printStartupBanner(opts: StartupBannerOptions): void {
       : redactConnectionString(opts.db.connectionString);
 
   const heartbeat = opts.heartbeatSchedulerEnabled
-    ? `enabled ${color(`(${opts.heartbeatSchedulerIntervalMs}ms)`, "dim")}`
+    ? `enabled ${color(`(${opts.heartbeatSchedulerIntervalMs}ms, orphan ${opts.orphanReapStaleThresholdMs}ms)`, "dim")}`
     : color("disabled", "yellow");
   const dbBackup = opts.databaseBackupEnabled
     ? `enabled ${color(`(every ${opts.databaseBackupIntervalMinutes}m, keep ${opts.databaseBackupRetentionDays}d)`, "dim")}`

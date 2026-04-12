@@ -338,6 +338,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     } else {
       args.push("--sandbox=none");
     }
+    // Expand workspace access so agents can read instruction files referenced
+    // by relative path (e.g. HEARTBEAT.md, SOUL.md) from AGENTS.md.
+    if (instructionsDir) args.push("--include-directories", instructionsDir);
+    if (agentHome && agentHome !== cwd && agentHome !== instructionsDir) {
+      args.push("--include-directories", agentHome);
+    }
     if (extraArgs.length > 0) args.push(...extraArgs);
     args.push("--prompt", prompt);
     return args;
@@ -436,7 +442,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       exitCode: attempt.proc.exitCode,
       signal: attempt.proc.signal,
       timedOut: false,
-      errorMessage: (attempt.proc.exitCode ?? 0) === 0 ? null : fallbackErrorMessage,
+      errorMessage: (attempt.proc.exitCode ?? 0) === 0 && !attempt.proc.signal ? null : fallbackErrorMessage,
       errorCode: (attempt.proc.exitCode ?? 0) !== 0 && authMeta.requiresAuth ? "gemini_auth_required" : null,
       usage: attempt.parsed.usage,
       sessionId: resolvedSessionId,

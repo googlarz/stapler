@@ -171,8 +171,7 @@ export function useInboxBadge(companyId: string | null | undefined) {
     queryKey: queryKeys.issues.listMineByMe(companyId!),
     queryFn: () =>
       issuesApi.list(companyId!, {
-        touchedByUserId: "me",
-        inboxArchivedByUserId: "me",
+        assigneeUserId: "me",
         status: INBOX_ISSUE_STATUSES,
       }),
     enabled: !!companyId,
