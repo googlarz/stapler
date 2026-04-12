@@ -14,12 +14,15 @@ export function suggestFromGoal(goal: string): OnboardingSuggestion | null {
   let adapterType = "claude_local";
   let adapterHint = "Claude handles complex reasoning and long tasks well.";
 
-  if (/\b(local|private|offline|self.host|ollama)\b/.test(g)) {
+  if (/\b(local|private|offline|self.host|ollama|gemma)\b/.test(g)) {
     adapterType = "ollama_local";
     adapterHint = "Ollama runs models fully locally — good fit for private workflows.";
   } else if (/\b(gemini|google|search|browse|web)\b/.test(g)) {
     adapterType = "gemini_local";
     adapterHint = "Gemini has strong research and web-grounded capabilities.";
+  } else if (/\b(codex|openai|gpt|code.gen|coding.agent)\b/.test(g)) {
+    adapterType = "codex_local";
+    adapterHint = "Codex is optimised for code generation and engineering tasks.";
   }
 
   // Task title — use the first line of the goal, truncated to 60 chars
