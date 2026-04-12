@@ -411,10 +411,22 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const shouldUseResumeDeltaPrompt = Boolean(sessionId) && wakePrompt.length > 0;
   const renderedPrompt = shouldUseResumeDeltaPrompt ? "" : renderTemplate(promptTemplate, templateData);
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+
+  // Inject top-K memories when the heartbeat layer has pre-loaded them.
+  const injectedMemories = ctx.agentMemoriesForInjection;
+  const memoriesSection =
+    injectedMemories && injectedMemories.length > 0
+      ? [
+          "## Relevant memories",
+          ...injectedMemories.map((m, i) => `${i + 1}. ${m.content}`),
+        ].join("\n")
+      : "";
+
   const prompt = joinPromptSections([
     renderedBootstrapPrompt,
     wakePrompt,
     sessionHandoffNote,
+    memoriesSection,
     renderedPrompt,
   ]);
   const promptMetrics = {
@@ -422,6 +434,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     bootstrapPromptChars: renderedBootstrapPrompt.length,
     wakePromptChars: wakePrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
+    memoriesSectionChars: memoriesSection.length,
     heartbeatPromptChars: renderedPrompt.length,
   };
 

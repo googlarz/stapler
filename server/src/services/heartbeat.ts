@@ -67,6 +67,7 @@ import {
   resolveSessionCompactionPolicy,
   type SessionCompactionPolicy,
 } from "@paperclipai/adapter-utils";
+import { maybeLoadMemoriesForInjection } from "./agent-memories.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -3308,6 +3309,13 @@ export function heartbeatService(db: Db) {
           "local agent jwt secret missing or invalid; running without injected PAPERCLIP_API_KEY",
         );
       }
+      const injectedMemories = await maybeLoadMemoriesForInjection(db, agent, context);
+      if (injectedMemories.length > 0) {
+        logger.info(
+          { agentId: agent.id, runId: run.id, count: injectedMemories.length },
+          "injected memories for agent run-start",
+        );
+      }
       const adapterResult = await adapter.execute({
         runId: run.id,
         agent,
@@ -3327,6 +3335,7 @@ export function heartbeatService(db: Db) {
           });
         },
         authToken: authToken ?? undefined,
+        agentMemoriesForInjection: injectedMemories.length > 0 ? injectedMemories : undefined,
       });
       const adapterManagedRuntimeServices = adapterResult.runtimeServices
         ? await persistAdapterManagedRuntimeServices({

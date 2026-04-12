@@ -100,6 +100,17 @@ export interface AdapterSessionCodec {
   getDisplayId?: (params: Record<string, unknown> | null) => string | null;
 }
 
+/**
+ * A memory entry injected into an agent's execution context at run-start.
+ * Carries only the fields an adapter needs to render the memories prompt section.
+ */
+export interface InjectedMemory {
+  id: string;
+  content: string;
+  tags: string[];
+  score: number;
+}
+
 export interface AdapterInvocationMeta {
   adapterType: string;
   command: string;
@@ -122,6 +133,12 @@ export interface AdapterExecutionContext {
   onMeta?: (meta: AdapterInvocationMeta) => Promise<void>;
   onSpawn?: (meta: { pid: number; processGroupId: number | null; startedAt: string }) => Promise<void>;
   authToken?: string;
+  /**
+   * Top-K agent memories retrieved at run-start and passed to adapters for
+   * injection into the system/user prompt. Only populated when the agent has
+   * `enableMemoryInjection: true` in its config and memories exist.
+   */
+  agentMemoriesForInjection?: InjectedMemory[];
 }
 
 export interface AdapterModel {

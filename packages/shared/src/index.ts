@@ -280,6 +280,7 @@ export type {
   AgentMemoryScope,
   AgentMemorySearchResult,
   AgentMemorySaveResult,
+  InjectedMemory,
   Approval,
   ApprovalComment,
   BudgetPolicy,

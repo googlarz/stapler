@@ -127,7 +127,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     typeof config.temperature === "number" && Number.isFinite(config.temperature)
       ? config.temperature
       : undefined;
-  const systemPrompt = asString(config.system, DEFAULT_SYSTEM_PROMPT);
+  let systemPrompt = asString(config.system, DEFAULT_SYSTEM_PROMPT);
+
+  // Inject top-K memories when the heartbeat layer has pre-loaded them.
+  const injectedMemories = ctx.agentMemoriesForInjection;
+  if (injectedMemories && injectedMemories.length > 0) {
+    const memoriesSection = [
+      "## Relevant memories",
+      ...injectedMemories.map((m, i) => `${i + 1}. ${m.content}`),
+    ].join("\n");
+    systemPrompt = `${systemPrompt}\n\n${memoriesSection}`;
+  }
 
   // Resolve the model name against what Ollama actually has installed.
   // e.g. config says "llama3.2" but Ollama stores it as "llama3.2:3b".

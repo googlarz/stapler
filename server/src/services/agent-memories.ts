@@ -6,6 +6,7 @@ import type {
   AgentMemory,
   AgentMemorySearchResult,
   AgentMemorySaveResult,
+  InjectedMemory,
 } from "@paperclipai/shared";
 
 /**
@@ -324,4 +325,56 @@ export function agentMemoryService(db: Db) {
       return rows[0]?.n ?? 0;
     },
   };
+}
+
+/**
+ * Load top-K memories relevant to the current run context for injection
+ * into the adapter's prompt at run-start.
+ *
+ * Returns an empty array when:
+ * - `agent.config.enableMemoryInjection` is not `true`
+ * - The assembled search query is empty
+ * - No memories pass the similarity threshold
+ *
+ * The search query is assembled from `context.wakeReason` + the task title
+ * from `context.taskTitle` or `context.issueTitle`. Adapters that receive a
+ * non-empty result should render a `## Relevant memories` section in their
+ * system / user prompt.
+ */
+export async function maybeLoadMemoriesForInjection(
+  db: Db,
+  agent: { id: string; adapterConfig: unknown },
+  context: Record<string, unknown>,
+): Promise<InjectedMemory[]> {
+  const config = typeof agent.adapterConfig === "object" && agent.adapterConfig !== null
+    ? (agent.adapterConfig as Record<string, unknown>)
+    : {};
+
+  if (config.enableMemoryInjection !== true) return [];
+
+  const limit = typeof config.memoryInjectionLimit === "number" && config.memoryInjectionLimit > 0
+    ? Math.min(config.memoryInjectionLimit, 20)
+    : 5;
+
+  const queryParts: string[] = [];
+  if (typeof context.wakeReason === "string" && context.wakeReason.trim()) {
+    queryParts.push(context.wakeReason.trim());
+  }
+  if (typeof context.taskTitle === "string" && context.taskTitle.trim()) {
+    queryParts.push(context.taskTitle.trim());
+  } else if (typeof context.issueTitle === "string" && context.issueTitle.trim()) {
+    queryParts.push(context.issueTitle.trim());
+  }
+
+  const q = queryParts.join(" ").trim();
+  if (!q) return [];
+
+  const svc = agentMemoryService(db);
+  const results = await svc.search({ agentId: agent.id, q, limit });
+  return results.map((r) => ({
+    id: r.id,
+    content: r.content,
+    tags: r.tags,
+    score: r.score,
+  }));
 }

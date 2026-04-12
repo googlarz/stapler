@@ -25,3 +25,15 @@ export interface AgentMemorySaveResult {
   /** True if an identical memory already existed for this agent. */
   deduped: boolean;
 }
+
+/**
+ * A memory entry injected into an agent's execution context at run-start.
+ * Lighter than the full AgentMemory — only the fields an adapter needs to
+ * build the memories section of the system/user prompt.
+ */
+export interface InjectedMemory {
+  id: string;
+  content: string;
+  tags: string[];
+  score: number;
+}

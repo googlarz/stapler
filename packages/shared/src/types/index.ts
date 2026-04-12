@@ -123,6 +123,7 @@ export type {
   AgentMemoryScope,
   AgentMemorySearchResult,
   AgentMemorySaveResult,
+  InjectedMemory,
 } from "./agent-memory.js";
 export type { Approval, ApprovalComment } from "./approval.js";
 export type {
