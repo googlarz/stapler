@@ -1,3 +1,21 @@
+/**
+ * Simplified per-agent memory store.
+ *
+ * This is a precursor to the full memory service in upstream PR #3403
+ * (feat: implement memory service end to end). That PR introduces a
+ * platform-level system with pluggable providers, multi-scope records
+ * (company / project / agent / issue / run), automatic extraction from
+ * run outputs, and a full operations audit trail.
+ *
+ * When upstream #3403 lands, absorb it:
+ *   1. Add their 5 tables (memory_bindings, memory_binding_targets,
+ *      memory_local_records, memory_extraction_jobs, memory_operations).
+ *   2. Migrate agent_memories rows → memory_local_records (scopeAgentId).
+ *   3. Drop agent_memories and this service; point routes + UI at the new API.
+ *
+ * The adapter-level injection (agentMemoriesForInjection in AdapterExecutionContext)
+ * is already compatible — their adapter change is the same +3 lines Wave 3 added.
+ */
 import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
