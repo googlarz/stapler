@@ -1,3 +1,5 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
 import {
   asNumber,
@@ -5,8 +7,13 @@ import {
   buildPaperclipEnv,
   parseObject,
   renderTemplate,
+  readPaperclipRuntimeSkillEntries,
+  readPaperclipSkillMarkdown,
 } from "@paperclipai/adapter-utils/server-utils";
 import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MAX_HISTORY_TURNS, DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_TIMEOUT_SEC } from "../index.js";
+import { resolveOllamaDesiredSkillNames } from "./skills.js";
+
+const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
 export interface OllamaMessage {
   role: "system" | "user" | "assistant";
@@ -128,6 +135,22 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? config.temperature
       : undefined;
   let systemPrompt = asString(config.system, DEFAULT_SYSTEM_PROMPT);
+
+  // Inject company skills into the system prompt.
+  const skillEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
+  const desiredSkillNames = new Set(resolveOllamaDesiredSkillNames(config, skillEntries));
+  if (desiredSkillNames.size > 0) {
+    const skillMarkdowns = (
+      await Promise.all(
+        skillEntries
+          .filter((e) => desiredSkillNames.has(e.key))
+          .map((e) => readPaperclipSkillMarkdown(__moduleDir, e.key)),
+      )
+    ).filter((md): md is string => md !== null);
+    if (skillMarkdowns.length > 0) {
+      systemPrompt = `${systemPrompt}\n\n${skillMarkdowns.join("\n\n---\n\n")}`;
+    }
+  }
 
   // Inject top-K memories when the heartbeat layer has pre-loaded them.
   const injectedMemories = ctx.agentMemoriesForInjection;
