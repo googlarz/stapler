@@ -21,7 +21,7 @@ const SAMPLE_ISSUES: LinkedIssueSnapshot[] = [
     identifier: "ENG-1",
     title: "Build landing page",
     description: "Spin up landing.example.com",
-    finalComment: "Deployed and verified by QA",
+    recentComments: ["Deployed and verified by QA"],
     status: "done",
   },
 ];
@@ -48,7 +48,7 @@ describe("buildVerificationIssueDescription", () => {
     expect(out).toContain("[optional]");
   });
 
-  it("includes linked issues with their final comments", () => {
+  it("includes linked issues with their comments", () => {
     const out = buildVerificationIssueDescription({
       goalTitle: "x",
       goalDescription: null,
@@ -57,6 +57,86 @@ describe("buildVerificationIssueDescription", () => {
     });
     expect(out).toContain("ENG-1");
     expect(out).toContain("Deployed and verified by QA");
+  });
+
+  it("renders all recent comments in chronological order when multiple exist", () => {
+    const issues: LinkedIssueSnapshot[] = [
+      {
+        id: "i-1",
+        identifier: "ENG-2",
+        title: "Implement feature",
+        description: null,
+        recentComments: ["Started work", "PR #10 merged", "Done ✓"],
+        status: "done",
+      },
+    ];
+    const out = buildVerificationIssueDescription({
+      goalTitle: "x",
+      goalDescription: null,
+      criteria: SAMPLE_CRITERIA,
+      linkedIssues: issues,
+    });
+    // All three comments must appear
+    expect(out).toContain("Started work");
+    expect(out).toContain("PR #10 merged");
+    expect(out).toContain("Done ✓");
+    // Chronological: first comment appears before last comment
+    expect(out.indexOf("Started work")).toBeLessThan(out.indexOf("Done ✓"));
+    // Last comment is labelled "final"
+    expect(out).toMatch(/Comment \d+ \(final\)/);
+  });
+
+  it("shows '_(none)_' when an issue has no comments", () => {
+    const issues: LinkedIssueSnapshot[] = [
+      {
+        id: "i-2",
+        identifier: "ENG-3",
+        title: "Silent task",
+        description: null,
+        recentComments: [],
+        status: "done",
+      },
+    ];
+    const out = buildVerificationIssueDescription({
+      goalTitle: "x",
+      goalDescription: null,
+      criteria: SAMPLE_CRITERIA,
+      linkedIssues: issues,
+    });
+    expect(out).toContain("_(none)_");
+  });
+
+  it("includes retry context block on attempt 2+", () => {
+    const out = buildVerificationIssueDescription({
+      goalTitle: "x",
+      goalDescription: null,
+      criteria: SAMPLE_CRITERIA,
+      linkedIssues: SAMPLE_ISSUES,
+      attemptNumber: 2,
+    });
+    expect(out).toContain("Retry context");
+    expect(out).toContain("attempt **2**");
+  });
+
+  it("does NOT include retry context on attempt 1", () => {
+    const out = buildVerificationIssueDescription({
+      goalTitle: "x",
+      goalDescription: null,
+      criteria: SAMPLE_CRITERIA,
+      linkedIssues: SAMPLE_ISSUES,
+      attemptNumber: 1,
+    });
+    expect(out).not.toContain("Retry context");
+  });
+
+  it("does NOT include retry context when attemptNumber is omitted", () => {
+    const out = buildVerificationIssueDescription({
+      goalTitle: "x",
+      goalDescription: null,
+      criteria: SAMPLE_CRITERIA,
+      linkedIssues: SAMPLE_ISSUES,
+    });
+    expect(out).not.toContain("Retry context");
   });
 
   it("includes the verification fence infostring in the example", () => {

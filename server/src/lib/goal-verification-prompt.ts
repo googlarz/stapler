@@ -34,7 +34,12 @@ export interface LinkedIssueSnapshot {
   identifier: string | null;
   title: string;
   description: string | null;
-  finalComment: string | null;
+  /**
+   * The last N comments on this issue, **in chronological order** (oldest
+   * first). At most `MAX_COMMENTS_PER_ISSUE` entries are kept so the
+   * verification prompt stays within a reasonable token budget.
+   */
+  recentComments: string[];
   status: string;
 }
 
@@ -43,7 +48,19 @@ export interface VerificationPromptInput {
   goalDescription: string | null;
   criteria: GoalAcceptanceCriterion[];
   linkedIssues: LinkedIssueSnapshot[];
+  /**
+   * 1-based attempt counter. When > 1 a retry-context block is prepended
+   * to the prompt so the verifying agent knows prior attempts did not
+   * confirm achievement and should look for evidence of change.
+   */
+  attemptNumber?: number;
 }
+
+/**
+ * Maximum number of comments to include per linked issue. Enough to capture
+ * the work narrative (start → update → done) without blowing the token budget.
+ */
+export const MAX_COMMENTS_PER_ISSUE = 3;
 
 // ---------------------------------------------------------------------------
 // Prompt template
@@ -78,15 +95,33 @@ export function buildVerificationIssueDescription(input: VerificationPromptInput
       const title = issue.title;
       const status = issue.status;
       const desc = issue.description?.trim() || "_(no description)_";
-      const final = issue.finalComment?.trim() || "_(no closing comment)_";
+
+      // Render comments in chronological order (oldest → newest) so the
+      // verifying agent can follow the work narrative. We label the last
+      // one "Final" so it stands out when scanning.
+      const comments = issue.recentComments.filter((c) => c.trim().length > 0);
+      let commentsBlock: string;
+      if (comments.length === 0) {
+        commentsBlock = "**Comments:** _(none)_";
+      } else if (comments.length === 1) {
+        commentsBlock = `**Final comment:**\n${comments[0].trim()}`;
+      } else {
+        const lines: string[] = [];
+        for (let i = 0; i < comments.length; i++) {
+          const label = i === comments.length - 1 ? `**Comment ${i + 1} (final):**` : `**Comment ${i + 1}:**`;
+          lines.push(label, comments[i].trim());
+          if (i < comments.length - 1) lines.push("");
+        }
+        commentsBlock = lines.join("\n");
+      }
+
       return [
         `### ${id} — ${title} [${status}]`,
         "",
         `**Description:**`,
         desc,
         "",
-        `**Final comment:**`,
-        final,
+        commentsBlock,
       ].join("\n");
     })
     .join("\n\n---\n\n");
@@ -99,11 +134,26 @@ export function buildVerificationIssueDescription(input: VerificationPromptInput
     )
     .join(",\n");
 
+  // Retry context block — shown on attempts 2+ so the agent knows to look
+  // for evidence of change rather than re-judging the same stale state.
+  const retryBlock =
+    input.attemptNumber && input.attemptNumber > 1
+      ? [
+          "> ⚠️ **Retry context:** This is verification attempt " +
+            `**${input.attemptNumber}**. ` +
+            "One or more previous attempts did not confirm the goal was achieved. " +
+            "Look specifically for evidence that has changed or been added since the last evaluation — " +
+            "new comments, updated descriptions, or completed work.",
+          "",
+        ]
+      : [];
+
   return [
     "# Goal verification",
     "",
     `You are verifying whether the goal **"${input.goalTitle}"** has been achieved.`,
     "",
+    ...retryBlock,
     input.goalDescription
       ? `**Goal description:**\n${input.goalDescription.trim()}\n`
       : "",

@@ -7,6 +7,7 @@ import {
   buildVerificationIssueDescription,
   interpretOutcome,
   parseVerificationOutcome,
+  MAX_COMMENTS_PER_ISSUE,
   type LinkedIssueSnapshot,
   type VerificationOutcome,
 } from "../lib/goal-verification-prompt.js";
@@ -122,9 +123,11 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc, heartbeat?: 
       (i) => i.originKind !== "goal_verification",
     );
 
-    // Pull the latest comment body per issue in a single query.
+    // Pull the last MAX_COMMENTS_PER_ISSUE comments per issue in a single
+    // query. We fetch newest-first (desc) then reverse per-issue so the
+    // verifying agent reads the work narrative chronologically.
     const issueIds = nonVerificationIssues.map((i) => i.id);
-    const latestCommentByIssue = new Map<string, string>();
+    const commentsByIssue = new Map<string, string[]>();
     if (issueIds.length > 0) {
       const comments = await dbOrTx
         .select({
@@ -136,8 +139,10 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc, heartbeat?: 
         .where(inArray(issueComments.issueId, issueIds))
         .orderBy(desc(issueComments.createdAt));
       for (const c of comments) {
-        if (!latestCommentByIssue.has(c.issueId)) {
-          latestCommentByIssue.set(c.issueId, c.body);
+        const existing = commentsByIssue.get(c.issueId) ?? [];
+        if (existing.length < MAX_COMMENTS_PER_ISSUE) {
+          existing.push(c.body);
+          commentsByIssue.set(c.issueId, existing);
         }
       }
     }
@@ -148,7 +153,8 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc, heartbeat?: 
       title: i.title,
       description: i.description,
       status: i.status,
-      finalComment: latestCommentByIssue.get(i.id) ?? null,
+      // Reverse from newest-first (DB order) to oldest-first (narrative order)
+      recentComments: [...(commentsByIssue.get(i.id) ?? [])].reverse(),
     }));
 
     return { goal, linkedIssues: snapshots };
@@ -247,6 +253,8 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc, heartbeat?: 
         goalDescription: goal.description,
         criteria,
         linkedIssues,
+        // nextAttempt is goal.verificationAttempts + 1 (computed just below)
+        attemptNumber: goal.verificationAttempts + 1,
       });
 
       // Create the verification issue via the full issue pipeline within
