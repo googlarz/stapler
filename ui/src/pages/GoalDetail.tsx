@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useParams } from "@/lib/router";
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { goalsApi } from "../api/goals";
 import { projectsApi } from "../api/projects";
@@ -20,7 +20,8 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { cn, projectUrl } from "../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, SlidersHorizontal } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import type { Goal, GoalAcceptanceCriterion, Project } from "@paperclipai/shared";
 
 interface GoalPropertiesToggleButtonProps {
@@ -55,6 +56,8 @@ export function GoalDetail() {
   const { openPanel, closePanel, panelVisible, setPanelVisible } = usePanel();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const {
     data: goal,
@@ -110,6 +113,16 @@ export function GoalDetail() {
     }
   });
 
+  const deleteGoal = useMutation({
+    mutationFn: () => goalsApi.remove(goalId!),
+    onSuccess: () => {
+      if (resolvedCompanyId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.goals.list(resolvedCompanyId) });
+      }
+      navigate("/goals");
+    },
+  });
+
   const childGoals = (allGoals ?? []).filter((g) => g.parentId === goalId);
   const linkedProjects = (allProjects ?? []).filter((p) => {
     if (!goalId) return false;
@@ -149,7 +162,16 @@ export function GoalDetail() {
             {goal.level}
           </span>
           <StatusBadge status={goal.status} />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="text-muted-foreground hover:text-destructive"
+              title="Delete goal"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
             <GoalPropertiesToggleButton
               panelVisible={panelVisible}
               onShowProperties={() => setPanelVisible(true)}
@@ -166,11 +188,12 @@ export function GoalDetail() {
 
         <InlineEditor
           value={goal.description ?? ""}
-          onSave={(description) => updateGoal.mutate({ description })}
+          onSave={(description) => updateGoal.mutate({ description: description || null })}
           as="p"
           className="text-sm text-muted-foreground"
           placeholder="Add a description..."
           multiline
+          nullable
           imageUploadHandler={async (file) => {
             const asset = await uploadImage.mutateAsync(file);
             return asset.contentPath;
@@ -262,6 +285,32 @@ export function GoalDetail() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent className="max-w-sm">
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-semibold text-base">Delete goal?</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                This will permanently delete <strong>{goal.title}</strong> and all its acceptance criteria. This cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteGoal.isPending}
+                onClick={() => deleteGoal.mutate()}
+              >
+                {deleteGoal.isPending ? "Deleting…" : "Delete goal"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { formatDate, cn, agentUrl } from "../lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { ChevronsUpDown, X } from "lucide-react";
 
 interface GoalPropertiesProps {
   goal: Goal;
@@ -67,6 +68,68 @@ function PickerButton({
         ))}
       </PopoverContent>
     </Popover>
+  );
+}
+
+function ParentGoalPicker({
+  currentParentId,
+  currentGoalId,
+  goals,
+  onChange,
+}: {
+  currentParentId: string | null;
+  currentGoalId: string;
+  goals: Goal[];
+  onChange: (parentId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = goals.find((g) => g.id === currentParentId);
+  // Exclude self and descendants to avoid cycles (simple 1-level guard)
+  const candidates = goals.filter((g) => g.id !== currentGoalId);
+
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button className="flex items-center gap-1 text-sm hover:opacity-80 transition-opacity min-w-0 max-w-[140px]">
+            <span className="truncate">
+              {current ? current.title : <span className="text-muted-foreground">None</span>}
+            </span>
+            <ChevronsUpDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-1 max-h-60 overflow-y-auto" align="start">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-xs text-muted-foreground"
+            onClick={() => { onChange(null); setOpen(false); }}
+          >
+            None
+          </Button>
+          {candidates.map((g) => (
+            <Button
+              key={g.id}
+              variant="ghost"
+              size="sm"
+              className={cn("w-full justify-start text-xs truncate", g.id === currentParentId && "bg-accent")}
+              onClick={() => { onChange(g.id); setOpen(false); }}
+            >
+              {g.title}
+            </Button>
+          ))}
+        </PopoverContent>
+      </Popover>
+      {currentParentId && (
+        <button
+          onClick={() => onChange(null)}
+          className="text-muted-foreground hover:text-foreground shrink-0"
+          title="Clear parent"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -137,16 +200,25 @@ export function GoalProperties({ goal, onUpdate }: GoalPropertiesProps) {
           )}
         </PropertyRow>
 
-        {goal.parentId && (
-          <PropertyRow label="Parent Goal">
+        <PropertyRow label="Parent Goal">
+          {onUpdate ? (
+            <ParentGoalPicker
+              currentParentId={goal.parentId ?? null}
+              currentGoalId={goal.id}
+              goals={allGoals ?? []}
+              onChange={(parentId) => onUpdate({ parentId })}
+            />
+          ) : goal.parentId ? (
             <Link
               to={`/goals/${goal.parentId}`}
               className="text-sm hover:underline"
             >
               {parentGoal?.title ?? goal.parentId.slice(0, 8)}
             </Link>
-          </PropertyRow>
-        )}
+          ) : (
+            <span className="text-sm text-muted-foreground">None</span>
+          )}
+        </PropertyRow>
       </div>
 
       <Separator />
