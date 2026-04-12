@@ -2645,8 +2645,9 @@ Return exactly this JSON structure:
           model,
           stream: false,
           format: "json",
+          // think: false disables chain-of-thought in Qwen3/thinking models so content is non-empty
+          think: false,
           messages: [{ role: "user", content: prompt }],
-          options: { num_predict: 1200, num_ctx: 4096 },
         }),
         signal: AbortSignal.timeout(180_000),
       });
@@ -2657,8 +2658,9 @@ Return exactly this JSON structure:
         return;
       }
 
-      const ollamaData = (await ollamaRes.json()) as { message?: { content?: string } };
-      const rawContent = ollamaData?.message?.content ?? "";
+      const ollamaData = (await ollamaRes.json()) as { message?: { content?: string; thinking?: string } };
+      // thinking models (e.g. qwen3) put content in message.content; fall back to thinking field
+      const rawContent = (ollamaData?.message?.content ?? ollamaData?.message?.thinking ?? "").trim();
 
       let proposals: unknown;
       try {
@@ -2675,6 +2677,7 @@ Return exactly this JSON structure:
         const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
         proposals = Array.isArray(parsed.proposals) ? parsed.proposals : [];
       } catch {
+        console.error("[propose-tasks] raw model output:", JSON.stringify(rawContent.slice(0, 1000)));
         res.status(502).json({ error: "Model returned invalid JSON", raw: rawContent.slice(0, 500) });
         return;
       }
