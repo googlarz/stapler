@@ -1,5 +1,6 @@
 import { Router } from "express";
-import type { Db } from "@paperclipai/db";
+import { agents, goals, type Db } from "@paperclipai/db";
+import { and, eq } from "drizzle-orm";
 import { createGoalSchema, updateGoalSchema } from "@paperclipai/shared";
 import { trackGoalCreated } from "@paperclipai/shared/telemetry";
 import { validate } from "../middleware/validate.js";
@@ -12,10 +13,60 @@ import {
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { getTelemetryClient } from "../telemetry.js";
 import { logger } from "../middleware/logger.js";
+import { badRequest, conflict } from "../errors.js";
 
 export function goalRoutes(db: Db) {
   const router = Router();
   const svc = goalService(db);
+
+  async function assertGoalUpdateReferences(
+    goalId: string,
+    companyId: string,
+    body: { parentId?: string | null; ownerAgentId?: string | null },
+  ) {
+    if (body.parentId !== undefined && body.parentId !== null) {
+      if (body.parentId === goalId) {
+        throw badRequest("Goal cannot be its own parent");
+      }
+
+      const parent = await db
+        .select({ id: goals.id, companyId: goals.companyId, parentId: goals.parentId })
+        .from(goals)
+        .where(eq(goals.id, body.parentId))
+        .then((rows) => rows[0] ?? null);
+      if (!parent || parent.companyId !== companyId) {
+        throw badRequest("Parent goal must belong to the same company");
+      }
+
+      let currentParentId = parent.parentId;
+      const visited = new Set<string>([goalId, parent.id]);
+      while (currentParentId) {
+        if (currentParentId === goalId) {
+          throw conflict("Goal parent update would create a cycle");
+        }
+        if (visited.has(currentParentId)) break;
+        visited.add(currentParentId);
+
+        const next = await db
+          .select({ id: goals.id, parentId: goals.parentId })
+          .from(goals)
+          .where(and(eq(goals.id, currentParentId), eq(goals.companyId, companyId)))
+          .then((rows) => rows[0] ?? null);
+        currentParentId = next?.parentId ?? null;
+      }
+    }
+
+    if (body.ownerAgentId !== undefined && body.ownerAgentId !== null) {
+      const owner = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.id, body.ownerAgentId), eq(agents.companyId, companyId)))
+        .then((rows) => rows[0] ?? null);
+      if (!owner) {
+        throw badRequest("Owner agent must belong to the same company");
+      }
+    }
+  }
 
   router.get("/companies/:companyId/goals", async (req, res) => {
     const companyId = req.params.companyId as string;
@@ -66,6 +117,7 @@ export function goalRoutes(db: Db) {
       return;
     }
     assertCompanyAccess(req, existing.companyId);
+    await assertGoalUpdateReferences(id, existing.companyId, req.body);
     const goal = await svc.update(id, req.body);
     if (!goal) {
       res.status(404).json({ error: "Goal not found" });

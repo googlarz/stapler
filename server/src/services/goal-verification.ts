@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { goals, issues, issueComments, agents } from "@paperclipai/db";
 import type { GoalAcceptanceCriterion, IssueOriginKind } from "@paperclipai/shared";
@@ -11,7 +11,7 @@ import {
   type VerificationOutcome,
 } from "../lib/goal-verification-prompt.js";
 import { logActivity } from "./activity-log.js";
-import type { issueService } from "./issues.js";
+import { issueService } from "./issues.js";
 
 /**
  * Actor context used by the verification service to write activity-log
@@ -43,6 +43,7 @@ const SYSTEM_ACTOR: VerificationActor = {
  */
 
 type IssueSvc = ReturnType<typeof issueService>;
+type GoalVerificationDb = Pick<Db, "select" | "update" | "execute">;
 
 // ---------------------------------------------------------------------------
 // Outcome types returned to the caller so they can log / respond
@@ -78,15 +79,15 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
    * Pull the goal + its linked issues (and each issue's latest comment)
    * into a snapshot suitable for the verification prompt template.
    */
-  async function buildGoalSnapshot(companyId: string, goalId: string) {
-    const goal = await db
+  async function buildGoalSnapshot(companyId: string, goalId: string, dbOrTx: GoalVerificationDb = db) {
+    const goal = await dbOrTx
       .select()
       .from(goals)
       .where(and(eq(goals.id, goalId), eq(goals.companyId, companyId)))
       .then((rows) => rows[0] ?? null);
     if (!goal) return null;
 
-    const linkedIssues = await db
+    const linkedIssues = await dbOrTx
       .select({
         id: issues.id,
         identifier: issues.identifier,
@@ -117,7 +118,7 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
     const issueIds = nonVerificationIssues.map((i) => i.id);
     const latestCommentByIssue = new Map<string, string>();
     if (issueIds.length > 0) {
-      const comments = await db
+      const comments = await dbOrTx
         .select({
           issueId: issueComments.issueId,
           body: issueComments.body,
@@ -145,8 +146,12 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
     return { goal, linkedIssues: snapshots };
   }
 
-  async function findPendingVerificationIssue(companyId: string, goalId: string) {
-    return db
+  async function findPendingVerificationIssue(
+    companyId: string,
+    goalId: string,
+    dbOrTx: GoalVerificationDb = db,
+  ) {
+    return dbOrTx
       .select({ id: issues.id, status: issues.status })
       .from(issues)
       .where(
@@ -182,80 +187,99 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
       actor?: VerificationActor;
     },
   ): Promise<MaybeCreateResult> {
-    const snapshot = await buildGoalSnapshot(companyId, goalId);
-    if (!snapshot) return { kind: "skipped", reason: "goal_not_found" };
-    const { goal, linkedIssues } = snapshot;
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select ${goals.id} from ${goals}
+            where ${and(eq(goals.id, goalId), eq(goals.companyId, companyId))}
+            for update`,
+      );
 
-    const criteria = (goal.acceptanceCriteria ?? []) as GoalAcceptanceCriterion[];
-    if (criteria.length === 0) return { kind: "skipped", reason: "no_criteria" };
+      const snapshot = await buildGoalSnapshot(companyId, goalId, tx);
+      if (!snapshot) return { kind: "skipped" as const, reason: "goal_not_found" as const };
+      const { goal, linkedIssues } = snapshot;
 
-    if (goal.verificationStatus === "passed" || goal.status === "achieved") {
-      return { kind: "skipped", reason: "already_achieved" };
-    }
+      const criteria = (goal.acceptanceCriteria ?? []) as GoalAcceptanceCriterion[];
+      if (criteria.length === 0) return { kind: "skipped" as const, reason: "no_criteria" as const };
 
-    if (!opts?.manualTrigger && goal.verificationAttempts >= MAX_GOAL_VERIFICATION_ATTEMPTS) {
-      return { kind: "skipped", reason: "attempts_exhausted" };
-    }
+      if (goal.verificationStatus === "passed" || goal.status === "achieved") {
+        return { kind: "skipped" as const, reason: "already_achieved" as const };
+      }
 
-    // Already a pending verification for this goal? Don't stack them.
-    const existing = await findPendingVerificationIssue(companyId, goalId);
-    if (existing && existing.status !== "done" && existing.status !== "cancelled") {
-      return { kind: "skipped", reason: "already_pending" };
-    }
+      if (!opts?.manualTrigger && goal.verificationAttempts >= MAX_GOAL_VERIFICATION_ATTEMPTS) {
+        return { kind: "skipped" as const, reason: "attempts_exhausted" as const };
+      }
 
-    if (linkedIssues.length === 0) return { kind: "skipped", reason: "no_linked_issues" };
+      // Already a pending verification for this goal? Don't stack them.
+      const existing = await findPendingVerificationIssue(companyId, goalId, tx);
+      if (existing && existing.status !== "done" && existing.status !== "cancelled") {
+        return { kind: "skipped" as const, reason: "already_pending" as const };
+      }
 
-    const allDone = linkedIssues.every(
-      (i) => i.status === "done" || i.status === "cancelled",
-    );
-    if (!allDone) return { kind: "skipped", reason: "not_all_issues_done" };
+      if (linkedIssues.length === 0) return { kind: "skipped" as const, reason: "no_linked_issues" as const };
 
-    // Pick the agent. Owner agent is required — we don't silently fall back.
-    if (!goal.ownerAgentId) return { kind: "skipped", reason: "no_owner_agent" };
+      const allDone = linkedIssues.every(
+        (i) => i.status === "done" || i.status === "cancelled",
+      );
+      if (!allDone) return { kind: "skipped" as const, reason: "not_all_issues_done" as const };
 
-    // Verify the owner agent is active — don't assign to a terminated agent.
-    const owner = await db
-      .select({ id: agents.id, status: agents.status })
-      .from(agents)
-      .where(and(eq(agents.id, goal.ownerAgentId), eq(agents.companyId, companyId)))
-      .then((rows) => rows[0] ?? null);
-    if (!owner || owner.status === "terminated" || owner.status === "pending_approval") {
-      return { kind: "skipped", reason: "no_owner_agent" };
-    }
+      // Pick the agent. Owner agent is required — we don't silently fall back.
+      if (!goal.ownerAgentId) return { kind: "skipped" as const, reason: "no_owner_agent" as const };
 
-    const description = buildVerificationIssueDescription({
-      goalTitle: goal.title,
-      goalDescription: goal.description,
-      criteria,
-      linkedIssues,
-    });
+      // Verify the owner agent is active — don't assign to a terminated agent.
+      const owner = await tx
+        .select({ id: agents.id, status: agents.status })
+        .from(agents)
+        .where(and(eq(agents.id, goal.ownerAgentId), eq(agents.companyId, companyId)))
+        .then((rows) => rows[0] ?? null);
+      if (!owner || owner.status === "terminated" || owner.status === "pending_approval") {
+        return { kind: "skipped" as const, reason: "no_owner_agent" as const };
+      }
 
-    // Create the verification issue via the full issue pipeline so it
-    // fires telemetry, wakeup, and activity log. We pass originKind so
-    // the issue PATCH hook can recognise it later.
-    const verificationIssue = await issueSvc.create(companyId, {
-      title: `Verify: ${goal.title}`,
-      description,
-      status: "todo",
-      priority: "medium",
-      assigneeAgentId: goal.ownerAgentId,
-      goalId,
-      originKind: "goal_verification",
-    });
+      const description = buildVerificationIssueDescription({
+        goalTitle: goal.title,
+        goalDescription: goal.description,
+        criteria,
+        linkedIssues,
+      });
 
-    // Update the goal in a single statement: bump attempts, set pending,
-    // point to the new issue. We do this AFTER issueService.create() so
-    // if creation fails the goal is unchanged.
-    const nextAttempt = goal.verificationAttempts + 1;
-    await db
-      .update(goals)
-      .set({
-        verificationStatus: "pending",
-        verificationAttempts: nextAttempt,
+      // Create the verification issue via the full issue pipeline within
+      // the same transaction protected by the goal row lock. This prevents
+      // concurrent final-issue completions from both passing the pending
+      // check and creating duplicate verification issues.
+      const verificationIssue = await issueService(tx as unknown as Db).create(companyId, {
+        title: `Verify: ${goal.title}`,
+        description,
+        status: "todo",
+        priority: "medium",
+        assigneeAgentId: goal.ownerAgentId,
+        goalId,
+        originKind: "goal_verification",
+      });
+
+      // Update the goal in a single statement: bump attempts, set pending,
+      // point to the new issue. We do this AFTER issueService.create() so
+      // if creation fails the goal is unchanged.
+      const nextAttempt = goal.verificationAttempts + 1;
+      await tx
+        .update(goals)
+        .set({
+          verificationStatus: "pending",
+          verificationAttempts: nextAttempt,
+          verificationIssueId: verificationIssue.id,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(goals.id, goalId), eq(goals.companyId, companyId)));
+
+      return {
+        kind: "created" as const,
         verificationIssueId: verificationIssue.id,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(goals.id, goalId), eq(goals.companyId, companyId)));
+        attemptNumber: nextAttempt,
+        criteriaCount: criteria.length,
+        ownerAgentId: goal.ownerAgentId,
+      };
+    });
+
+    if (result.kind === "skipped") return result;
 
     // Audit: record the verification request against the GOAL (not the
     // issue — the issue's creation is logged separately by
@@ -272,15 +296,15 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
       entityType: "goal",
       entityId: goalId,
       details: {
-        verificationIssueId: verificationIssue.id,
-        attemptNumber: nextAttempt,
+        verificationIssueId: result.verificationIssueId,
+        attemptNumber: result.attemptNumber,
         manualTrigger: opts?.manualTrigger === true,
-        criteriaCount: criteria.length,
-        ownerAgentId: goal.ownerAgentId,
+        criteriaCount: result.criteriaCount,
+        ownerAgentId: result.ownerAgentId,
       },
     });
 
-    return { kind: "created", verificationIssueId: verificationIssue.id };
+    return { kind: "created", verificationIssueId: result.verificationIssueId };
   }
 
   /**
@@ -386,9 +410,18 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
 
     if (verdict.kind === "unclear") {
       // Treat unclear as "not achieved, don't count as a full failure".
-      // Status stays pending; the UI surfaces the reasons. Still audit
-      // the event so a human can see why the verification didn't
-      // conclude.
+      // Clear the pending state so a human or later trigger can retry
+      // instead of leaving the goal blocked on a completed verification
+      // issue forever.
+      await db
+        .update(goals)
+        .set({
+          verificationStatus: "not_started",
+          verificationIssueId: null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(goals.id, goal.id), eq(goals.companyId, companyId)));
+
       await logActivity(db, {
         companyId,
         actorType: actor.actorType,
@@ -401,6 +434,7 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
         details: {
           verificationIssueId,
           attemptNumber: goal.verificationAttempts,
+          nextVerificationStatus: "not_started",
         },
       });
       return { kind: "unclear" };

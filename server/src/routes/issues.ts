@@ -1677,74 +1677,6 @@ export function issueRoutes(
           trackAgentTaskCompleted(tc, { agentRole: actorAgent.role });
         }
       }
-
-      // Goal verification hook (fire-and-forget, never blocks the response).
-      //
-      // Two branches:
-      //   A) The issue being marked done IS a verification issue
-      //      (originKind = goal_verification). Apply the agent's outcome
-      //      to the parent goal.
-      //   B) The issue has a goalId but is NOT a verification issue.
-      //      If the goal has acceptance criteria, maybe create a
-      //      verification issue assigned to the owner agent.
-      if (issue.goalId) {
-        try {
-          const verificationSvc = goalVerificationService(db, svc);
-          // The audit actor for verification-driven goal transitions is
-          // the agent (or user) who PATCHed the triggering issue to
-          // done. This is semantically right for both branches: the
-          // verification agent who posted the outcome in Branch A, and
-          // the issue-completing agent whose done-transition triggered
-          // the new verification cycle in Branch B.
-          const verificationActor = {
-            actorType: actor.actorType,
-            actorId: actor.actorId,
-            agentId: actor.agentId,
-            runId: actor.runId,
-          };
-          if (issue.originKind === "goal_verification") {
-            // Branch A — parse the latest comment and apply the outcome.
-            // `commentBody` is the comment from THIS request; if the agent
-            // posted the outcome as a prior comment, read the latest from
-            // the issue.
-            const outcomeComment =
-              commentBody ??
-              (await svc
-                .listComments(issue.id, { limit: 1, order: "desc" })
-                .then((rows) => (rows.length > 0 ? rows[0].body : null))
-                .catch(() => null));
-            if (outcomeComment) {
-              verificationSvc
-                .applyVerificationOutcome(issue.companyId, issue.id, outcomeComment, {
-                  actor: verificationActor,
-                })
-                .catch((err) =>
-                  logger.warn(
-                    { err, issueId: issue.id, goalId: issue.goalId },
-                    "failed to apply goal verification outcome",
-                  ),
-                );
-            }
-          } else {
-            // Branch B — maybe start a new verification cycle.
-            verificationSvc
-              .maybeCreateVerificationIssue(issue.companyId, issue.goalId, {
-                actor: verificationActor,
-              })
-              .catch((err) =>
-                logger.warn(
-                  { err, goalId: issue.goalId },
-                  "failed to maybe-create verification issue",
-                ),
-              );
-          }
-        } catch (err) {
-          logger.warn(
-            { err, goalId: issue.goalId },
-            "goal verification hook threw synchronously",
-          );
-        }
-      }
     }
 
     let comment = null;
@@ -1779,6 +1711,72 @@ export function issueRoutes(
         },
       });
 
+    }
+    if (issue.status === "done" && existing.status !== "done" && issue.goalId) {
+      // Goal verification hook (fire-and-forget, never blocks the response).
+      //
+      // Two branches:
+      //   A) The issue being marked done IS a verification issue
+      //      (originKind = goal_verification). Apply the agent's outcome
+      //      to the parent goal.
+      //   B) The issue has a goalId but is NOT a verification issue.
+      //      If the goal has acceptance criteria, maybe create a
+      //      verification issue assigned to the owner agent.
+      try {
+        const verificationSvc = goalVerificationService(db, svc);
+        // The audit actor for verification-driven goal transitions is
+        // the agent (or user) who PATCHed the triggering issue to
+        // done. This is semantically right for both branches: the
+        // verification agent who posted the outcome in Branch A, and
+        // the issue-completing agent whose done-transition triggered
+        // the new verification cycle in Branch B.
+        const verificationActor = {
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+        };
+        if (issue.originKind === "goal_verification") {
+          // Branch A — parse the latest comment and apply the outcome.
+          // If THIS request added a comment, use the persisted row from
+          // svc.addComment above; otherwise read the latest prior comment.
+          const outcomeComment =
+            comment?.body ??
+            (await svc
+              .listComments(issue.id, { limit: 1, order: "desc" })
+              .then((rows) => (rows.length > 0 ? rows[0].body : null))
+              .catch(() => null));
+          if (outcomeComment) {
+            verificationSvc
+              .applyVerificationOutcome(issue.companyId, issue.id, outcomeComment, {
+                actor: verificationActor,
+              })
+              .catch((err) =>
+                logger.warn(
+                  { err, issueId: issue.id, goalId: issue.goalId },
+                  "failed to apply goal verification outcome",
+                ),
+              );
+          }
+        } else {
+          // Branch B — maybe start a new verification cycle.
+          verificationSvc
+            .maybeCreateVerificationIssue(issue.companyId, issue.goalId, {
+              actor: verificationActor,
+            })
+            .catch((err) =>
+              logger.warn(
+                { err, goalId: issue.goalId },
+                "failed to maybe-create verification issue",
+              ),
+            );
+        }
+      } catch (err) {
+        logger.warn(
+          { err, goalId: issue.goalId },
+          "goal verification hook threw synchronously",
+        );
+      }
     }
     const assigneeChanged =
       issue.assigneeAgentId !== existing.assigneeAgentId || issue.assigneeUserId !== existing.assigneeUserId;

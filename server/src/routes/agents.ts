@@ -1997,6 +1997,7 @@ export function agentRoutes(db: Db) {
       res.status(404).json({ error: "Agent not found" });
       return;
     }
+    assertCompanyAccess(req, agent.companyId);
 
     const cancelledRuns = await heartbeat.cancelActiveForAgent(
       id,
