@@ -161,11 +161,27 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
+      name: "paperclip_get_agent",
+      description:
+        "Fetch details about a specific agent — their name, role, status, current config, and assigned issues. " +
+        "Use to inspect an agent before delegating work or waking them.",
+      parameters: {
+        type: "object",
+        required: ["agentId"],
+        properties: {
+          agentId: { type: "string", description: "The agent ID (UUID)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "paperclip_create_agent",
       description:
         "Hire a new AI agent for the company. Creates the agent with instructions and an adapter. " +
         "Use this when you need to staff a new role: engineer, designer, QA, researcher, etc. " +
-        "After creation, assign the agent to issues to give it work.",
+        "After creation, use paperclip_wake_agent to give it its first task.",
       parameters: {
         type: "object",
         required: ["name", "role"],
@@ -193,6 +209,71 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
             description:
               "System instructions for the agent — what it does, its expertise, how it should work",
           },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_wake_agent",
+      description:
+        "Wake an agent and give it a task to work on. The agent will run immediately with the given reason. " +
+        "Use this after hiring an agent or to delegate an urgent task. " +
+        "Provide the issueId of the issue you want them to work on.",
+      parameters: {
+        type: "object",
+        required: ["agentId", "reason"],
+        properties: {
+          agentId: { type: "string", description: "The agent ID (UUID) to wake" },
+          reason: {
+            type: "string",
+            description: "Brief description of the task or reason for waking the agent",
+          },
+          issueId: {
+            type: "string",
+            description: "The issue ID to focus on (optional but recommended)",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_save_memory",
+      description:
+        "Save a memory for yourself. Use to record decisions, learnings, context, or facts you want " +
+        "to remember in future runs. Memories are automatically injected at run-start when relevant.",
+      parameters: {
+        type: "object",
+        required: ["content"],
+        properties: {
+          content: {
+            type: "string",
+            description: "The memory content to save (plain text or markdown)",
+          },
+          tags: {
+            type: "string",
+            description: "Comma-separated tags to categorise the memory, e.g. 'decision,architecture'",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_search_memories",
+      description:
+        "Search your memories for relevant context. Use when you need to recall past decisions, " +
+        "learnings, or facts before starting work.",
+      parameters: {
+        type: "object",
+        required: ["query"],
+        properties: {
+          query: { type: "string", description: "Search query — describe what you want to recall" },
+          limit: { type: "number", description: "Maximum memories to return (default: 10)" },
         },
       },
     },
@@ -325,6 +406,15 @@ export async function executePaperclipTool(
       });
     }
 
+    case "paperclip_get_agent": {
+      const id = String(args.agentId ?? "");
+      if (!id) return { error: "agentId is required" };
+      return paperclipFetch(`${base}/api/agents/${encodeURIComponent(id)}`, {
+        method: "GET",
+        authToken,
+      });
+    }
+
     case "paperclip_create_agent": {
       const adapterType = typeof args.adapterType === "string" ? args.adapterType : "ollama_local";
       const model = typeof args.model === "string" && args.model.trim() ? args.model.trim() : undefined;
@@ -341,6 +431,8 @@ export async function executePaperclipTool(
         role: typeof args.role === "string" ? args.role : "general",
         adapterType,
         adapterConfig: config,
+        // Enable heartbeat so the agent automatically picks up assigned work
+        runtimeConfig: { heartbeat: { enabled: true }, heartbeatIntervalSec: 300 },
       };
       // Use /agent-hires — the agent-safe endpoint that respects canCreateAgents permission
       const result = await paperclipFetch(
@@ -348,6 +440,51 @@ export async function executePaperclipTool(
         { method: "POST", body: JSON.stringify(body), authToken },
       );
       return result;
+    }
+
+    case "paperclip_wake_agent": {
+      const id = String(args.agentId ?? "");
+      if (!id) return { error: "agentId is required" };
+      const reason = typeof args.reason === "string" ? args.reason.trim() : "";
+      if (!reason) return { error: "reason is required" };
+      const wakeBody: Record<string, unknown> = {
+        source: "on_demand",
+        reason,
+      };
+      if (typeof args.issueId === "string" && args.issueId.trim()) {
+        wakeBody.payload = { issueId: args.issueId.trim() };
+      }
+      return paperclipFetch(`${base}/api/agents/${encodeURIComponent(id)}/wakeup`, {
+        method: "POST",
+        body: JSON.stringify(wakeBody),
+        authToken,
+      });
+    }
+
+    case "paperclip_save_memory": {
+      const content = typeof args.content === "string" ? args.content.trim() : "";
+      if (!content) return { error: "content is required" };
+      const tagsRaw = typeof args.tags === "string" ? args.tags : "";
+      const tags = tagsRaw
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      return paperclipFetch(`${base}/api/agents/${encodeURIComponent(agentId)}/memories`, {
+        method: "POST",
+        body: JSON.stringify({ content, tags }),
+        authToken,
+      });
+    }
+
+    case "paperclip_search_memories": {
+      const q = typeof args.query === "string" ? args.query.trim() : "";
+      if (!q) return { error: "query is required" };
+      const limit = typeof args.limit === "number" ? args.limit : 10;
+      const qs = new URLSearchParams({ q, limit: String(limit) });
+      return paperclipFetch(
+        `${base}/api/agents/${encodeURIComponent(agentId)}/memories?${qs}`,
+        { method: "GET", authToken },
+      );
     }
 
     case "paperclip_list_goals": {
