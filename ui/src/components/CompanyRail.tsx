@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Paperclip, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import {
   DndContext,
@@ -269,9 +269,23 @@ export function CompanyRail() {
 
   return (
     <div className="flex flex-col items-center w-[72px] shrink-0 h-full bg-background border-r border-border">
-      {/* Paperclip icon - aligned with top sections (implied line, no visible border) */}
+      {/* Stapler icon - aligned with top sections (implied line, no visible border) */}
       <div className="flex items-center justify-center h-12 w-full shrink-0">
-        <Paperclip className="h-5 w-5 text-foreground" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-5 w-5 stroke-foreground"
+        >
+          {/* Stapler arm (top) */}
+          <path strokeWidth="2" d="M4 14V9.5A1.5 1.5 0 0 1 5.5 8H20A1.5 1.5 0 0 1 21.5 9.5V14"/>
+          {/* Stapler base (bottom) */}
+          <rect strokeWidth="2" x="2" y="14" width="20" height="6.5" rx="2"/>
+          {/* Staple exit slot */}
+          <line strokeWidth="1.5" x1="14.5" y1="18" x2="20.5" y2="18"/>
+        </svg>
       </div>
 
       {/* Company list */}
