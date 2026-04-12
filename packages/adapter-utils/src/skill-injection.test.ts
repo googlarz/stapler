@@ -374,4 +374,181 @@ describe("listPaperclipSkillEntries", () => {
     const entries = await listPaperclipSkillEntries("/nonexistent");
     expect(entries).toEqual([]);
   });
+
+  it("includes a requiredReason on all auto-discovered entries", async () => {
+    await fs.mkdir(path.join(tmpDir!, "mypkg"));
+    const entries = await listPaperclipSkillEntries("/nonexistent", [tmpDir!]);
+    expect(entries[0]!.requiredReason).toBeTruthy();
+  });
+
+  it("uses the first valid additional candidate (skips nonexistent earlier ones)", async () => {
+    await fs.mkdir(path.join(tmpDir!, "real-skill"));
+    const entries = await listPaperclipSkillEntries("/nonexistent", [
+      "/definitely/not/here",
+      tmpDir!,
+    ]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.runtimeName).toBe("real-skill");
+  });
+
+  it("deduplicates candidates that resolve to the same absolute path", async () => {
+    await fs.mkdir(path.join(tmpDir!, "dedup-skill"));
+    const entries = await listPaperclipSkillEntries("/nonexistent", [
+      tmpDir!, // same path twice
+      tmpDir!,
+    ]);
+    // Only uses first match — entries come from one directory
+    expect(entries).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readPaperclipRuntimeSkillEntries — additional non-array type guards
+// ---------------------------------------------------------------------------
+
+describe("readPaperclipRuntimeSkillEntries — non-array type guards", () => {
+  it("auto-discovers when paperclipRuntimeSkills is a number (0)", async () => {
+    await fs.mkdir(path.join(tmpDir!, "auto-skill"));
+    const result = await readPaperclipRuntimeSkillEntries(
+      { paperclipRuntimeSkills: 0 },
+      "/nonexistent",
+      [tmpDir!],
+    );
+    expect(result).toHaveLength(1); // auto-discovered
+  });
+
+  it("auto-discovers when paperclipRuntimeSkills is an object (not array)", async () => {
+    await fs.mkdir(path.join(tmpDir!, "auto-skill"));
+    const result = await readPaperclipRuntimeSkillEntries(
+      { paperclipRuntimeSkills: { key: "skill", runtimeName: "skill", source: "/x" } },
+      "/nonexistent",
+      [tmpDir!],
+    );
+    expect(result).toHaveLength(1); // auto-discovered — object is not an array
+  });
+
+  it("auto-discovers when paperclipRuntimeSkills is boolean false", async () => {
+    await fs.mkdir(path.join(tmpDir!, "bool-skill"));
+    const result = await readPaperclipRuntimeSkillEntries(
+      { paperclipRuntimeSkills: false },
+      "/nonexistent",
+      [tmpDir!],
+    );
+    expect(result).toHaveLength(1);
+  });
+
+  it("returns [] when paperclipRuntimeSkills is [] even with a populated skills dir", async () => {
+    // THE CRITICAL REGRESSION — skills dir exists, but empty array wins
+    await fs.mkdir(path.join(tmpDir!, "skill-that-should-be-ignored"));
+    const result = await readPaperclipRuntimeSkillEntries(
+      { paperclipRuntimeSkills: [] },
+      "/nonexistent",
+      [tmpDir!],
+    );
+    expect(result).toEqual([]); // explicit empty array beats auto-discovery
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolvePathValue — additional edge cases
+// ---------------------------------------------------------------------------
+
+describe("resolvePathValue — additional edge cases", () => {
+  it("serialises an array leaf to JSON", () => {
+    const result = resolvePathValue({ tags: ["a", "b"] }, "tags");
+    expect(result).toBe('["a","b"]');
+  });
+
+  it("serialises an object leaf to JSON", () => {
+    const result = resolvePathValue({ meta: { x: 1 } }, "meta");
+    expect(result).toBe('{"x":1}');
+  });
+
+  it("handles a very deep path (10 levels)", () => {
+    const data = { a: { b: { c: { d: { e: { f: { g: { h: { i: { j: "deep!" } } } } } } } } } };
+    expect(resolvePathValue(data, "a.b.c.d.e.f.g.h.i.j")).toBe("deep!");
+  });
+
+  it("returns '' when path traversal hits an array mid-way", () => {
+    // arrays are not objects for the traversal purposes
+    const data = { list: ["x", "y"] };
+    expect(resolvePathValue(data, "list.0")).toBe(""); // array blocks traversal
+  });
+
+  it("returns '' when a circular reference exists at the leaf (JSON.stringify throws)", () => {
+    const obj: Record<string, unknown> = {};
+    obj["self"] = obj; // circular
+    const data = { ref: obj };
+    expect(resolvePathValue(data, "ref")).toBe(""); // stringify fails → ""
+  });
+
+  it("resolves a single-segment path", () => {
+    expect(resolvePathValue({ key: "value" }, "key")).toBe("value");
+  });
+
+  it("returns '' for a path with an empty segment caused by double dot", () => {
+    // "a..b" splits to ["a", "", "b"]
+    // "" key lookup on obj returns undefined → "" returned
+    const data = { a: { "": { b: "hidden" } } };
+    // In practice the empty part tries obj[""] which likely doesn't exist
+    expect(resolvePathValue({ a: { b: "yes" } }, "a..b")).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderTemplate — additional edge cases
+// ---------------------------------------------------------------------------
+
+describe("renderTemplate — additional edge cases", () => {
+  it("replaces the same variable multiple times in one template", () => {
+    const data = { name: "CEO" };
+    expect(renderTemplate("{{name}} and {{name}}", data)).toBe("CEO and CEO");
+  });
+
+  it("handles a template that is only variables (no literal text)", () => {
+    expect(renderTemplate("{{a}}{{b}}", { a: "X", b: "Y" })).toBe("XY");
+  });
+
+  it("handles an empty template", () => {
+    expect(renderTemplate("", { name: "CEO" })).toBe("");
+  });
+
+  it("does not replace {{ }} with no path content (regex requires at least one char)", () => {
+    // Pattern requires [a-zA-Z0-9_.]{1,} inside braces
+    expect(renderTemplate("{{ }}", { "": "bad" })).toBe("{{ }}"); // not replaced
+  });
+
+  it("serialises an object variable to its JSON string", () => {
+    const data = { meta: { count: 3 } };
+    expect(renderTemplate("meta={{meta}}", data)).toBe('meta={"count":3}');
+  });
+
+  it("serialises an array variable to its JSON string", () => {
+    const data = { tags: ["a", "b"] };
+    expect(renderTemplate("tags={{tags}}", data)).toBe('tags=["a","b"]');
+  });
+
+  it("coerces 0 to string '0'", () => {
+    expect(renderTemplate("count={{n}}", { n: 0 })).toBe("count=0");
+  });
+
+  it("coerces false to string 'false'", () => {
+    expect(renderTemplate("enabled={{flag}}", { flag: false })).toBe("enabled=false");
+  });
+
+  it("{{ identifier }} with whitespace around the name IS matched (whitespace is allowed)", () => {
+    // The regex {{\s*([a-zA-Z0-9_.-]+)\s*}} allows surrounding whitespace.
+    // "{{ here }}" matches → resolves path "here" → "" (missing) → empty string.
+    expect(renderTemplate("no {{ here }}", {})).toBe("no ");
+  });
+
+  it("does not match when there is whitespace INSIDE the identifier (space between words)", () => {
+    // "{{a b}}" — regex can match "a" but then \s*}} needs to follow; "b}}" doesn't start with }}
+    // so the overall pattern does not match and the text passes through unchanged.
+    expect(renderTemplate("{{a b}}", {})).toBe("{{a b}}");
+  });
+
+  it("does not match single-brace syntax {name}", () => {
+    expect(renderTemplate("{name}", { name: "CEO" })).toBe("{name}");
+  });
 });
