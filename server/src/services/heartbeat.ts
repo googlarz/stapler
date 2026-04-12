@@ -1285,6 +1285,29 @@ export function heartbeatService(db: Db) {
       .then((rows) => rows[0] ?? null);
   }
 
+  async function getUsageLimitDeferralUntil(agentId: string): Promise<Date | null> {
+    const runtime = await getRuntimeState(agentId);
+    if (!runtime?.lastRunId) return null;
+
+    const run = await db
+      .select({
+        errorCode: heartbeatRuns.errorCode,
+        resultJson: heartbeatRuns.resultJson,
+      })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.id, runtime.lastRunId))
+      .then((rows) => rows[0] ?? null);
+
+    if (run?.errorCode !== "claude_usage_limited") return null;
+    const resultJson = parseObject(run.resultJson);
+    const errorMeta = parseObject(resultJson.errorMeta);
+    const rawReset = typeof errorMeta.usageLimitResetsAt === "string" ? errorMeta.usageLimitResetsAt : "";
+    if (!rawReset) return null;
+
+    const reset = new Date(rawReset);
+    return Number.isFinite(reset.getTime()) ? reset : null;
+  }
+
   async function getTaskSession(
     companyId: string,
     agentId: string,
@@ -3453,10 +3476,16 @@ export function heartbeatService(db: Db) {
             } as Record<string, unknown>)
           : null;
 
-      const persistedResultJson = mergeHeartbeatRunResultJson(
+      const baseResultJson = mergeHeartbeatRunResultJson(
         adapterResult.resultJson ?? null,
         adapterResult.summary ?? null,
       );
+      const persistedResultJson = adapterResult.errorMeta
+        ? {
+            ...(baseResultJson ?? {}),
+            errorMeta: adapterResult.errorMeta,
+          }
+        : baseResultJson;
 
       await setRunStatus(run.id, status, {
         finishedAt: new Date(),
@@ -3922,6 +3951,20 @@ export function heartbeatService(db: Db) {
     }
     if (source !== "timer" && !policy.wakeOnDemand) {
       await writeSkippedRequest("heartbeat.wakeOnDemand.disabled");
+      return null;
+    }
+
+    const usageLimitDeferralUntil = await getUsageLimitDeferralUntil(agentId);
+    if (usageLimitDeferralUntil && usageLimitDeferralUntil.getTime() > Date.now()) {
+      logger.info(
+        {
+          agentId,
+          companyId: agent.companyId,
+          deferUntil: usageLimitDeferralUntil.toISOString(),
+        },
+        "deferring heartbeat wakeup until Claude usage limit reset",
+      );
+      await writeSkippedRequest("claude_usage_limit.deferred");
       return null;
     }
 

@@ -27,7 +27,9 @@ import {
   parseClaudeStreamJson,
   describeClaudeFailure,
   detectClaudeLoginRequired,
+  extractClaudeUsageLimitReset,
   isClaudeMaxTurnsResult,
+  isClaudeUsageLimitResult,
   isClaudeUnknownSessionError,
 } from "./parse.js";
 import { resolveClaudeDesiredSkillNames } from "./skills.js";
@@ -536,12 +538,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       stdout: proc.stdout,
       stderr: proc.stderr,
     });
-    const errorMeta =
-      loginMeta.loginUrl != null
-        ? {
-            loginUrl: loginMeta.loginUrl,
-          }
-        : undefined;
+    const usageLimitParsed = parsed ?? { result: [proc.stdout, proc.stderr].join("\n") };
+    const usageLimited = isClaudeUsageLimitResult(usageLimitParsed);
+    const usageLimitResetsAt = usageLimited ? extractClaudeUsageLimitReset(usageLimitParsed) : null;
+    const errorMeta = {
+      ...(loginMeta.loginUrl != null ? { loginUrl: loginMeta.loginUrl } : {}),
+      ...(usageLimitResetsAt ? { usageLimitResetsAt } : {}),
+    };
+    const resolvedErrorMeta = Object.keys(errorMeta).length > 0 ? errorMeta : undefined;
 
     if (proc.timedOut) {
       return {
@@ -550,7 +554,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         timedOut: true,
         errorMessage: `Timed out after ${timeoutSec}s`,
         errorCode: "timeout",
-        errorMeta,
+        errorMeta: resolvedErrorMeta,
         clearSession: Boolean(opts.clearSessionOnMissingSession),
       };
     }
@@ -561,8 +565,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         signal: proc.signal,
         timedOut: false,
         errorMessage: parseFallbackErrorMessage(proc),
-        errorCode: loginMeta.requiresLogin ? "claude_auth_required" : null,
-        errorMeta,
+        errorCode: loginMeta.requiresLogin
+          ? "claude_auth_required"
+          : usageLimited
+            ? "claude_usage_limited"
+            : null,
+        errorMeta: resolvedErrorMeta,
         resultJson: {
           stdout: proc.stdout,
           stderr: proc.stderr,
@@ -605,8 +613,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         (proc.exitCode ?? 0) === 0
           ? null
           : describeClaudeFailure(parsed) ?? `Claude exited with code ${proc.exitCode ?? -1}`,
-      errorCode: loginMeta.requiresLogin ? "claude_auth_required" : null,
-      errorMeta,
+      errorCode: loginMeta.requiresLogin
+        ? "claude_auth_required"
+        : usageLimited
+          ? "claude_usage_limited"
+          : null,
+      errorMeta: resolvedErrorMeta,
       usage,
       sessionId: resolvedSessionId,
       sessionParams: resolvedSessionParams,

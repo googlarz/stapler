@@ -5,7 +5,9 @@ export { testEnvironment } from "./test.js";
 export {
   parseClaudeStreamJson,
   describeClaudeFailure,
+  extractClaudeUsageLimitReset,
   isClaudeMaxTurnsResult,
+  isClaudeUsageLimitResult,
   isClaudeUnknownSessionError,
 } from "./parse.js";
 export {
