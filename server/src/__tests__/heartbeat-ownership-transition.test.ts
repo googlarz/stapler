@@ -344,4 +344,72 @@ describeEmbeddedPostgres("heartbeat ownership transitions (BLA-206 / BLA-207)", 
     expect(agentARuns[0]?.id).toBe(runAId);
     expect(agentARuns[0]?.status).toBe("failed");
   });
+
+  it("cancels running runs for the previous assignee when an issue is reassigned", async () => {
+    const { companyId, issuePrefix, agentAId, agentBId } = await seedTwoAgents();
+
+    const issueId = randomUUID();
+    const oldAssigneeRunId = randomUUID();
+    const newAssigneeRunId = randomUUID();
+    const now = new Date("2026-01-01T00:00:00.000Z");
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Reassigned issue with stale run",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: agentBId,
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+    });
+
+    await db.insert(heartbeatRuns).values([
+      {
+        id: oldAssigneeRunId,
+        companyId,
+        agentId: agentAId,
+        invocationSource: "assignment",
+        triggerDetail: "system",
+        status: "running",
+        contextSnapshot: { issueId },
+        startedAt: now,
+        updatedAt: now,
+      },
+      {
+        id: newAssigneeRunId,
+        companyId,
+        agentId: agentBId,
+        invocationSource: "assignment",
+        triggerDetail: "system",
+        status: "running",
+        contextSnapshot: { issueId },
+        startedAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const heartbeat = heartbeatService(db);
+    const cancelled = await heartbeat.cancelQueuedRunsForIssue(issueId, {
+      agentId: agentAId,
+      reason: "Issue reassigned to another agent",
+    });
+
+    expect(cancelled).toBe(1);
+
+    const oldRun = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.id, oldAssigneeRunId))
+      .then((rows) => rows[0] ?? null);
+    const newRun = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.id, newAssigneeRunId))
+      .then((rows) => rows[0] ?? null);
+
+    expect(oldRun?.status).toBe("cancelled");
+    expect(oldRun?.error).toBe("Issue reassigned to another agent");
+    expect(newRun?.status).toBe("running");
+  });
 });

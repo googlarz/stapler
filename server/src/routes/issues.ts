@@ -1403,6 +1403,32 @@ export function issueRoutes(
       updateFields.executionPolicy !== undefined
         ? (updateFields.executionPolicy as NormalizedExecutionPolicy | null)
         : previousExecutionPolicy;
+    const completingVerificationIssue =
+      updateFields.status === "done" &&
+      existing.status !== "done" &&
+      existing.originKind === "goal_verification";
+    let existingVerificationOutcomeComment: string | null = null;
+    if (completingVerificationIssue) {
+      const actorIsVerificationAssignee =
+        req.actor.type === "agent" &&
+        !!req.actor.agentId &&
+        req.actor.agentId === existing.assigneeAgentId;
+      if (req.actor.type !== "board" && !actorIsVerificationAssignee) {
+        res.status(403).json({ error: "Only the board or assigned verification agent can complete this issue" });
+        return;
+      }
+
+      if (!commentBody) {
+        existingVerificationOutcomeComment = await svc
+          .listComments(existing.id, { limit: 1, order: "desc" })
+          .then((rows) => (rows.length > 0 ? rows[0].body : null))
+          .catch(() => null);
+        if (!existingVerificationOutcomeComment) {
+          res.status(400).json({ error: "Goal verification issues require an outcome comment before completion" });
+          return;
+        }
+      }
+    }
 
     const transition = applyIssueExecutionPolicyTransition({
       issue: existing,
@@ -1742,22 +1768,24 @@ export function issueRoutes(
           // svc.addComment above; otherwise read the latest prior comment.
           const outcomeComment =
             comment?.body ??
+            existingVerificationOutcomeComment ??
             (await svc
               .listComments(issue.id, { limit: 1, order: "desc" })
               .then((rows) => (rows.length > 0 ? rows[0].body : null))
               .catch(() => null));
-          if (outcomeComment) {
-            verificationSvc
-              .applyVerificationOutcome(issue.companyId, issue.id, outcomeComment, {
-                actor: verificationActor,
-              })
-              .catch((err) =>
-                logger.warn(
-                  { err, issueId: issue.id, goalId: issue.goalId },
-                  "failed to apply goal verification outcome",
-                ),
-              );
+          if (!outcomeComment) {
+            throw new Error("Goal verification issue completed without an outcome comment");
           }
+          verificationSvc
+            .applyVerificationOutcome(issue.companyId, issue.id, outcomeComment, {
+              actor: verificationActor,
+            })
+            .catch((err) =>
+              logger.warn(
+                { err, issueId: issue.id, goalId: issue.goalId },
+                "failed to apply goal verification outcome",
+              ),
+            );
         } else {
           // Branch B — maybe start a new verification cycle.
           verificationSvc

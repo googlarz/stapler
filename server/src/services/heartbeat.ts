@@ -4538,7 +4538,7 @@ export function heartbeatService(db: Db) {
     opts?: { agentId?: string; reason?: string },
   ) {
     const reason = opts?.reason ?? "Issue reassigned or closed";
-    // Cancel queued runs for this issue, optionally scoped to a specific agent.
+    // Cancel queued/running runs for this issue, optionally scoped to a specific agent.
     // On reassignment we only cancel the OLD agent's runs — the new agent's
     // runs must not be touched. On closure we cancel all agents' runs.
     //
@@ -4547,7 +4547,7 @@ export function heartbeatService(db: Db) {
     // another queued run for the same issue after our initial select.
     const buildConditions = () => {
       const conditions = [
-        eq(heartbeatRuns.status, "queued" as const),
+        inArray(heartbeatRuns.status, ["queued", "running"]),
         sql`${heartbeatRuns.contextSnapshot}->>'issueId' = ${issueId}`,
       ];
       if (opts?.agentId) {

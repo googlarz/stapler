@@ -70,6 +70,13 @@ export type ApplyOutcomeResult =
   | { kind: "unparseable" }
   | { kind: "incomplete"; missingCriterionIds: string[] };
 
+export function hasCompletedLinkedWorkForVerification(
+  linkedIssues: Array<Pick<LinkedIssueSnapshot, "status">>,
+) {
+  const nonCancelledIssues = linkedIssues.filter((issue) => issue.status !== "cancelled");
+  return nonCancelledIssues.length > 0 && nonCancelledIssues.every((issue) => issue.status === "done");
+}
+
 // ---------------------------------------------------------------------------
 // Service factory
 // ---------------------------------------------------------------------------
@@ -217,10 +224,9 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
 
       if (linkedIssues.length === 0) return { kind: "skipped" as const, reason: "no_linked_issues" as const };
 
-      const allDone = linkedIssues.every(
-        (i) => i.status === "done" || i.status === "cancelled",
-      );
-      if (!allDone) return { kind: "skipped" as const, reason: "not_all_issues_done" as const };
+      if (!hasCompletedLinkedWorkForVerification(linkedIssues)) {
+        return { kind: "skipped" as const, reason: "not_all_issues_done" as const };
+      }
 
       // Pick the agent. Owner agent is required — we don't silently fall back.
       if (!goal.ownerAgentId) return { kind: "skipped" as const, reason: "no_owner_agent" as const };

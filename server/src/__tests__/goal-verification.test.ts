@@ -6,6 +6,7 @@ import {
   VERIFICATION_FENCE_INFOSTRING,
   type LinkedIssueSnapshot,
 } from "../lib/goal-verification-prompt.ts";
+import { hasCompletedLinkedWorkForVerification as hasCompletedLinkedWorkForVerificationService } from "../services/goal-verification.ts";
 import type { GoalAcceptanceCriterion } from "@paperclipai/shared";
 
 const SAMPLE_CRITERIA: GoalAcceptanceCriterion[] = [
@@ -237,5 +238,26 @@ describe("interpretOutcome", () => {
     ];
     const result = interpretOutcome(allOptional, { criteria: [] });
     expect(result.kind).toBe("passed");
+  });
+});
+
+describe("hasCompletedLinkedWorkForVerification", () => {
+  it("requires at least one non-cancelled linked issue", () => {
+    expect(hasCompletedLinkedWorkForVerificationService([{ status: "cancelled" }])).toBe(false);
+  });
+
+  it("ignores cancelled issues when checking remaining linked work", () => {
+    expect(hasCompletedLinkedWorkForVerificationService([
+      { status: "done" },
+      { status: "cancelled" },
+    ])).toBe(true);
+  });
+
+  it("rejects any non-cancelled linked issue that is not done", () => {
+    expect(hasCompletedLinkedWorkForVerificationService([
+      { status: "done" },
+      { status: "todo" },
+      { status: "cancelled" },
+    ])).toBe(false);
   });
 });
