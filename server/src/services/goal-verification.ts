@@ -12,6 +12,7 @@ import {
 } from "../lib/goal-verification-prompt.js";
 import { logActivity } from "./activity-log.js";
 import { issueService } from "./issues.js";
+import { queueIssueAssignmentWakeup, type IssueAssignmentWakeupDeps } from "./issue-assignment-wakeup.js";
 
 /**
  * Actor context used by the verification service to write activity-log
@@ -81,7 +82,7 @@ export function hasCompletedLinkedWorkForVerification(
 // Service factory
 // ---------------------------------------------------------------------------
 
-export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
+export function goalVerificationService(db: Db, issueSvc: IssueSvc, heartbeat?: IssueAssignmentWakeupDeps) {
   /**
    * Pull the goal + its linked issues (and each issue's latest comment)
    * into a snapshot suitable for the verification prompt template.
@@ -309,6 +310,24 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
         ownerAgentId: result.ownerAgentId,
       },
     });
+
+    // Wake the assigned owner agent so they pick up the verification issue
+    // immediately instead of waiting for their heartbeat timer.
+    if (heartbeat && result.ownerAgentId) {
+      void queueIssueAssignmentWakeup({
+        heartbeat,
+        issue: {
+          id: result.verificationIssueId,
+          assigneeAgentId: result.ownerAgentId,
+          status: "todo",
+        },
+        reason: "Goal verification issue created — please verify the goal outcome",
+        mutation: "goal_verification_created",
+        contextSource: "goal_verification",
+        requestedByActorType: "system",
+        requestedByActorId: null,
+      });
+    }
 
     return { kind: "created", verificationIssueId: result.verificationIssueId };
   }

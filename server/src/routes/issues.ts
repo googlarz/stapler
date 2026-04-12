@@ -1945,7 +1945,7 @@ export function issueRoutes(
       //      If the goal has acceptance criteria, maybe create a
       //      verification issue assigned to the owner agent.
       try {
-        const verificationSvc = goalVerificationService(db, svc);
+        const verificationSvc = goalVerificationService(db, svc, heartbeat);
         // The audit actor for verification-driven goal transitions is
         // the agent (or user) who PATCHed the triggering issue to
         // done. This is semantically right for both branches: the

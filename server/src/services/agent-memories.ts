@@ -378,7 +378,19 @@ export async function maybeLoadMemoriesForInjection(
   if (typeof context.wakeReason === "string" && context.wakeReason.trim()) {
     queryParts.push(context.wakeReason.trim());
   }
-  if (typeof context.taskTitle === "string" && context.taskTitle.trim()) {
+  // Prefer structured wake payload issue title (the common heartbeat path),
+  // then fall back to flat top-level fields for other callers.
+  const wakePayload = context.paperclipWake;
+  const wakeIssueTitle =
+    wakePayload !== null &&
+    typeof wakePayload === "object" &&
+    typeof (wakePayload as Record<string, unknown>).issue === "object" &&
+    (wakePayload as Record<string, unknown>).issue !== null
+      ? ((wakePayload as Record<string, Record<string, unknown>>).issue.title as string | undefined)
+      : undefined;
+  if (typeof wakeIssueTitle === "string" && wakeIssueTitle.trim()) {
+    queryParts.push(wakeIssueTitle.trim());
+  } else if (typeof context.taskTitle === "string" && context.taskTitle.trim()) {
     queryParts.push(context.taskTitle.trim());
   } else if (typeof context.issueTitle === "string" && context.issueTitle.trim()) {
     queryParts.push(context.issueTitle.trim());

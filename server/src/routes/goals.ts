@@ -7,6 +7,7 @@ import { validate } from "../middleware/validate.js";
 import {
   goalService,
   goalVerificationService,
+  heartbeatService,
   issueService,
   logActivity,
 } from "../services/index.js";
@@ -149,7 +150,7 @@ export function goalRoutes(db: Db) {
     assertCompanyAccess(req, existing.companyId);
 
     const issueSvc = issueService(db);
-    const verificationSvc = goalVerificationService(db, issueSvc);
+    const verificationSvc = goalVerificationService(db, issueSvc, heartbeatService(db));
     const actor = getActorInfo(req);
     // The service writes its own goal.verification_requested audit row
     // with the full state transition context on the `created` path —
