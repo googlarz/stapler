@@ -2662,7 +2662,17 @@ Return exactly this JSON structure:
 
       let proposals: unknown;
       try {
-        const parsed = JSON.parse(rawContent) as Record<string, unknown>;
+        // Strip markdown fences and find the first {...} block
+        const stripped = rawContent
+          .replace(/^```(?:json)?\s*/i, "")
+          .replace(/\s*```\s*$/, "")
+          .trim();
+        const jsonStart = stripped.indexOf("{");
+        const jsonEnd = stripped.lastIndexOf("}");
+        const jsonStr = jsonStart !== -1 && jsonEnd !== -1
+          ? stripped.slice(jsonStart, jsonEnd + 1)
+          : stripped;
+        const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
         proposals = Array.isArray(parsed.proposals) ? parsed.proposals : [];
       } catch {
         res.status(502).json({ error: "Model returned invalid JSON", raw: rawContent.slice(0, 500) });
