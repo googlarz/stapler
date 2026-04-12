@@ -727,6 +727,9 @@ export function shouldResetTaskSessionForWake(
   ) {
     return true;
   }
+
+  const wakeSource = readNonEmptyString(contextSnapshot?.wakeSource);
+  if (wakeSource === "timer") return true;
   return false;
 }
 
@@ -766,6 +769,9 @@ function describeSessionResetReason(
   if (wakeReason === "execution_review_requested") return "wake reason is execution_review_requested";
   if (wakeReason === "execution_approval_requested") return "wake reason is execution_approval_requested";
   if (wakeReason === "execution_changes_requested") return "wake reason is execution_changes_requested";
+
+  const wakeSource = readNonEmptyString(contextSnapshot?.wakeSource);
+  if (wakeSource === "timer") return "wake source is timer (fresh session per timer heartbeat)";
   return null;
 }
 
