@@ -872,8 +872,12 @@ export async function readPaperclipRuntimeSkillEntries(
   moduleDir: string,
   additionalCandidates: string[] = [],
 ): Promise<PaperclipSkillEntry[]> {
-  const configuredEntries = normalizeConfiguredPaperclipRuntimeSkills(config.paperclipRuntimeSkills);
-  if (configuredEntries.length > 0) return configuredEntries;
+  // If `paperclipRuntimeSkills` is explicitly set as an array (even empty), honour it.
+  // An empty array means "no skills" — do NOT fall through to auto-discovery.
+  // Undefined / null / non-array means "auto-discover from the skills directory".
+  if (Array.isArray(config.paperclipRuntimeSkills)) {
+    return normalizeConfiguredPaperclipRuntimeSkills(config.paperclipRuntimeSkills);
+  }
   return listPaperclipSkillEntries(moduleDir, additionalCandidates);
 }
 
