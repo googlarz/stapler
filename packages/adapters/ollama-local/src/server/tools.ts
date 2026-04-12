@@ -407,7 +407,10 @@ export async function executePaperclipTool(
     }
 
     case "paperclip_get_agent": {
-      const id = String(args.agentId ?? "");
+      // Resolve "me" / "self" to the agent's own ID so models can
+      // self-identify without needing to know their UUID.
+      const rawId = String(args.agentId ?? "").trim();
+      const id = rawId === "me" || rawId === "self" ? agentId : rawId;
       if (!id) return { error: "agentId is required" };
       return paperclipFetch(`${base}/api/agents/${encodeURIComponent(id)}`, {
         method: "GET",
