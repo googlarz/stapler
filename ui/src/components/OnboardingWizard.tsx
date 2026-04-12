@@ -7,6 +7,7 @@ import { useCompany } from "../context/CompanyContext";
 import { companiesApi } from "../api/companies";
 import { goalsApi } from "../api/goals";
 import { agentsApi } from "../api/agents";
+import { routinesApi } from "../api/routines";
 import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
 import { queryKeys } from "../lib/queryKeys";
@@ -47,6 +48,7 @@ import { suggestFromGoal, type OnboardingSuggestion } from "../lib/onboarding-su
 import {
   Building2,
   Bot,
+  BarChart2,
   ListTodo,
   Rocket,
   ArrowLeft,
@@ -55,11 +57,54 @@ import {
   Loader2,
   ChevronDown,
   X,
-  Sparkles
+  Sparkles,
+  ToggleLeft,
+  ToggleRight
 } from "lucide-react";
 
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
+
+const CPO_INSTRUCTIONS = `# CPO — Chief Product Officer
+
+You are the CPO of this Paperclip company. You are always present — you respond to questions, review approaches on demand, and run a full company review on a regular schedule.
+
+You are an observer, advisor, and proposer. You do NOT directly edit agent configs, close goals, or reassign issues. You give recommendations and let the board decide.
+
+## How you get woken up
+
+Check \`context.wakeReason\` to determine your mode:
+
+### Mode 1 — Ad-hoc (wakeReason: comment, issue_assigned, approval_requested)
+Someone needs strategic input. Be concise and direct (under 300 words). Post your response as a comment, then mark the issue done.
+
+### Mode 2 — Scheduled review (wakeReason: routine or schedule)
+Post ONE issue titled \`Company Review #N — YYYY-MM-DD\` with:
+- Health: 🟢 Good / 🟡 Needs attention / 🔴 Critical
+- What's working (max 3 bullets with evidence)
+- What needs attention (max 5 bullets with evidence)
+- Recommendations (3–6, each with observation + proposed change + expected impact)
+- Agent snapshots table (runs last 10, success rate, flag if <70%)
+
+Find review number from prior issues titled "Company Review #...".
+
+### Mode 3 — Startup / no clear context
+Post a brief "CPO online — [date]" note on the most recent open Company Review issue.
+
+## Reading company state
+
+\`\`\`bash
+curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agents" | jq .
+curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/goals" | jq .
+curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues?limit=50" | jq .
+\`\`\`
+
+## Always-on constraints
+- Ad-hoc: max 300 words, close the issue when done
+- Review: post ONE issue, no sub-issues, no agent assignments
+- Never edit agent configs, goals, or routines directly
+- You can store observations as memories: curl -X POST "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories" -H "Content-Type: application/json" -d '{"content": "...", "tags": ["review"]}'
+`;
 type AdapterType = string;
 
 const DEFAULT_TASK_TITLE = "Hire your first engineer and create a hiring plan";
@@ -141,7 +186,13 @@ export function OnboardingWizard() {
   const [unsetAnthropicLoading, setUnsetAnthropicLoading] = useState(false);
   const [showMoreAdapters, setShowMoreAdapters] = useState(false);
 
-  // Step 3
+  // Step 3 — CPO
+  const [cpoEnabled, setCpoEnabled] = useState(true);
+  const [cpoFrequency, setCpoFrequency] = useState<"weekly" | "biweekly" | "monthly">("weekly");
+  const [cpoAdapterType, setCpoAdapterType] = useState("claude_local");
+  const [cpoModel, setCpoModel] = useState("");
+
+  // Step 4 — Task
   const [taskTitle, setTaskTitle] = useState(DEFAULT_TASK_TITLE);
   const [taskDescription, setTaskDescription] = useState(
     DEFAULT_TASK_DESCRIPTION
@@ -204,9 +255,9 @@ export function OnboardingWizard() {
     if (company) setCreatedCompanyPrefix(company.issuePrefix);
   }, [effectiveOnboardingOpen, createdCompanyId, createdCompanyPrefix, companies]);
 
-  // Resize textarea when step 3 is shown or description changes
+  // Resize textarea when step 4 (task) is shown or description changes
   useEffect(() => {
-    if (step === 3) autoResizeTextarea();
+    if (step === 4) autoResizeTextarea();
   }, [step, taskDescription, autoResizeTextarea]);
 
   const {
@@ -320,6 +371,10 @@ export function OnboardingWizard() {
     setAdapterEnvLoading(false);
     setForceUnsetAnthropicApiKey(false);
     setUnsetAnthropicLoading(false);
+    setCpoEnabled(true);
+    setCpoFrequency("weekly");
+    setCpoAdapterType("claude_local");
+    setCpoModel("");
     setTaskTitle(DEFAULT_TASK_TITLE);
     setTaskDescription(DEFAULT_TASK_DESCRIPTION);
     setCreatedCompanyId(null);
@@ -546,7 +601,7 @@ export function OnboardingWizard() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.agents.list(createdCompanyId)
       });
-      setStep(3);
+      setStep(3); // advance to CPO step
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create agent");
     } finally {
@@ -605,8 +660,58 @@ export function OnboardingWizard() {
 
   async function handleStep3Next() {
     if (!createdCompanyId || !createdAgentId) return;
+    setLoading(true);
     setError(null);
-    setStep(4);
+    try {
+      if (cpoEnabled) {
+        const cpoAgent = await agentsApi.create(createdCompanyId, {
+          name: "CPO",
+          role: "cpo",
+          adapterType: cpoAdapterType,
+          adapterConfig: {
+            ...(cpoModel ? { model: cpoModel } : {}),
+            enableMemoryInjection: true,
+          },
+        });
+        // Save CPO instructions to the agent's instructions bundle
+        await agentsApi.saveInstructionsFile(
+          cpoAgent.id,
+          { path: "INSTRUCTIONS.md", content: CPO_INSTRUCTIONS, clearLegacyPromptTemplate: true },
+          createdCompanyId,
+        );
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(createdCompanyId) });
+
+        // Create routine + schedule trigger
+        const routine = await routinesApi.create(createdCompanyId, {
+          title: "Company Review",
+          assigneeAgentId: cpoAgent.id,
+          concurrencyPolicy: "coalesce_if_active",
+          catchUpPolicy: "skip_missed",
+        });
+        const cronMap = {
+          weekly: "0 9 * * 1",
+          biweekly: "0 9 1,15 * *",
+          monthly: "0 9 1 * *",
+        } as const;
+        await routinesApi.createTrigger(routine.id, {
+          kind: "schedule",
+          cronExpression: cronMap[cpoFrequency],
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          enabled: true,
+        });
+      }
+      setStep(4);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set up CPO");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleStep4Next() {
+    if (!createdCompanyId || !createdAgentId) return;
+    setError(null);
+    setStep(5);
   }
 
   async function handleLaunch() {
@@ -675,8 +780,9 @@ export function OnboardingWizard() {
       e.preventDefault();
       if (step === 1 && companyName.trim()) handleStep1Next();
       else if (step === 2 && agentName.trim()) handleStep2Next();
-      else if (step === 3 && taskTitle.trim()) handleStep3Next();
-      else if (step === 4) handleLaunch();
+      else if (step === 3) handleStep3Next();
+      else if (step === 4 && taskTitle.trim()) handleStep4Next();
+      else if (step === 5) handleLaunch();
     }
   }
 
@@ -722,8 +828,9 @@ export function OnboardingWizard() {
                   [
                     { step: 1 as Step, label: "Company", icon: Building2 },
                     { step: 2 as Step, label: "Agent", icon: Bot },
-                    { step: 3 as Step, label: "Task", icon: ListTodo },
-                    { step: 4 as Step, label: "Launch", icon: Rocket }
+                    { step: 3 as Step, label: "CPO", icon: BarChart2 },
+                    { step: 4 as Step, label: "Task", icon: ListTodo },
+                    { step: 5 as Step, label: "Launch", icon: Rocket }
                   ] as const
                 ).map(({ step: s, label, icon: Icon }) => (
                   <button
@@ -1186,6 +1293,103 @@ export function OnboardingWizard() {
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
+                      <BarChart2 className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Add a CPO agent</h3>
+                      <p className="text-xs text-muted-foreground">
+                        The CPO reviews your company on a schedule and surfaces what to improve.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Enable toggle */}
+                  <button
+                    type="button"
+                    className="flex items-center justify-between w-full rounded-md border border-border px-3 py-2.5 hover:bg-accent/50 transition-colors"
+                    onClick={() => setCpoEnabled((v) => !v)}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-left">Enable CPO</p>
+                      <p className="text-xs text-muted-foreground text-left">
+                        Creates a CPO agent and schedules regular company reviews.
+                      </p>
+                    </div>
+                    {cpoEnabled ? (
+                      <ToggleRight className="h-5 w-5 text-foreground shrink-0 ml-3" />
+                    ) : (
+                      <ToggleLeft className="h-5 w-5 text-muted-foreground shrink-0 ml-3" />
+                    )}
+                  </button>
+
+                  {cpoEnabled && (
+                    <>
+                      {/* Review frequency */}
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-2 block">
+                          Review frequency
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["weekly", "biweekly", "monthly"] as const).map((freq) => (
+                            <button
+                              key={freq}
+                              type="button"
+                              className={cn(
+                                "rounded-md border px-3 py-2 text-xs font-medium transition-colors",
+                                cpoFrequency === freq
+                                  ? "border-foreground bg-accent"
+                                  : "border-border hover:bg-accent/50"
+                              )}
+                              onClick={() => setCpoFrequency(freq)}
+                            >
+                              {freq === "weekly" ? "Weekly" : freq === "biweekly" ? "Bi-weekly" : "Monthly"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Adapter type */}
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-2 block">
+                          Model adapter
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {recommendedAdapters.map((opt) => (
+                            <button
+                              key={opt.type}
+                              type="button"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors",
+                                cpoAdapterType === opt.type
+                                  ? "border-foreground bg-accent"
+                                  : "border-border hover:bg-accent/50"
+                              )}
+                              onClick={() => {
+                                setCpoAdapterType(opt.type);
+                                setCpoModel("");
+                              }}
+                            >
+                              <opt.icon className="h-3.5 w-3.5 shrink-0" />
+                              <span className="font-medium truncate">{opt.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {!cpoEnabled && (
+                    <p className="text-xs text-muted-foreground">
+                      You can add a CPO agent manually later from the Agents page.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {step === 4 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
                       <ListTodo className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
@@ -1223,7 +1427,7 @@ export function OnboardingWizard() {
                 </div>
               )}
 
-              {step === 4 && (
+              {step === 5 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
@@ -1256,6 +1460,20 @@ export function OnboardingWizard() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {getUIAdapter(adapterType).label}
+                        </p>
+                      </div>
+                      <Check className="h-4 w-4 text-green-500 shrink-0" />
+                    </div>
+                    <div className="flex items-center gap-3 px-3 py-2.5">
+                      <BarChart2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          CPO
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {cpoEnabled
+                            ? `${cpoFrequency.charAt(0).toUpperCase() + cpoFrequency.slice(1)} company reviews`
+                            : "Skipped"}
                         </p>
                       </div>
                       <Check className="h-4 w-4 text-green-500 shrink-0" />
@@ -1330,18 +1548,38 @@ export function OnboardingWizard() {
                   {step === 3 && (
                     <Button
                       size="sm"
-                      disabled={!taskTitle.trim() || loading}
-                      onClick={handleStep3Next}
+                      disabled={loading}
+                      onClick={() => void handleStep3Next()}
                     >
                       {loading ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                       ) : (
                         <ArrowRight className="h-3.5 w-3.5 mr-1" />
                       )}
-                      {loading ? "Creating..." : "Next"}
+                      {loading
+                        ? cpoEnabled
+                          ? "Setting up CPO..."
+                          : "Continuing..."
+                        : cpoEnabled
+                          ? "Create CPO & Continue"
+                          : "Skip & Continue"}
                     </Button>
                   )}
                   {step === 4 && (
+                    <Button
+                      size="sm"
+                      disabled={!taskTitle.trim() || loading}
+                      onClick={() => void handleStep4Next()}
+                    >
+                      {loading ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <ArrowRight className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      {loading ? "Saving..." : "Next"}
+                    </Button>
+                  )}
+                  {step === 5 && (
                     <Button size="sm" disabled={loading} onClick={handleLaunch}>
                       {loading ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
