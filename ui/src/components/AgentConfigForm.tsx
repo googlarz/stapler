@@ -22,7 +22,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, Heart, ChevronDown, X } from "lucide-react";
+import { FolderOpen, Heart, ChevronDown, X, Brain } from "lucide-react";
 import { cn } from "../lib/utils";
 import { extractModelName, extractProviderId } from "../lib/model-utils";
 import { queryKeys } from "../lib/queryKeys";
@@ -931,6 +931,35 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
           </div>
         </div>
       ) : null}
+
+      {/* ---- Memory ---- */}
+      {!isCreate && (
+        <div className={cn(!cards && "border-b border-border")}>
+          {cards
+            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Brain className="h-3 w-3" /> Memory</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Brain className="h-3 w-3" /> Memory</div>
+          }
+          <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+            {(() => {
+              const memoryEnabled = eff("adapterConfig", "enableMemoryInjection", config.enableMemoryInjection === true);
+              const memoryLimit = Math.max(1, Number(config.memoryInjectionLimit ?? 5) || 5);
+              return (
+                <ToggleWithNumber
+                  label="Auto-inject memories at run-start"
+                  hint="When enabled, the server searches this agent's memory store for entries relevant to the current task and injects the top results into the prompt before each run — no tool call needed."
+                  checked={memoryEnabled}
+                  onCheckedChange={(v) => mark("adapterConfig", "enableMemoryInjection", v)}
+                  number={eff("adapterConfig", "memoryInjectionLimit", memoryLimit)}
+                  onNumberChange={(v) => mark("adapterConfig", "memoryInjectionLimit", v)}
+                  numberLabel="memories"
+                  numberPrefix="Inject up to"
+                  showNumber={memoryEnabled}
+                />
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
     </div>
   );

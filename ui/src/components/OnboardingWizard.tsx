@@ -415,6 +415,11 @@ export function OnboardingWizard() {
         // their defaults — guards against back→next discarding user edits.
         if (taskTitle === DEFAULT_TASK_TITLE) setTaskTitle(s.taskTitle);
         if (taskDescription === DEFAULT_TASK_DESCRIPTION) setTaskDescription(s.taskDescription);
+        // Auto-expand "More adapters" if the suggested adapter lives there
+        // so the "For your goal" badge is actually visible.
+        if (moreAdapters.some((a) => a.type === s.adapterType)) {
+          setShowMoreAdapters(true);
+        }
       }
       setStep(2);
     }
