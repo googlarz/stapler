@@ -477,9 +477,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   })();
   const renderedPrompt = shouldUseResumeDeltaPrompt ? "" : renderTemplate(promptTemplate, templateData);
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  const injectedMemories = ctx.agentMemoriesForInjection;
+  const memoriesSection =
+    injectedMemories && injectedMemories.length > 0
+      ? ["## Relevant memories", ...injectedMemories.map((m, i) => `${i + 1}. ${m.content}`)].join("\n")
+      : "";
   const prompt = joinPromptSections([
     promptInstructionsPrefix,
     renderedBootstrapPrompt,
+    memoriesSection,
     wakePrompt,
     sessionHandoffNote,
     renderedPrompt,
@@ -488,6 +494,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     promptChars: prompt.length,
     instructionsChars,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
+    memoriesChars: memoriesSection.length,
     wakePromptChars: wakePrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
     heartbeatPromptChars: renderedPrompt.length,
