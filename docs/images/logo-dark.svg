@@ -1,11 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="140" height="32" viewBox="0 0 140 32" fill="none">
-  <g stroke-linecap="round" stroke-linejoin="round">
-    <!-- Stapler arm (top) -->
-    <path stroke="#e4e4e7" stroke-width="2" d="M4 18V13.5A1.5 1.5 0 0 1 5.5 12H20A1.5 1.5 0 0 1 21.5 13.5V18"/>
-    <!-- Stapler base (bottom) -->
-    <rect stroke="#e4e4e7" stroke-width="2" x="2" y="18" width="20" height="6.5" rx="2"/>
-    <!-- Staple exit slot -->
-    <line stroke="#e4e4e7" stroke-width="1.5" stroke-linecap="round" x1="14.5" y1="22" x2="20.5" y2="22"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="32" viewBox="0 0 140 32" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <g transform="translate(1 1) scale(0.054)">
+    <path fill="#18181b" stroke="#e4e4e7" stroke-width="26" stroke-linejoin="round"
+      d="M24 388 L24 432 Q24 458 54 458 L462 458 Q494 458 494 434 L478 388 Z"/>
+    <path fill="#18181b" stroke="#e4e4e7" stroke-width="26" stroke-linejoin="round"
+      d="M46 292 L46 138 Q46 66 140 66 L428 66 Q490 66 490 130 L490 292 Z"/>
+    <line stroke="#e4e4e7" stroke-width="24" stroke-linecap="round" x1="148" y1="108" x2="466" y2="108"/>
+    <line stroke="#e4e4e7" stroke-width="24" stroke-linecap="round" x1="140" y1="292" x2="468" y2="262"/>
+    <circle fill="#18181b" stroke="#e4e4e7" stroke-width="26" cx="72" cy="338" r="54"/>
+    <circle fill="#18181b" stroke="#e4e4e7" stroke-width="26" cx="72" cy="338" r="22"/>
   </g>
-  <text x="32" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#e4e4e7">Stapler</text>
+  <text x="34" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#e4e4e7">Stapler</text>
 </svg>

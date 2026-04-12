@@ -273,18 +273,26 @@ export function CompanyRail() {
       <div className="flex items-center justify-center h-12 w-full shrink-0">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
+          viewBox="0 0 512 512"
           fill="none"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="h-5 w-5 stroke-foreground"
+          className="h-5 w-5"
         >
-          {/* Stapler arm (top) */}
-          <path strokeWidth="2" d="M4 14V9.5A1.5 1.5 0 0 1 5.5 8H20A1.5 1.5 0 0 1 21.5 9.5V14"/>
-          {/* Stapler base (bottom) */}
-          <rect strokeWidth="2" x="2" y="14" width="20" height="6.5" rx="2"/>
-          {/* Staple exit slot */}
-          <line strokeWidth="1.5" x1="14.5" y1="18" x2="20.5" y2="18"/>
+          {/* Base */}
+          <path stroke="currentColor" strokeWidth="26" strokeLinejoin="round"
+            d="M24 388 L24 432 Q24 458 54 458 L462 458 Q494 458 494 434 L478 388 Z"/>
+          {/* Arm */}
+          <path stroke="currentColor" strokeWidth="26" strokeLinejoin="round"
+            d="M46 292 L46 138 Q46 66 140 66 L428 66 Q490 66 490 130 L490 292 Z"/>
+          {/* Interior ceiling line */}
+          <line stroke="currentColor" strokeWidth="24" x1="148" y1="108" x2="466" y2="108"/>
+          {/* Interior diagonal */}
+          <line stroke="currentColor" strokeWidth="24" x1="140" y1="292" x2="468" y2="262"/>
+          {/* Hinge outer */}
+          <circle stroke="currentColor" strokeWidth="26" cx="72" cy="338" r="54"/>
+          {/* Hinge inner */}
+          <circle stroke="currentColor" strokeWidth="26" cx="72" cy="338" r="22"/>
         </svg>
       </div>
 
