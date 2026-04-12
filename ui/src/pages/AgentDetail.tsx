@@ -641,6 +641,7 @@ export function AgentDetail() {
   const [proposeOpen, setProposeOpen] = useState(false);
   const [proposing, setProposing] = useState(false);
   const [proposals, setProposals] = useState<TaskProposal[]>([]);
+  const [proposeError, setProposeError] = useState<string | null>(null);
   const activeView = urlRunId ? "runs" as AgentDetailView : parseAgentDetailView(urlTab ?? null);
   const needsDashboardData = activeView === "dashboard";
   const needsRunData = activeView === "runs" || Boolean(urlRunId);
@@ -870,11 +871,12 @@ export function AgentDetail() {
     setProposing(true);
     setProposeOpen(true);
     setProposals([]);
+    setProposeError(null);
     try {
       const result = await agentsApi.proposeTasks(agentLookupRef, resolvedCompanyId ?? undefined);
       setProposals(result.proposals ?? []);
-    } catch {
-      setProposeOpen(false);
+    } catch (err) {
+      setProposeError(err instanceof Error ? err.message : "Failed to generate proposals");
     } finally {
       setProposing(false);
     }
@@ -1207,7 +1209,10 @@ export function AgentDetail() {
               <p className="text-sm">Generating task proposals...</p>
             </div>
           )}
-          {!proposing && proposals.length === 0 && (
+          {!proposing && proposeError && (
+            <p className="text-sm text-destructive py-8 text-center">{proposeError}</p>
+          )}
+          {!proposing && !proposeError && proposals.length === 0 && (
             <p className="text-sm text-muted-foreground py-8 text-center">
               No proposals returned. Try again or check the model configuration.
             </p>

@@ -2561,14 +2561,41 @@ export function agentRoutes(db: Db) {
     const myIssues = recentIssues.filter((i) => i.assigneeAgentId === id);
     const otherIssues = recentIssues.filter((i) => i.assigneeAgentId !== id);
 
-    // Determine default model: agent config > company default > fallback
+    // Determine default model: agent config > company default > first available Ollama model
     const agentCfg = (agent.adapterConfig ?? {}) as Record<string, unknown>;
     const ollamaBaseUrl = typeof agentCfg.baseUrl === "string"
       ? agentCfg.baseUrl.replace(/\/$/, "")
       : "http://localhost:11434";
-    const model = typeof agentCfg.model === "string" && agentCfg.model
+    const preferredModel = typeof agentCfg.model === "string" && agentCfg.model
       ? agentCfg.model
-      : (company?.defaultModel ?? "llama3.2");
+      : (company?.defaultModel ?? null);
+
+    // Fetch available models from Ollama to validate / auto-select
+    let model: string;
+    try {
+      const tagsRes = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(5_000) });
+      const tagsData = tagsRes.ok
+        ? (await tagsRes.json()) as { models?: Array<{ name: string; size: number }> }
+        : { models: [] };
+      const availableModels = tagsData.models ?? [];
+      if (availableModels.length === 0) {
+        res.status(502).json({ error: "No models available in Ollama. Pull a model first (e.g. ollama pull qwen3.5)." });
+        return;
+      }
+      const matched = preferredModel
+        ? availableModels.find((m) => m.name === preferredModel || m.name.startsWith(`${preferredModel}:`))
+        : null;
+      if (matched) {
+        model = matched.name;
+      } else {
+        // Fall back to smallest available model (fastest for task planning)
+        const sorted = [...availableModels].sort((a, b) => (a.size ?? 0) - (b.size ?? 0));
+        model = sorted[0]!.name;
+      }
+    } catch {
+      res.status(502).json({ error: "Cannot reach Ollama at " + ollamaBaseUrl });
+      return;
+    }
 
     // Build context prompt
     const goalsSection = allGoals.length === 0 ? "No goals defined yet." : allGoals.map((g) => {
@@ -2648,7 +2675,7 @@ Respond with ONLY a JSON object in this exact format, no other text:
           format: "json",
           messages: [{ role: "user", content: prompt }],
         }),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(180_000),
       });
 
       if (!ollamaRes.ok) {
