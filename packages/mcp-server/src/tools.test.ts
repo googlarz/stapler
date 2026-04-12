@@ -278,7 +278,7 @@ describe("paperclip MCP tools", () => {
         apiUrl: "http://localhost:3100/api",
         apiKey: "token-123",
         companyId: "11111111-1111-1111-1111-111111111111",
-        agentId: undefined,
+        agentId: null,
         runId: "33333333-3333-3333-3333-333333333333",
       });
       const tool = createToolDefinitions(clientWithoutAgent).find(

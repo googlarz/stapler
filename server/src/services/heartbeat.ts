@@ -739,6 +739,8 @@ function shouldRequireIssueCommentForWake(
     wakeReason === "execution_approval_requested" ||
     wakeReason === "execution_changes_requested"
   );
+}
+
 export function shouldUseAgentRuntimeSessionForTaskScope(input: {
   taskKey: string | null | undefined;
   resetTaskSession: boolean;
@@ -4739,7 +4741,7 @@ export function heartbeatService(db: Db) {
 
     cancelRun: (runId: string) => cancelRunInternal(runId),
 
-    cancelActiveForAgent: (agentId: string) => cancelActiveForAgentInternal(agentId),
+    cancelActiveForAgent: (agentId: string, reason?: string) => cancelActiveForAgentInternal(agentId, reason),
 
     cancelQueuedRunsForIssue: (issueId: string, opts?: { agentId?: string; reason?: string }) =>
       cancelQueuedRunsForIssueInternal(issueId, opts),

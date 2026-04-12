@@ -1027,7 +1027,7 @@ export function CompanySkills() {
 
   const deleteSkill = useMutation({
     mutationFn: () => companySkillsApi.delete(selectedCompanyId!, deleteTargetSkillId!),
-    onSuccess: async (skill) => {
+    onSuccess: async () => {
       closeDeleteDialog(false);
       setDisplayedDetail(null);
       setDisplayedFile(null);
@@ -1051,7 +1051,7 @@ export function CompanySkills() {
       pushToast({
         tone: "success",
         title: "Skill removed",
-        body: `${skill.name} was removed from the company skill library.`,
+        body: `Skill was removed from the company skill library.`,
       });
     },
     onError: (error) => {
