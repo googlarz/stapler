@@ -414,6 +414,13 @@
       "when": 1776067200000,
       "tag": "0058_agent_memories",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1776153600000,
+      "tag": "0059_goal_verification_issue_fk",
+      "breakpoints": true
     }
   ]
 }

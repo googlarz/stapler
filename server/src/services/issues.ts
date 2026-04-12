@@ -914,7 +914,7 @@ export function issueService(db: Db) {
       const conditions = [eq(issues.companyId, companyId)];
       const limit = typeof filters?.limit === "number" && Number.isFinite(filters.limit)
         ? Math.max(1, Math.min(1000, Math.floor(filters.limit)))
-        : 100; // DEFAULT_ISSUE_LIST_LIMIT — prevents correlated subquery explosion on large datasets
+        : undefined;
       const touchedByUserId = filters?.touchedByUserId?.trim() || undefined;
       const inboxArchivedByUserId = filters?.inboxArchivedByUserId?.trim() || undefined;
       const unreadForUserId = filters?.unreadForUserId?.trim() || undefined;

@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { agents } from "./agents.js";
 import { companies } from "./companies.js";
+import { issues } from "./issues.js";
 
 /**
  * Structured acceptance criterion attached to a goal. Enables
@@ -52,13 +53,9 @@ export const goals = pgTable(
     verificationStatus: text("verification_status").notNull().default("not_started"),
     verificationAttempts: integer("verification_attempts").notNull().default(0),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
-    /**
-     * Loose reference — no FK constraint, since `issues.goalId` already
-     * references `goals.id` and we avoid a circular FK at the schema level.
-     * The issues service clears this column when the referenced issue is
-     * deleted.
-     */
-    verificationIssueId: uuid("verification_issue_id"),
+    verificationIssueId: uuid("verification_issue_id").references((): AnyPgColumn => issues.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

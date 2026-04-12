@@ -341,7 +341,18 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc) {
     if (!goal) return { kind: "unparseable" };
 
     const parsed: VerificationOutcome | null = parseVerificationOutcome(agentCommentBody);
-    if (!parsed) return { kind: "unparseable" };
+    if (!parsed) {
+      await db
+        .update(goals)
+        .set({
+          verificationStatus: "not_started",
+          verificationIssueId: null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(goals.id, goal.id), eq(goals.companyId, companyId)));
+
+      return { kind: "unparseable" };
+    }
 
     const criteria = (goal.acceptanceCriteria ?? []) as GoalAcceptanceCriterion[];
     const verdict = interpretOutcome(criteria, parsed);
