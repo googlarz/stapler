@@ -23,6 +23,8 @@
 | Automatic goal verification loop | ✅ | ❌ |
 | Editable goal parent, description, delete | ✅ | ❌ |
 | Issue list query validation (400 on bad params) | ✅ | ❌ |
+| Default model setting per company | ✅ | ❌ |
+| Propose Tasks — AI-generated task suggestions per agent | ✅ | ❌ |
 
 ---
 
@@ -105,6 +107,29 @@ Type your company mission in step 1 and the wizard:
 - Recommends the best adapter for your setup
 - Pre-fills the first task title and description
 - Generates structured acceptance criteria tailored to your goal
+
+---
+
+### Propose Tasks
+
+On any agent detail page, **Propose Tasks** generates 5 prioritised task suggestions using the agent's full context: company goals, open issues, other agents, and the agent's own memories.
+
+The API call:
+
+```bash
+curl -X POST "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/propose-tasks" \
+  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+```
+
+Returns an array of proposals — each with a title, description, and priority. Each proposal has a **Create Issue** button in the UI to turn it into a real issue in one click.
+
+Requires a local Ollama instance. Uses the company's **default model** (configurable in company settings) or falls back to the smallest available model.
+
+---
+
+### Default Model
+
+Set a default Ollama model for your company in **Settings → Default Model**. Used by Propose Tasks and any agent that doesn't specify its own model.
 
 ---
 
