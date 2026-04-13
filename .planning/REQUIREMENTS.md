@@ -27,7 +27,7 @@
 
 ### Budget
 
-- [ ] **BUDGET-01**: Agent run list and run detail shows estimated USD cost for Claude runs, calculated from stored input/output token counts using Anthropic pricing constants
+- [x] **BUDGET-01**: Agent run list and run detail shows estimated USD cost for Claude runs, calculated from stored input/output token counts using Anthropic pricing constants
 
 ### Agent Templates
 
@@ -83,7 +83,7 @@
 | MEMORY-02 | Phase 3 | Complete |
 | MEMORY-03 | Phase 3 | Complete |
 | GOALS-01 | Phase 4 | Pending |
-| BUDGET-01 | Phase 4 | Pending |
+| BUDGET-01 | Phase 4 | Complete |
 | AGENTS-01 | Phase 5 | Pending |
 | PROPOSE-01 | Phase 5 | Pending |
 | BENCH-01 | Phase 6 | Pending |
