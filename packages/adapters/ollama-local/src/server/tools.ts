@@ -291,6 +291,61 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_delete_memory",
+      description:
+        "Delete one of your own memories by ID. Use when a memory is outdated, incorrect, or no longer relevant.",
+      parameters: {
+        type: "object",
+        required: ["memoryId"],
+        properties: {
+          memoryId: { type: "string", description: "The memory ID to delete" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_create_goal",
+      description:
+        "Create a new company goal with a title, description, and acceptance criteria. Use to define strategic objectives for the team.",
+      parameters: {
+        type: "object",
+        required: ["title"],
+        properties: {
+          title: { type: "string", description: "Short, clear goal title" },
+          description: { type: "string", description: "Goal description (markdown supported)" },
+          acceptanceCriteria: { type: "string", description: "Definition of done — what must be true for this goal to be achieved" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_update_goal",
+      description:
+        "Update an existing goal's status, description, or acceptance criteria by ID.",
+      parameters: {
+        type: "object",
+        required: ["goalId"],
+        properties: {
+          goalId: { type: "string", description: "The goal ID to update" },
+          status: {
+            type: "string",
+            enum: ["open", "in_progress", "achieved", "abandoned"],
+            description: "New goal status",
+          },
+          title: { type: "string", description: "Updated goal title" },
+          description: { type: "string", description: "Updated goal description" },
+          acceptanceCriteria: { type: "string", description: "Updated acceptance criteria" },
+        },
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -500,6 +555,45 @@ export async function executePaperclipTool(
       return paperclipFetch(
         `${base}/api/companies/${encodeURIComponent(companyId)}/goals?limit=${limit}`,
         { method: "GET", authToken },
+      );
+    }
+
+    case "paperclip_delete_memory": {
+      const id = String(args.memoryId ?? "").trim();
+      if (!id) return { error: "memoryId is required" };
+      return paperclipFetch(
+        `${base}/api/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(id)}`,
+        { method: "DELETE", authToken },
+      );
+    }
+
+    case "paperclip_create_goal": {
+      const title = String(args.title ?? "").trim();
+      if (!title) return { error: "title is required" };
+      const body: Record<string, unknown> = { title };
+      if (typeof args.description === "string" && args.description.trim()) {
+        body.description = args.description.trim();
+      }
+      if (typeof args.acceptanceCriteria === "string" && args.acceptanceCriteria.trim()) {
+        body.acceptanceCriteria = args.acceptanceCriteria.trim();
+      }
+      return paperclipFetch(
+        `${base}/api/companies/${encodeURIComponent(companyId)}/goals`,
+        { method: "POST", body: JSON.stringify(body), authToken },
+      );
+    }
+
+    case "paperclip_update_goal": {
+      const id = String(args.goalId ?? "").trim();
+      if (!id) return { error: "goalId is required" };
+      const updates: Record<string, unknown> = {};
+      if (typeof args.status === "string") updates.status = args.status;
+      if (typeof args.title === "string") updates.title = args.title;
+      if (typeof args.description === "string") updates.description = args.description;
+      if (typeof args.acceptanceCriteria === "string") updates.acceptanceCriteria = args.acceptanceCriteria;
+      return paperclipFetch(
+        `${base}/api/companies/${encodeURIComponent(companyId)}/goals/${encodeURIComponent(id)}`,
+        { method: "PATCH", body: JSON.stringify(updates), authToken },
       );
     }
 
