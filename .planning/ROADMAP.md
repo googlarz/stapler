@@ -109,4 +109,4 @@ Plans:
 | 3. Company Shared Memories | 1/3 | Complete    | 2026-04-13 |
 | 4. Goals + Budget UI | 1/2 | Complete    | 2026-04-13 |
 | 5. Agent Template + Propose Bulk | 1/2 | Complete    | 2026-04-13 |
-| 6. Ollama Benchmarking | 1/1 | Complete   | 2026-04-13 |
+| 6. Ollama Benchmarking | 1/1 | Complete    | 2026-04-13 |
