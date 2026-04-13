@@ -51,7 +51,12 @@ Plans:
   2. `GET /api/companies/:id/memories` returns all company-level memories (distinct from agent memories)
   3. An Ollama agent can call `paperclip_list_company_memories` and receive the current shared memories list
   4. A memory written by agent A is returned when agent B queries company memories in the same company
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — DB migration (0061_company_memories) + Drizzle schema + companyMemoryService
+- [ ] 03-02-PLAN.md — REST routes POST/GET /api/companies/:id/memories + wire into app
+- [ ] 03-03-PLAN.md — Ollama tool paperclip_list_company_memories definition + executor
 
 ### Phase 4: Goals + Budget UI
 **Goal**: Users can see goal progress at a glance and understand the USD cost of Claude runs without leaving the UI
@@ -90,7 +95,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Ollama Tools + Memory Injection | 1/1 | Complete    | 2026-04-13 |
 | 2. Ollama Streaming | 0/1 | Complete    | 2026-04-13 |
-| 3. Company Shared Memories | 0/TBD | Not started | - |
+| 3. Company Shared Memories | 0/3 | Not started | - |
 | 4. Goals + Budget UI | 0/TBD | Not started | - |
 | 5. Agent Template + Propose Bulk | 0/TBD | Not started | - |
 | 6. Ollama Benchmarking | 0/TBD | Not started | - |
