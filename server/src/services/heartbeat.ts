@@ -2359,13 +2359,41 @@ export function heartbeatService(db: Db) {
 
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect) {
     if (run.status !== "queued") return run;
+
+    // Helper: cancel a queued run without calling cancelRunInternal.
+    // cancelRunInternal → startNextQueuedRunForAgent → withAgentStartLock
+    // deadlocks when claimQueuedRun is already inside that lock.
+    // This inlines the same steps minus the lock-reacquiring call and the
+    // child-process kill (queued runs have no running process).
+    async function cancelQueuedRun(reason: string, options?: { skipEvent?: boolean }) {
+      const cancelled = await setRunStatus(run.id, "cancelled", {
+        finishedAt: new Date(),
+        error: reason,
+        errorCode: "cancelled",
+      }, { skipEvent: options?.skipEvent });
+      await setWakeupStatus(run.wakeupRequestId, "cancelled", {
+        finishedAt: new Date(),
+        error: reason,
+      });
+      if (cancelled) {
+        await appendRunEvent(cancelled, 1, {
+          eventType: "lifecycle",
+          stream: "system",
+          level: "warn",
+          message: "run cancelled",
+        });
+        await releaseIssueExecutionAndPromote(cancelled);
+      }
+      await finalizeAgentStatus(run.agentId, "cancelled");
+    }
+
     const agent = await getAgent(run.agentId);
     if (!agent) {
-      await cancelRunInternal(run.id, "Cancelled because the agent no longer exists");
+      await cancelQueuedRun("Cancelled because the agent no longer exists");
       return null;
     }
     if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") {
-      await cancelRunInternal(run.id, "Cancelled because the agent is not invokable");
+      await cancelQueuedRun("Cancelled because the agent is not invokable");
       return null;
     }
 
@@ -2375,14 +2403,12 @@ export function heartbeatService(db: Db) {
       projectId: readNonEmptyString(context.projectId),
     });
     if (budgetBlock) {
-      await cancelRunInternal(run.id, budgetBlock.reason);
+      await cancelQueuedRun(budgetBlock.reason);
       return null;
     }
 
     // Dequeue-time issue-status check: cancel runs for done/cancelled issues.
-    // Uses low-level setRunStatus/setWakeupStatus instead of cancelRunInternal
-    // to avoid deadlock — cancelRunInternal calls startNextQueuedRunForAgent,
-    // which holds the agent start lock that is already held by our caller.
+    // skipEvent suppresses the toast — this is an internal cleanup, not user-facing.
     const issueId = readNonEmptyString(context.issueId);
     if (issueId) {
       const issue = await db
@@ -2391,16 +2417,10 @@ export function heartbeatService(db: Db) {
         .where(eq(issues.id, issueId))
         .then((rows) => rows[0] ?? null);
       if (issue && (issue.status === "done" || issue.status === "cancelled")) {
-        const reason = `Cancelled because the issue is already ${issue.status}`;
-        await setRunStatus(run.id, "cancelled", {
-          finishedAt: new Date(),
-          error: reason,
-          errorCode: "cancelled",
-        }, { skipEvent: true });
-        await setWakeupStatus(run.wakeupRequestId, "cancelled", {
-          finishedAt: new Date(),
-          error: reason,
-        });
+        await cancelQueuedRun(
+          `Cancelled because the issue is already ${issue.status}`,
+          { skipEvent: true },
+        );
         return null;
       }
     }
