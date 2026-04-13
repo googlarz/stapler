@@ -39,7 +39,7 @@
 
 ### Benchmarking
 
-- [ ] **BENCH-01**: A benchmarking page (or modal) allows comparing installed Ollama models by running a fixed sample prompt against each and displaying response time and output for comparison
+- [x] **BENCH-01**: A benchmarking page (or modal) allows comparing installed Ollama models by running a fixed sample prompt against each and displaying response time and output for comparison
 
 ## v2 Requirements
 
@@ -86,7 +86,7 @@
 | BUDGET-01 | Phase 4 | Complete |
 | AGENTS-01 | Phase 5 | Complete |
 | PROPOSE-01 | Phase 5 | Complete |
-| BENCH-01 | Phase 6 | Pending |
+| BENCH-01 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 12 total
