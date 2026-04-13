@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 03-company-shared-memories 03-03-PLAN.md
-last_updated: "2026-04-13T21:04:59.354Z"
+stopped_at: Completed 03-company-shared-memories 03-02-PLAN.md
+last_updated: "2026-04-13T21:05:29.504Z"
 last_activity: 2026-04-13 — Roadmap created (6 phases, 12 requirements mapped)
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
   percent: 100
 ---
 
@@ -53,6 +53,7 @@ Progress: [██████████] 100%
 | Phase 01-ollama-tools-memory-injection P01 | 10 | 1 tasks | 1 files |
 | Phase 02-ollama-streaming P01 | 1 | 2 tasks | 1 files |
 | Phase 03-company-shared-memories P03 | 5 | 1 tasks | 1 files |
+| Phase 03-company-shared-memories P02 | 8 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [Phase 03-company-shared-memories]: MemoryContentTooLargeError re-exported from agent-memories.ts to prevent duplicate error classes breaking instanceof checks
 - [Phase 03-company-shared-memories]: Tags lowercased in company service (stricter normalization for company-wide shared scope)
 - [Phase 03-company-shared-memories]: paperclip_list_company_memories limit clamped 1-200, default 50
+- [Phase 03-company-shared-memories]: Manual query-param validation used instead of zod schema for company memory GET route
+- [Phase 03-company-shared-memories]: POST /api/companies/:companyId/memories returns 201 with memory object directly (no deduped wrapper)
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-13T21:04:59.352Z
-Stopped at: Completed 03-company-shared-memories 03-03-PLAN.md
+Last session: 2026-04-13T21:05:29.502Z
+Stopped at: Completed 03-company-shared-memories 03-02-PLAN.md
 Resume file: None

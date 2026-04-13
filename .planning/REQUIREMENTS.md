@@ -14,7 +14,7 @@
 ### Memory
 
 - [x] **MEMORY-01**: Ollama adapter reads `context.agentMemoriesForInjection` and prepends a `## Relevant memories` section to its system prompt (matching existing Claude adapter behavior)
-- [ ] **MEMORY-02**: Company-level shared memory API exists (`POST/GET /api/companies/:id/memories`) — memories readable by all agents in a company, writable by any agent
+- [x] **MEMORY-02**: Company-level shared memory API exists (`POST/GET /api/companies/:id/memories`) — memories readable by all agents in a company, writable by any agent
 - [x] **MEMORY-03**: Ollama adapter exposes `paperclip_list_company_memories` tool to query shared company memories
 
 ### Streaming
@@ -80,7 +80,7 @@
 | OLLAMA-03 | Phase 1 | Complete |
 | MEMORY-01 | Phase 1 | Complete |
 | STREAM-01 | Phase 2 | Complete |
-| MEMORY-02 | Phase 3 | Pending |
+| MEMORY-02 | Phase 3 | Complete |
 | MEMORY-03 | Phase 3 | Complete |
 | GOALS-01 | Phase 4 | Pending |
 | BUDGET-01 | Phase 4 | Pending |
