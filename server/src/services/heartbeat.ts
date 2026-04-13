@@ -2451,9 +2451,7 @@ export function heartbeatService(db: Db) {
     }
 
     // Dequeue-time issue-status check: cancel runs for done/cancelled issues.
-    // Uses low-level setRunStatus/setWakeupStatus instead of cancelRunInternal
-    // to avoid deadlock — cancelRunInternal calls startNextQueuedRunForAgent,
-    // which holds the agent start lock that is already held by our caller.
+    // skipEvent suppresses the toast — this is an internal cleanup, not user-facing.
     const issueId = readNonEmptyString(context.issueId);
     if (issueId) {
       const issue = await db
