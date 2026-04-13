@@ -24,7 +24,10 @@ Six phases that bring Ollama agents to feature parity with Claude agents, then l
   2. An Ollama agent can call `paperclip_create_goal` and the goal appears in the goals list
   3. An Ollama agent can call `paperclip_update_goal` and the goal's status/description changes
   4. When an Ollama run starts, a `## Relevant memories` section is prepended to the system prompt (matching Claude adapter behavior), visible in run logs
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Add delete_memory, create_goal, update_goal tools + confirm memory injection
 
 ### Phase 2: Ollama Streaming
 **Goal**: Ollama agent output appears progressively in the run log as tokens are generated, not all-at-once after the model finishes
@@ -82,7 +85,7 @@ Six phases that bring Ollama agents to feature parity with Claude agents, then l
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Ollama Tools + Memory Injection | 0/TBD | Not started | - |
+| 1. Ollama Tools + Memory Injection | 0/1 | Not started | - |
 | 2. Ollama Streaming | 0/TBD | Not started | - |
 | 3. Company Shared Memories | 0/TBD | Not started | - |
 | 4. Goals + Budget UI | 0/TBD | Not started | - |
