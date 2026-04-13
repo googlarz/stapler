@@ -428,6 +428,13 @@
       "when": 1776240000000,
       "tag": "0060_company_default_model",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1776326400000,
+      "tag": "0061_company_memories",
+      "breakpoints": true
     }
   ]
 }
