@@ -75,24 +75,24 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| OLLAMA-01 | — | Pending |
-| OLLAMA-02 | — | Pending |
-| OLLAMA-03 | — | Pending |
-| MEMORY-01 | — | Pending |
-| MEMORY-02 | — | Pending |
-| MEMORY-03 | — | Pending |
-| STREAM-01 | — | Pending |
-| GOALS-01 | — | Pending |
-| BUDGET-01 | — | Pending |
-| AGENTS-01 | — | Pending |
-| PROPOSE-01 | — | Pending |
-| BENCH-01 | — | Pending |
+| OLLAMA-01 | Phase 1 | Pending |
+| OLLAMA-02 | Phase 1 | Pending |
+| OLLAMA-03 | Phase 1 | Pending |
+| MEMORY-01 | Phase 1 | Pending |
+| STREAM-01 | Phase 2 | Pending |
+| MEMORY-02 | Phase 3 | Pending |
+| MEMORY-03 | Phase 3 | Pending |
+| GOALS-01 | Phase 4 | Pending |
+| BUDGET-01 | Phase 4 | Pending |
+| AGENTS-01 | Phase 5 | Pending |
+| PROPOSE-01 | Phase 5 | Pending |
+| BENCH-01 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 12 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 12 ⚠️
+- Mapped to phases: 12 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-13*
-*Last updated: 2026-04-13 after initial definition*
+*Last updated: 2026-04-13 — traceability populated after roadmap creation*
