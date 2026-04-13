@@ -35,7 +35,7 @@
 
 ### Propose Tasks
 
-- [ ] **PROPOSE-01**: Propose Tasks dialog allows selecting multiple proposals via checkboxes and creating all selected proposals as issues in a single action
+- [x] **PROPOSE-01**: Propose Tasks dialog allows selecting multiple proposals via checkboxes and creating all selected proposals as issues in a single action
 
 ### Benchmarking
 
@@ -85,7 +85,7 @@
 | GOALS-01 | Phase 4 | Complete |
 | BUDGET-01 | Phase 4 | Complete |
 | AGENTS-01 | Phase 5 | Complete |
-| PROPOSE-01 | Phase 5 | Pending |
+| PROPOSE-01 | Phase 5 | Complete |
 | BENCH-01 | Phase 6 | Pending |
 
 **Coverage:**
