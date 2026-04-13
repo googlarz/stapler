@@ -2177,6 +2177,32 @@ export function issueRoutes(
 
       const becameTerminal =
         !["done", "cancelled"].includes(existing.status) && ["done", "cancelled"].includes(issue.status);
+
+      if (becameTerminal && actor.actorType !== "agent") {
+        const runToCancel = await resolveActiveIssueRun(existing);
+        if (runToCancel) {
+          const cancelled = await heartbeat.cancelRun(runToCancel.id);
+          if (cancelled) {
+            await logActivity(db, {
+              companyId: cancelled.companyId,
+              actorType: actor.actorType,
+              actorId: actor.actorId,
+              agentId: actor.agentId,
+              runId: actor.runId,
+              action: "heartbeat.cancelled",
+              entityType: "heartbeat_run",
+              entityId: cancelled.id,
+              details: {
+                agentId: cancelled.agentId,
+                source: "issue_status_terminal",
+                issueId: existing.id,
+                newStatus: issue.status,
+              },
+            });
+          }
+        }
+      }
+
       if (becameTerminal && issue.parentId) {
         const parent = await svc.getWakeableParentAfterChildCompletion(issue.parentId);
         if (parent) {
