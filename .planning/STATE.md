@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 02-ollama-streaming 02-01-PLAN.md
-last_updated: "2026-04-13T20:56:45.445Z"
-last_activity: 2026-04-13 — Roadmap created (6 phases, 12 requirements mapped)
+stopped_at: Completed 03-company-shared-memories 03-01-PLAN.md
+last_updated: "2026-04-13T21:15:00Z"
+last_activity: 2026-04-13 — Phase 03 Plan 01 complete (company_memories table, Drizzle schema, companyMemoryService)
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
+  total_plans: 3
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project State
@@ -67,6 +67,9 @@ Recent decisions affecting current work:
 - [Phase 01-ollama-tools-memory-injection]: paperclip_update_goal uses partial PATCH pattern — only args fields present in call are sent in updates body
 - [Phase 02-ollama-streaming]: Path A final response uses stream:true sub-request (no tools param); tool-calling iterations stay stream:false
 - [Phase 02-ollama-streaming]: Partial output durability relies on onLog side-effect persistence; no explicit flush needed in execute.ts
+- [Phase 03-company-shared-memories]: ON CONFLICT DO NOTHING (not DO UPDATE) for company memories save — no updated_at bump; simpler than agentMemoryService approach
+- [Phase 03-company-shared-memories]: MemoryContentTooLargeError re-exported from agent-memories.ts to prevent duplicate error classes breaking instanceof checks
+- [Phase 03-company-shared-memories]: Tags lowercased in company service (stricter normalization for company-wide shared scope)
 
 ### Pending Todos
 
@@ -79,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-13T20:55:26.771Z
-Stopped at: Completed 02-ollama-streaming 02-01-PLAN.md
+Last session: 2026-04-13T21:15:00Z
+Stopped at: Completed 03-company-shared-memories 03-01-PLAN.md
 Resume file: None
