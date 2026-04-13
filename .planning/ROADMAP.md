@@ -10,7 +10,7 @@ Six phases that bring Ollama agents to feature parity with Claude agents, then l
 - [x] **Phase 2: Ollama Streaming** - Stream tokens to run output in real time (completed 2026-04-13)
 - [x] **Phase 3: Company Shared Memories** - New DB table, REST API, and Ollama tool for company-scoped memories (completed 2026-04-13)
 - [x] **Phase 4: Goals + Budget UI** - Progress bar on goal detail, estimated cost on run list/detail (completed 2026-04-13)
-- [ ] **Phase 5: Agent Template + Propose Bulk** - AGENTS.md documents Stapler tools; Propose Tasks bulk create
+- [x] **Phase 5: Agent Template + Propose Bulk** - AGENTS.md documents Stapler tools; Propose Tasks bulk create (completed 2026-04-13)
 - [ ] **Phase 6: Ollama Benchmarking** - Page to compare installed Ollama models on speed and output quality
 
 ## Phase Details
@@ -109,5 +109,5 @@ Plans:
 | 2. Ollama Streaming | 0/1 | Complete    | 2026-04-13 |
 | 3. Company Shared Memories | 1/3 | Complete    | 2026-04-13 |
 | 4. Goals + Budget UI | 1/2 | Complete    | 2026-04-13 |
-| 5. Agent Template + Propose Bulk | 1/2 | In Progress|  |
+| 5. Agent Template + Propose Bulk | 1/2 | Complete    | 2026-04-13 |
 | 6. Ollama Benchmarking | 0/TBD | Not started | - |
