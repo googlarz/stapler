@@ -378,14 +378,87 @@ Complete this task in full in your response. Do not defer to a future turn.`,
 
         if (toolCalls.length === 0) {
           // No tool calls — model produced its final text response.
-          assistantContent = typeof msgObj.content === "string" ? msgObj.content : "";
-          // Emit as a chunk so the UI sees the response token.
-          if (assistantContent) {
-            await onLog(
-              "stdout",
-              JSON.stringify({ type: "chunk", content: assistantContent } satisfies OllamaChunkLine) + "\n",
-            );
+          // Switch to stream:true for this final response so tokens appear
+          // incrementally in the UI instead of all at once.
+          const finalContent = typeof msgObj.content === "string" ? msgObj.content : "";
+
+          if (finalContent) {
+            // Make a streaming sub-request using the same loopMessages that
+            // produced this non-tool-call response.  Ollama streaming does not
+            // support tools, which is fine — this is the terminal text response.
+            const streamReq: Record<string, unknown> = {
+              model,
+              messages: loopMessages,
+              stream: true,
+            };
+            if (temperature !== undefined) streamReq.options = { temperature };
+
+            const streamRes = await fetch(`${baseUrl}/api/chat`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(streamReq),
+              signal: controller.signal,
+            });
+
+            if (!streamRes.ok || !streamRes.body) {
+              // Fallback: emit the already-fetched content as a single chunk.
+              assistantContent = finalContent;
+              await onLog(
+                "stdout",
+                JSON.stringify({ type: "chunk", content: assistantContent } satisfies OllamaChunkLine) + "\n",
+              );
+            } else {
+              const streamReader = streamRes.body.getReader();
+              try {
+                // Each onLog call persists the chunk immediately via run-log-store.
+                // Partial output is therefore durable even if the AbortController fires mid-stream.
+                const decoder = new TextDecoder();
+                let buf = "";
+                assistantContent = "";
+
+                while (true) {
+                  const { done, value } = await streamReader.read();
+                  if (done) break;
+                  buf += decoder.decode(value, { stream: true });
+                  const lines = buf.split("\n");
+                  buf = lines.pop() ?? "";
+
+                  for (const rawLine of lines) {
+                    const line = rawLine.trim();
+                    if (!line) continue;
+                    let parsed: Record<string, unknown>;
+                    try {
+                      parsed = JSON.parse(line) as Record<string, unknown>;
+                    } catch {
+                      continue;
+                    }
+
+                    const isDone = parsed.done === true;
+                    const messageObj2 =
+                      typeof parsed.message === "object" && parsed.message !== null
+                        ? (parsed.message as Record<string, unknown>)
+                        : null;
+                    const token =
+                      typeof messageObj2?.content === "string" ? messageObj2.content : "";
+
+                    if (!isDone && token) {
+                      assistantContent += token;
+                      await onLog("stdout", JSON.stringify({ type: "chunk", content: token } satisfies OllamaChunkLine) + "\n");
+                    }
+
+                    if (isDone) {
+                      // Override accumulated token counts with streaming response stats.
+                      promptEvalCount += typeof parsed.prompt_eval_count === "number" ? parsed.prompt_eval_count : 0;
+                      evalCount += typeof parsed.eval_count === "number" ? parsed.eval_count : 0;
+                    }
+                  }
+                }
+              } finally {
+                streamReader.cancel().catch(() => {});
+              }
+            }
           }
+
           await onLog(
             "stdout",
             JSON.stringify({
