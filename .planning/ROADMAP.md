@@ -37,7 +37,10 @@ Plans:
   1. Run output in the UI updates incrementally during an Ollama run (tokens stream in real time)
   2. The final run log contains the same content whether streaming was on or off
   3. An Ollama run that is interrupted mid-stream records the partial output in the run log
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Add per-token streaming to Path A (tool loop final response) + verify partial output durability
 
 ### Phase 3: Company Shared Memories
 **Goal**: Any agent in a company can read and write company-level memories that persist independently of any single agent
@@ -86,7 +89,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Ollama Tools + Memory Injection | 1/1 | Complete    | 2026-04-13 |
-| 2. Ollama Streaming | 0/TBD | Not started | - |
+| 2. Ollama Streaming | 0/1 | Not started | - |
 | 3. Company Shared Memories | 0/TBD | Not started | - |
 | 4. Goals + Budget UI | 0/TBD | Not started | - |
 | 5. Agent Template + Propose Bulk | 0/TBD | Not started | - |
