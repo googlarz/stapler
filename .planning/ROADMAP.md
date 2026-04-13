@@ -85,7 +85,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Ollama Tools + Memory Injection | 1/1 | Complete   | 2026-04-13 |
+| 1. Ollama Tools + Memory Injection | 1/1 | Complete    | 2026-04-13 |
 | 2. Ollama Streaming | 0/TBD | Not started | - |
 | 3. Company Shared Memories | 0/TBD | Not started | - |
 | 4. Goals + Budget UI | 0/TBD | Not started | - |
