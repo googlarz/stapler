@@ -36,6 +36,7 @@ import { InstanceExperimentalSettings } from "./pages/InstanceExperimentalSettin
 import { PluginManager } from "./pages/PluginManager";
 import { PluginSettings } from "./pages/PluginSettings";
 import { AdapterManager } from "./pages/AdapterManager";
+import { OllamaBenchmark } from "./pages/OllamaBenchmark";
 import { PluginPage } from "./pages/PluginPage";
 import { IssueChatUxLab } from "./pages/IssueChatUxLab";
 import { RunTranscriptUxLab } from "./pages/RunTranscriptUxLab";
@@ -187,6 +188,7 @@ function boardRoutes() {
       <Route path="tests/ux/chat" element={<IssueChatUxLab />} />
       <Route path="tests/ux/runs" element={<RunTranscriptUxLab />} />
       <Route path="instance/settings/adapters" element={<AdapterManager />} />
+      <Route path="instance/settings/ollama-benchmark" element={<OllamaBenchmark />} />
       <Route path=":pluginRoutePath" element={<PluginPage />} />
       <Route path="*" element={<NotFoundPage scope="board" />} />
     </>
