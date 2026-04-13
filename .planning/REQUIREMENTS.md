@@ -23,7 +23,7 @@
 
 ### Goals UI
 
-- [ ] **GOALS-01**: Goal detail page shows a progress bar derived from linked issues (count of done issues / total linked issues)
+- [x] **GOALS-01**: Goal detail page shows a progress bar derived from linked issues (count of done issues / total linked issues)
 
 ### Budget
 
@@ -82,7 +82,7 @@
 | STREAM-01 | Phase 2 | Complete |
 | MEMORY-02 | Phase 3 | Complete |
 | MEMORY-03 | Phase 3 | Complete |
-| GOALS-01 | Phase 4 | Pending |
+| GOALS-01 | Phase 4 | Complete |
 | BUDGET-01 | Phase 4 | Complete |
 | AGENTS-01 | Phase 5 | Pending |
 | PROPOSE-01 | Phase 5 | Pending |
