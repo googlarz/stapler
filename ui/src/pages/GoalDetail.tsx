@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Plus, SlidersHorizontal, Trash2 } from "lucide-react";
-import type { Goal, GoalAcceptanceCriterion, Project } from "@paperclipai/shared";
+import type { Goal, GoalAcceptanceCriterion, GoalProgress, Project } from "@paperclipai/shared";
 
 interface GoalPropertiesToggleButtonProps {
   panelVisible: boolean;
@@ -46,6 +46,27 @@ export function GoalPropertiesToggleButton({
     >
       <SlidersHorizontal className="h-4 w-4" />
     </Button>
+  );
+}
+
+export function GoalProgressBar({ progress }: { progress: GoalProgress | null | undefined }) {
+  if (!progress || progress.totalIssues === 0) return null;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>Issue progress</span>
+        <span>
+          {progress.doneIssues} / {progress.totalIssues} done (
+          {progress.completionPct}%)
+        </span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary transition-all"
+          style={{ width: `${progress.completionPct}%` }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -209,23 +230,7 @@ export function GoalDetail() {
       />
 
       {/* Progress bar — only shown when the goal has linked issues */}
-      {goal.progress && goal.progress.totalIssues > 0 && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Issue progress</span>
-            <span>
-              {goal.progress.doneIssues} / {goal.progress.totalIssues} done (
-              {goal.progress.completionPct}%)
-            </span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${goal.progress.completionPct}%` }}
-            />
-          </div>
-        </div>
-      )}
+      <GoalProgressBar progress={goal.progress} />
 
       <Tabs defaultValue="children">
         <TabsList>
