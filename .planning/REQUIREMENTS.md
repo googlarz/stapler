@@ -7,13 +7,13 @@
 
 ### Ollama Tools
 
-- [ ] **OLLAMA-01**: Ollama agent can call `paperclip_delete_memory` to remove one of its own memories by ID
-- [ ] **OLLAMA-02**: Ollama agent can call `paperclip_create_goal` to create a new company goal with title, description, and acceptance criteria
-- [ ] **OLLAMA-03**: Ollama agent can call `paperclip_update_goal` to update a goal's status, description, or acceptance criteria by ID
+- [x] **OLLAMA-01**: Ollama agent can call `paperclip_delete_memory` to remove one of its own memories by ID
+- [x] **OLLAMA-02**: Ollama agent can call `paperclip_create_goal` to create a new company goal with title, description, and acceptance criteria
+- [x] **OLLAMA-03**: Ollama agent can call `paperclip_update_goal` to update a goal's status, description, or acceptance criteria by ID
 
 ### Memory
 
-- [ ] **MEMORY-01**: Ollama adapter reads `context.agentMemoriesForInjection` and prepends a `## Relevant memories` section to its system prompt (matching existing Claude adapter behavior)
+- [x] **MEMORY-01**: Ollama adapter reads `context.agentMemoriesForInjection` and prepends a `## Relevant memories` section to its system prompt (matching existing Claude adapter behavior)
 - [ ] **MEMORY-02**: Company-level shared memory API exists (`POST/GET /api/companies/:id/memories`) — memories readable by all agents in a company, writable by any agent
 - [ ] **MEMORY-03**: Ollama adapter exposes `paperclip_list_company_memories` tool to query shared company memories
 
@@ -75,10 +75,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| OLLAMA-01 | Phase 1 | Pending |
-| OLLAMA-02 | Phase 1 | Pending |
-| OLLAMA-03 | Phase 1 | Pending |
-| MEMORY-01 | Phase 1 | Pending |
+| OLLAMA-01 | Phase 1 | Complete |
+| OLLAMA-02 | Phase 1 | Complete |
+| OLLAMA-03 | Phase 1 | Complete |
+| MEMORY-01 | Phase 1 | Complete |
 | STREAM-01 | Phase 2 | Pending |
 | MEMORY-02 | Phase 3 | Pending |
 | MEMORY-03 | Phase 3 | Pending |
