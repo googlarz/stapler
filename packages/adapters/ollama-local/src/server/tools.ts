@@ -346,6 +346,25 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_list_company_memories",
+      description:
+        "List all shared company memories — notes that any agent in this company can read and write. " +
+        "Use to recall shared context, decisions, or facts that apply across agents.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "number",
+            description: "Maximum number of memories to return (1–200). Defaults to 50.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -594,6 +613,14 @@ export async function executePaperclipTool(
       return paperclipFetch(
         `${base}/api/companies/${encodeURIComponent(companyId)}/goals/${encodeURIComponent(id)}`,
         { method: "PATCH", body: JSON.stringify(updates), authToken },
+      );
+    }
+
+    case "paperclip_list_company_memories": {
+      const limit = typeof args.limit === "number" ? Math.min(Math.max(1, args.limit), 200) : 50;
+      return paperclipFetch(
+        `${base}/api/companies/${encodeURIComponent(companyId)}/memories?limit=${limit}`,
+        { method: "GET", authToken },
       );
     }
 
