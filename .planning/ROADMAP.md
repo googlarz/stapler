@@ -95,11 +95,10 @@ Plans:
   1. A benchmarking page (or modal) is reachable from the Ollama settings area and lists all installed models
   2. Running a benchmark sends the fixed sample prompt to each selected model and displays response time and output
   3. Results are displayed in a comparable table or card layout (model name, response time, output text)
-**Plans**: 2 plans
+**Plans**: 1 plan
 
 Plans:
-- [ ] 05-01-PLAN.md — Update default AGENTS.md with Stapler tool documentation
-- [ ] 05-02-PLAN.md — Add proposal checkboxes + bulk create button to Propose Tasks dialog
+- [ ] 06-01-PLAN.md — OllamaBenchmark page + route + navigation link from adapter settings
 
 ## Progress
 
@@ -110,4 +109,4 @@ Plans:
 | 3. Company Shared Memories | 1/3 | Complete    | 2026-04-13 |
 | 4. Goals + Budget UI | 1/2 | Complete    | 2026-04-13 |
 | 5. Agent Template + Propose Bulk | 1/2 | Complete    | 2026-04-13 |
-| 6. Ollama Benchmarking | 0/TBD | Not started | - |
+| 6. Ollama Benchmarking | 0/1 | Not started | - |
