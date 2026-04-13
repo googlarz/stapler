@@ -178,5 +178,6 @@ describeEmbeddedPostgres("claimQueuedRun dequeue-time issue-status check", () =>
     // It may fail later due to adapter not being available, but the claim itself should succeed.
     expect(run?.status).not.toBe("cancelled");
     expect(run?.status).not.toBe("queued");
+
   }, 15_000);
 });
