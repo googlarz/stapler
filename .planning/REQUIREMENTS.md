@@ -19,7 +19,7 @@
 
 ### Streaming
 
-- [ ] **STREAM-01**: Ollama adapter streams tokens to run output in real-time (Ollama `stream: true`) — output appears progressively, not all-at-once after completion
+- [x] **STREAM-01**: Ollama adapter streams tokens to run output in real-time (Ollama `stream: true`) — output appears progressively, not all-at-once after completion
 
 ### Goals UI
 
@@ -79,7 +79,7 @@
 | OLLAMA-02 | Phase 1 | Complete |
 | OLLAMA-03 | Phase 1 | Complete |
 | MEMORY-01 | Phase 1 | Complete |
-| STREAM-01 | Phase 2 | Pending |
+| STREAM-01 | Phase 2 | Complete |
 | MEMORY-02 | Phase 3 | Pending |
 | MEMORY-03 | Phase 3 | Pending |
 | GOALS-01 | Phase 4 | Pending |

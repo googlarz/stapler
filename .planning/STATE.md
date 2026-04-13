@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 01-ollama-tools-memory-injection 01-01-PLAN.md
-last_updated: "2026-04-13T20:49:47.125Z"
+stopped_at: Completed 02-ollama-streaming 02-01-PLAN.md
+last_updated: "2026-04-13T20:55:26.772Z"
 last_activity: 2026-04-13 — Roadmap created (6 phases, 12 requirements mapped)
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 100
 ---
 
@@ -51,6 +51,7 @@ Progress: [██████████] 100%
 
 *Updated after each plan completion*
 | Phase 01-ollama-tools-memory-injection P01 | 10 | 1 tasks | 1 files |
+| Phase 02-ollama-streaming P01 | 1 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Recent decisions affecting current work:
 - Company memories: Separate DB table (not nullable agentId) — cleaner schema semantics
 - [Phase 01-ollama-tools-memory-injection]: MEMORY-01 (agentMemoriesForInjection in execute.ts) was already implemented — no changes to execute.ts required
 - [Phase 01-ollama-tools-memory-injection]: paperclip_update_goal uses partial PATCH pattern — only args fields present in call are sent in updates body
+- [Phase 02-ollama-streaming]: Path A final response uses stream:true sub-request (no tools param); tool-calling iterations stay stream:false
+- [Phase 02-ollama-streaming]: Partial output durability relies on onLog side-effect persistence; no explicit flush needed in execute.ts
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-13T20:48:34.255Z
-Stopped at: Completed 01-ollama-tools-memory-injection 01-01-PLAN.md
+Last session: 2026-04-13T20:55:26.771Z
+Stopped at: Completed 02-ollama-streaming 02-01-PLAN.md
 Resume file: None
