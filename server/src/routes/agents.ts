@@ -2525,6 +2525,10 @@ export function agentRoutes(db: Db) {
     }
     assertCompanyAccess(req, agent.companyId);
 
+    const requestedModel = typeof (req.body as Record<string, unknown>).model === "string"
+      ? ((req.body as Record<string, unknown>).model as string).trim() || null
+      : null;
+
     const companyId = agent.companyId;
 
     // Gather context in parallel
@@ -2585,7 +2589,12 @@ export function agentRoutes(db: Db) {
       const matched = preferredModel
         ? availableModels.find((m) => m.name === preferredModel || m.name.startsWith(`${preferredModel}:`))
         : null;
-      if (matched) {
+      if (requestedModel) {
+        const clientMatch = availableModels.find(
+          (m) => m.name === requestedModel || m.name.startsWith(`${requestedModel}:`),
+        );
+        model = clientMatch?.name ?? requestedModel;
+      } else if (matched) {
         model = matched.name;
       } else {
         // Fall back to smallest available model (fastest for task planning)
@@ -2593,7 +2602,7 @@ export function agentRoutes(db: Db) {
         model = sorted[0]!.name;
       }
     } catch {
-      res.status(502).json({ error: "Cannot reach Ollama at " + ollamaBaseUrl });
+      res.status(502).json({ error: `Ollama is not running. Start it with: ollama serve (tried ${ollamaBaseUrl})` });
       return;
     }
 
@@ -2685,7 +2694,7 @@ Return exactly this JSON structure:
       res.json({ proposals });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      res.status(502).json({ error: `Failed to reach Ollama: ${message}` });
+      res.status(502).json({ error: `Ollama is not running. Start it with: ollama serve` });
     }
   });
 

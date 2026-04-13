@@ -31,6 +31,7 @@ import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { assetsApi } from "../api/assets";
 import { getUIAdapter, buildTranscript, onAdapterChange } from "../adapters";
+import { OllamaModelPicker } from "../adapters/ollama-local/model-picker";
 import { StatusBadge } from "../components/StatusBadge";
 import { agentStatusDot, agentStatusDotDefault } from "../lib/status-colors";
 import { MarkdownBody } from "../components/MarkdownBody";
@@ -642,6 +643,7 @@ export function AgentDetail() {
   const [proposing, setProposing] = useState(false);
   const [proposals, setProposals] = useState<TaskProposal[]>([]);
   const [proposeError, setProposeError] = useState<string | null>(null);
+  const [proposeModel, setProposeModel] = useState<string>("");
   const activeView = urlRunId ? "runs" as AgentDetailView : parseAgentDetailView(urlTab ?? null);
   const needsDashboardData = activeView === "dashboard";
   const needsRunData = activeView === "runs" || Boolean(urlRunId);
@@ -866,21 +868,31 @@ export function AgentDetail() {
     },
   });
 
-  const handleProposeTasks = useCallback(async () => {
+  const handleProposeTasks = useCallback(() => {
     if (!agent) return;
-    setProposing(true);
     setProposeOpen(true);
     setProposals([]);
     setProposeError(null);
+    setProposing(false);
+  }, [agent]);
+
+  const handleGenerateProposals = useCallback(async () => {
+    if (!agent) return;
+    setProposing(true);
+    setProposeError(null);
     try {
-      const result = await agentsApi.proposeTasks(agentLookupRef, resolvedCompanyId ?? undefined);
+      const result = await agentsApi.proposeTasks(
+        agentLookupRef,
+        resolvedCompanyId ?? undefined,
+        proposeModel || undefined,
+      );
       setProposals(result.proposals ?? []);
     } catch (err) {
       setProposeError(err instanceof Error ? err.message : "Failed to generate proposals");
     } finally {
       setProposing(false);
     }
-  }, [agent, agentLookupRef, resolvedCompanyId]);
+  }, [agent, agentLookupRef, resolvedCompanyId, proposeModel]);
 
   useEffect(() => {
     const crumbs: { label: string; href?: string }[] = [
@@ -1203,6 +1215,28 @@ export function AgentDetail() {
               Proposed Tasks for {agent.name}
             </DialogTitle>
           </DialogHeader>
+          {!proposing && proposals.length === 0 && !proposeError && (
+            <div className="space-y-4 mt-2">
+              <p className="text-sm text-muted-foreground">
+                Select a model, or leave blank to auto-select.
+              </p>
+              <OllamaModelPicker
+                installedModels={[]}
+                value={proposeModel}
+                onChange={setProposeModel}
+                baseUrl={
+                  typeof (agent.adapterConfig as Record<string, unknown>)?.baseUrl === "string"
+                    ? (agent.adapterConfig as Record<string, unknown>).baseUrl as string
+                    : undefined
+                }
+              />
+              <div className="flex justify-end pt-2">
+                <Button onClick={handleGenerateProposals} disabled={proposing}>
+                  Generate Proposals
+                </Button>
+              </div>
+            </div>
+          )}
           {proposing && (
             <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" />
@@ -1210,12 +1244,12 @@ export function AgentDetail() {
             </div>
           )}
           {!proposing && proposeError && (
-            <p className="text-sm text-destructive py-8 text-center">{proposeError}</p>
-          )}
-          {!proposing && !proposeError && proposals.length === 0 && (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              No proposals returned. Try again or check the model configuration.
-            </p>
+            <div className="py-8 text-center space-y-3">
+              <p className="text-sm text-destructive">{proposeError}</p>
+              <Button variant="outline" size="sm" onClick={handleGenerateProposals}>
+                Try Again
+              </Button>
+            </div>
           )}
           {!proposing && proposals.length > 0 && (
             <div className="space-y-3 mt-2">
@@ -2051,6 +2085,7 @@ function PromptsTab({
       };
       void save().catch(() => undefined);
     } : null);
+    return () => { onSaveActionChange(null); };
   }, [
     bundle,
     bundleDirty,
@@ -2075,6 +2110,7 @@ function PromptsTab({
         });
       }
     } : null);
+    return () => { onCancelActionChange(null); };
   }, [bundle, isDirty, onCancelActionChange, persistedMode, persistedRootPath]);
 
   const handleSeparatorDrag = useCallback((event: React.MouseEvent) => {
@@ -2470,7 +2506,7 @@ function PromptsTab({
             <MarkdownEditor
               key={selectedOrEntryFile}
               value={displayValue}
-              onChange={(value) => setDraft(value ?? "")}
+              onChange={(value) => setDraft(value ?? null)}
               placeholder="# Agent instructions"
               contentClassName="min-h-[420px] text-sm font-mono"
               imageUploadHandler={async (file) => {

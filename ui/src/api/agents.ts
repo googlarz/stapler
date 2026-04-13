@@ -196,8 +196,11 @@ export const agentsApi = {
     api.post<ClaudeLoginResult>(agentPath(id, companyId, "/claude-login"), {}),
   availableSkills: () =>
     api.get<{ skills: AvailableSkill[] }>("/skills/available"),
-  proposeTasks: (id: string, companyId?: string) =>
-    api.post<{ proposals: TaskProposal[] }>(agentPath(id, companyId, "/propose-tasks"), {}),
+  proposeTasks: (id: string, companyId?: string, model?: string) =>
+    api.post<{ proposals: TaskProposal[] }>(
+      agentPath(id, companyId, "/propose-tasks"),
+      model ? { model } : {},
+    ),
 };
 
 export interface TaskProposal {
