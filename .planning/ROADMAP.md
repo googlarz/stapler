@@ -81,7 +81,11 @@ Plans:
   1. The default AGENTS.md generated for a new agent lists all Stapler-specific tools (memory, goal tools) with brief descriptions
   2. Propose Tasks dialog has checkboxes on each proposal and a "Create selected" button
   3. Selecting N proposals and clicking "Create selected" creates exactly N issues in a single action
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Update default AGENTS.md with Stapler tool documentation
+- [ ] 05-02-PLAN.md — Add proposal checkboxes + bulk create button to Propose Tasks dialog
 
 ### Phase 6: Ollama Benchmarking
 **Goal**: Users can compare installed Ollama models side-by-side on a single fixed prompt to pick the best model for their agents
@@ -91,7 +95,11 @@ Plans:
   1. A benchmarking page (or modal) is reachable from the Ollama settings area and lists all installed models
   2. Running a benchmark sends the fixed sample prompt to each selected model and displays response time and output
   3. Results are displayed in a comparable table or card layout (model name, response time, output text)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Update default AGENTS.md with Stapler tool documentation
+- [ ] 05-02-PLAN.md — Add proposal checkboxes + bulk create button to Propose Tasks dialog
 
 ## Progress
 
