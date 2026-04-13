@@ -644,6 +644,8 @@ export function AgentDetail() {
   const [proposals, setProposals] = useState<TaskProposal[]>([]);
   const [proposeError, setProposeError] = useState<string | null>(null);
   const [proposeModel, setProposeModel] = useState<string>("");
+  const [selectedProposals, setSelectedProposals] = useState<Set<number>>(new Set());
+  const [bulkCreating, setBulkCreating] = useState(false);
   const activeView = urlRunId ? "runs" as AgentDetailView : parseAgentDetailView(urlTab ?? null);
   const needsDashboardData = activeView === "dashboard";
   const needsRunData = activeView === "runs" || Boolean(urlRunId);
@@ -874,6 +876,7 @@ export function AgentDetail() {
     setProposals([]);
     setProposeError(null);
     setProposing(false);
+    setSelectedProposals(new Set());
   }, [agent]);
 
   const handleGenerateProposals = useCallback(async () => {
@@ -887,12 +890,39 @@ export function AgentDetail() {
         proposeModel || undefined,
       );
       setProposals(result.proposals ?? []);
+      setSelectedProposals(new Set());
     } catch (err) {
       setProposeError(err instanceof Error ? err.message : "Failed to generate proposals");
     } finally {
       setProposing(false);
     }
   }, [agent, agentLookupRef, resolvedCompanyId, proposeModel]);
+
+  const handleBulkCreate = useCallback(async () => {
+    if (selectedProposals.size === 0 || !resolvedCompanyId || !agent) return;
+    setBulkCreating(true);
+    try {
+      const toCreate = proposals.filter((_, i) => selectedProposals.has(i));
+      await Promise.all(
+        toCreate.map((proposal) =>
+          issuesApi.create(resolvedCompanyId, {
+            title: proposal.title,
+            description: proposal.description,
+            priority: proposal.priority,
+            assigneeAgentId: agent.id,
+            ...(proposal.goalId ? { goalId: proposal.goalId } : {}),
+          })
+        )
+      );
+      setProposeOpen(false);
+      setProposals([]);
+      setSelectedProposals(new Set());
+    } catch (err) {
+      setProposeError(err instanceof Error ? err.message : "Failed to create issues");
+    } finally {
+      setBulkCreating(false);
+    }
+  }, [selectedProposals, proposals, resolvedCompanyId, agent]);
 
   useEffect(() => {
     const crumbs: { label: string; href?: string }[] = [
@@ -1252,40 +1282,65 @@ export function AgentDetail() {
             </div>
           )}
           {!proposing && proposals.length > 0 && (
-            <div className="space-y-3 mt-2">
-              {proposals.map((proposal, i) => (
-                <div key={i} className="border border-border rounded-lg p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold text-sm leading-snug">{proposal.title}</p>
-                    <PriorityBadge priority={proposal.priority} />
+            <>
+              <div className="space-y-3 mt-2">
+                {proposals.map((proposal, i) => (
+                  <div key={i} className="border border-border rounded-lg p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                          checked={selectedProposals.has(i)}
+                          onChange={(e) => {
+                            setSelectedProposals((prev) => {
+                              const next = new Set(prev);
+                              e.target.checked ? next.add(i) : next.delete(i);
+                              return next;
+                            });
+                          }}
+                        />
+                        <p className="font-semibold text-sm leading-snug">{proposal.title}</p>
+                      </div>
+                      <PriorityBadge priority={proposal.priority} />
+                    </div>
+                    <p className="text-sm text-muted-foreground">{proposal.description}</p>
+                    {proposal.goalTitle && (
+                      <p className="text-xs text-muted-foreground">
+                        Tied to: <span className="font-medium text-foreground">{proposal.goalTitle}</span>
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground italic">{proposal.rationale}</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-1"
+                      onClick={() => {
+                        openNewIssue({
+                          assigneeAgentId: agent.id,
+                          title: proposal.title,
+                          description: proposal.description,
+                          priority: proposal.priority,
+                          ...(proposal.goalId ? { goalId: proposal.goalId } : {}),
+                        });
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Create Issue
+                    </Button>
                   </div>
-                  <p className="text-sm text-muted-foreground">{proposal.description}</p>
-                  {proposal.goalTitle && (
-                    <p className="text-xs text-muted-foreground">
-                      Tied to: <span className="font-medium text-foreground">{proposal.goalTitle}</span>
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground italic">{proposal.rationale}</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-1"
-                    onClick={() => {
-                      openNewIssue({
-                        assigneeAgentId: agent.id,
-                        title: proposal.title,
-                        description: proposal.description,
-                        priority: proposal.priority,
-                        ...(proposal.goalId ? { goalId: proposal.goalId } : {}),
-                      });
-                    }}
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Create Issue
-                  </Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              <div className="flex justify-end pt-2 border-t border-border">
+                <Button
+                  onClick={handleBulkCreate}
+                  disabled={selectedProposals.size === 0 || bulkCreating}
+                >
+                  {bulkCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Create selected ({selectedProposals.size})
+                </Button>
+              </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
