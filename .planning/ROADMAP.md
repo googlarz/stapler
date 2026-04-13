@@ -67,7 +67,11 @@ Plans:
   2. Agent run list shows an estimated USD cost column for Claude runs (blank for Ollama runs)
   3. Agent run detail shows the same estimated cost with input/output token breakdown
   4. A goal with no linked issues shows a neutral/empty state (not a broken bar)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Extract GoalProgressBar component + add tests for progress bar and empty state
+- [ ] 04-02-PLAN.md — Add visibleRunCostUsd tests; verify run list/detail cost display for Claude vs Ollama
 
 ### Phase 5: Agent Template + Propose Bulk
 **Goal**: New agents are onboarded with tool documentation, and users can create multiple proposed tasks in one action
@@ -96,6 +100,6 @@ Plans:
 | 1. Ollama Tools + Memory Injection | 1/1 | Complete    | 2026-04-13 |
 | 2. Ollama Streaming | 0/1 | Complete    | 2026-04-13 |
 | 3. Company Shared Memories | 1/3 | Complete    | 2026-04-13 |
-| 4. Goals + Budget UI | 0/TBD | Not started | - |
+| 4. Goals + Budget UI | 0/2 | Not started | - |
 | 5. Agent Template + Propose Bulk | 0/TBD | Not started | - |
 | 6. Ollama Benchmarking | 0/TBD | Not started | - |
