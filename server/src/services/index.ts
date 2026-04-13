@@ -10,6 +10,7 @@ export {
   DEFAULT_MAX_CONTENT_BYTES,
   DEFAULT_SEARCH_THRESHOLD,
 } from "./agent-memories.js";
+export { companyMemoryService } from "./company-memories.js";
 export { agentInstructionsService, syncInstructionsBundleConfigFromFilePath } from "./agent-instructions.js";
 export { assetService } from "./assets.js";
 export { documentService, extractLegacyPlanBody } from "./documents.js";
