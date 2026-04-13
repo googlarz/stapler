@@ -31,7 +31,7 @@
 
 ### Agent Templates
 
-- [ ] **AGENTS-01**: Default AGENTS.md template generated for new agents includes documentation of all Stapler-specific tools: memory tools, goal tools, and any tools beyond the upstream paperclip baseline
+- [x] **AGENTS-01**: Default AGENTS.md template generated for new agents includes documentation of all Stapler-specific tools: memory tools, goal tools, and any tools beyond the upstream paperclip baseline
 
 ### Propose Tasks
 
@@ -84,7 +84,7 @@
 | MEMORY-03 | Phase 3 | Complete |
 | GOALS-01 | Phase 4 | Complete |
 | BUDGET-01 | Phase 4 | Complete |
-| AGENTS-01 | Phase 5 | Pending |
+| AGENTS-01 | Phase 5 | Complete |
 | PROPOSE-01 | Phase 5 | Pending |
 | BENCH-01 | Phase 6 | Pending |
 

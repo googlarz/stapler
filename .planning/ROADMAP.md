@@ -109,5 +109,5 @@ Plans:
 | 2. Ollama Streaming | 0/1 | Complete    | 2026-04-13 |
 | 3. Company Shared Memories | 1/3 | Complete    | 2026-04-13 |
 | 4. Goals + Budget UI | 1/2 | Complete    | 2026-04-13 |
-| 5. Agent Template + Propose Bulk | 0/TBD | Not started | - |
+| 5. Agent Template + Propose Bulk | 1/2 | In Progress|  |
 | 6. Ollama Benchmarking | 0/TBD | Not started | - |
