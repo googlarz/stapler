@@ -69,7 +69,7 @@ export const issueExecutionStagePrincipalSchema = issueExecutionStagePrincipalBa
   });
 
 export const issueExecutionStageParticipantSchema = issueExecutionStagePrincipalBaseSchema.extend({
-  id: z.string().uuid().optional(),
+  id: z.string().optional(),
 }).superRefine((value, ctx) => {
   if (value.type === "agent") {
     if (!value.agentId) {
@@ -89,7 +89,7 @@ export const issueExecutionStageParticipantSchema = issueExecutionStagePrincipal
 });
 
 export const issueExecutionStageSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: z.string().optional(),
   type: z.enum(ISSUE_EXECUTION_STAGE_TYPES),
   approvalsNeeded: z.literal(1).optional().default(1),
   participants: z.array(issueExecutionStageParticipantSchema).default([]),

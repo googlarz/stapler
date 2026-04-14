@@ -36,7 +36,7 @@ describe("paperclip MCP tools", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const tool = getTool("paperclipUpdateIssue");
+    const tool = getTool("updateIssue");
     await tool.execute({
       issueId: "PAP-1135",
       status: "done",
@@ -58,7 +58,7 @@ describe("paperclip MCP tools", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const tool = getTool("paperclipListIssues");
+    const tool = getTool("listIssues");
     const response = await tool.execute({});
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -75,7 +75,7 @@ describe("paperclip MCP tools", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const tool = getTool("paperclipCheckoutIssue");
+    const tool = getTool("checkoutIssue");
     await tool.execute({
       issueId: "PAP-1135",
     });
@@ -93,7 +93,7 @@ describe("paperclip MCP tools", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const tool = getTool("paperclipUpsertIssueDocument");
+    const tool = getTool("upsertIssueDocument");
     await tool.execute({
       issueId: "PAP-1135",
       key: "plan",
@@ -113,7 +113,7 @@ describe("paperclip MCP tools", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const tool = getTool("paperclipCreateApproval");
+    const tool = getTool("createApproval");
     await tool.execute({
       type: "hire_agent",
       payload: { branch: "pap-1167" },
@@ -136,7 +136,7 @@ describe("paperclip MCP tools", () => {
   it("rejects invalid generic request paths", async () => {
     vi.stubGlobal("fetch", vi.fn());
 
-    const tool = getTool("paperclipApiRequest");
+    const tool = getTool("apiRequest");
     const response = await tool.execute({
       method: "GET",
       path: "issues",
@@ -148,7 +148,7 @@ describe("paperclip MCP tools", () => {
   it("rejects generic request paths that escape /api", async () => {
     vi.stubGlobal("fetch", vi.fn());
 
-    const tool = getTool("paperclipApiRequest");
+    const tool = getTool("apiRequest");
     const response = await tool.execute({
       method: "GET",
       path: "/../../secret",
@@ -160,7 +160,7 @@ describe("paperclip MCP tools", () => {
   it("rejects percent-encoded path traversal attempts", async () => {
     vi.stubGlobal("fetch", vi.fn());
 
-    const tool = getTool("paperclipApiRequest");
+    const tool = getTool("apiRequest");
     const response = await tool.execute({
       method: "GET",
       path: "/%2e%2e/secret",
@@ -170,7 +170,7 @@ describe("paperclip MCP tools", () => {
   });
 
   describe("agent memory tools", () => {
-    it("paperclipMemorySave POSTs to the resolved agent's memories endpoint with run id", async () => {
+    it("memorySave POSTs to the resolved agent's memories endpoint with run id", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         mockJsonResponse({
           memory: { id: "mem-1", content: "note" },
@@ -179,7 +179,7 @@ describe("paperclip MCP tools", () => {
       );
       vi.stubGlobal("fetch", fetchMock);
 
-      const tool = getTool("paperclipMemorySave");
+      const tool = getTool("memorySave");
       await tool.execute({
         content: "user prefers French",
         tags: ["preference", "language"],
@@ -201,13 +201,13 @@ describe("paperclip MCP tools", () => {
       });
     });
 
-    it("paperclipMemorySearch builds the query string with q, limit, and tags", async () => {
+    it("memorySearch builds the query string with q, limit, and tags", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         mockJsonResponse({ items: [], mode: "search" }),
       );
       vi.stubGlobal("fetch", fetchMock);
 
-      const tool = getTool("paperclipMemorySearch");
+      const tool = getTool("memorySearch");
       await tool.execute({ q: "french", limit: 5, tags: ["preference"] });
 
       const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -220,13 +220,13 @@ describe("paperclip MCP tools", () => {
       expect(parsed.searchParams.get("tags")).toBe("preference");
     });
 
-    it("paperclipMemoryList omits query params when none are passed", async () => {
+    it("memoryList omits query params when none are passed", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         mockJsonResponse({ items: [], mode: "list" }),
       );
       vi.stubGlobal("fetch", fetchMock);
 
-      const tool = getTool("paperclipMemoryList");
+      const tool = getTool("memoryList");
       await tool.execute({});
 
       const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -236,13 +236,13 @@ describe("paperclip MCP tools", () => {
       expect(init.method).toBe("GET");
     });
 
-    it("paperclipMemoryList includes tags when provided", async () => {
+    it("memoryList includes tags when provided", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         mockJsonResponse({ items: [], mode: "list" }),
       );
       vi.stubGlobal("fetch", fetchMock);
 
-      const tool = getTool("paperclipMemoryList");
+      const tool = getTool("memoryList");
       await tool.execute({ limit: 20, tags: ["a", "b"] });
 
       const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -251,13 +251,13 @@ describe("paperclip MCP tools", () => {
       expect(parsed.searchParams.get("tags")).toBe("a,b");
     });
 
-    it("paperclipMemoryDelete issues DELETE with the memory id and run id header", async () => {
+    it("memoryDelete issues DELETE with the memory id and run id header", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         mockJsonResponse({ id: "mem-1" }),
       );
       vi.stubGlobal("fetch", fetchMock);
 
-      const tool = getTool("paperclipMemoryDelete");
+      const tool = getTool("memoryDelete");
       await tool.execute({ id: "99999999-9999-9999-9999-999999999999" });
 
       const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -282,7 +282,7 @@ describe("paperclip MCP tools", () => {
         runId: "33333333-3333-3333-3333-333333333333",
       });
       const tool = createToolDefinitions(clientWithoutAgent).find(
-        (t) => t.name === "paperclipMemorySave",
+        (t) => t.name === "memorySave",
       );
       if (!tool) throw new Error("missing tool");
 

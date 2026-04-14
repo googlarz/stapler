@@ -2057,7 +2057,14 @@ export function companySkillService(db: Db) {
     companyId: string,
     options: RuntimeSkillEntryOptions = {},
   ): Promise<PaperclipSkillEntry[]> {
-    const skills = await listFull(companyId);
+    // Bypass ensureSkillInventoryCurrent to avoid O(n) inventory refresh on
+    // every heartbeat wake. Read the current DB state directly instead.
+    const rows = await db
+      .select()
+      .from(companySkills)
+      .where(eq(companySkills.companyId, companyId))
+      .orderBy(asc(companySkills.name), asc(companySkills.key));
+    const skills = rows.map((row) => toCompanySkill(row));
 
     const out: PaperclipSkillEntry[] = [];
     for (const skill of skills) {

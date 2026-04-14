@@ -160,25 +160,25 @@ const memoryDeleteSchema = z.object({
 export function createToolDefinitions(client: PaperclipApiClient): ToolDefinition[] {
   return [
     makeTool(
-      "paperclipMe",
+      "me",
       "Get the current authenticated Paperclip actor details",
       z.object({}),
       async () => client.requestJson("GET", "/agents/me"),
     ),
     makeTool(
-      "paperclipInboxLite",
+      "inboxLite",
       "Get the current authenticated agent inbox-lite assignment list",
       z.object({}),
       async () => client.requestJson("GET", "/agents/me/inbox-lite"),
     ),
     makeTool(
-      "paperclipListAgents",
+      "listAgents",
       "List agents in a company",
       z.object({ companyId: companyIdOptional }),
       async ({ companyId }) => client.requestJson("GET", `/companies/${client.resolveCompanyId(companyId)}/agents`),
     ),
     makeTool(
-      "paperclipGetAgent",
+      "getAgent",
       "Get a single agent by id",
       z.object({ agentId: z.string().min(1), companyId: companyIdOptional }),
       async ({ agentId, companyId }) => {
@@ -187,7 +187,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipListIssues",
+      "listIssues",
       "List issues for a company with optional filters",
       listIssuesSchema,
       async (input) => {
@@ -202,13 +202,13 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipGetIssue",
+      "getIssue",
       "Get a single issue by UUID or identifier",
       z.object({ issueId: issueIdSchema }),
       async ({ issueId }) => client.requestJson("GET", `/issues/${encodeURIComponent(issueId)}`),
     ),
     makeTool(
-      "paperclipGetHeartbeatContext",
+      "getHeartbeatContext",
       "Get compact heartbeat context for an issue",
       z.object({ issueId: issueIdSchema, wakeCommentId: z.string().uuid().optional() }),
       async ({ issueId, wakeCommentId }) => {
@@ -217,7 +217,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipListComments",
+      "listComments",
       "List issue comments with incremental options",
       listCommentsSchema,
       async ({ issueId, after, order, limit }) => {
@@ -230,33 +230,33 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipGetComment",
+      "getComment",
       "Get a specific issue comment by id",
       z.object({ issueId: issueIdSchema, commentId: z.string().uuid() }),
       async ({ issueId, commentId }) =>
         client.requestJson("GET", `/issues/${encodeURIComponent(issueId)}/comments/${encodeURIComponent(commentId)}`),
     ),
     makeTool(
-      "paperclipListIssueApprovals",
+      "listIssueApprovals",
       "List approvals linked to an issue",
       z.object({ issueId: issueIdSchema }),
       async ({ issueId }) => client.requestJson("GET", `/issues/${encodeURIComponent(issueId)}/approvals`),
     ),
     makeTool(
-      "paperclipListDocuments",
+      "listDocuments",
       "List issue documents",
       z.object({ issueId: issueIdSchema }),
       async ({ issueId }) => client.requestJson("GET", `/issues/${encodeURIComponent(issueId)}/documents`),
     ),
     makeTool(
-      "paperclipGetDocument",
+      "getDocument",
       "Get one issue document by key",
       z.object({ issueId: issueIdSchema, key: documentKeySchema }),
       async ({ issueId, key }) =>
         client.requestJson("GET", `/issues/${encodeURIComponent(issueId)}/documents/${encodeURIComponent(key)}`),
     ),
     makeTool(
-      "paperclipListDocumentRevisions",
+      "listDocumentRevisions",
       "List revisions for an issue document",
       z.object({ issueId: issueIdSchema, key: documentKeySchema }),
       async ({ issueId, key }) =>
@@ -266,13 +266,13 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         ),
     ),
     makeTool(
-      "paperclipListProjects",
+      "listProjects",
       "List projects in a company",
       z.object({ companyId: companyIdOptional }),
       async ({ companyId }) => client.requestJson("GET", `/companies/${client.resolveCompanyId(companyId)}/projects`),
     ),
     makeTool(
-      "paperclipGetProject",
+      "getProject",
       "Get a project by id or company-scoped short reference",
       z.object({ projectId: projectIdSchema, companyId: companyIdOptional }),
       async ({ projectId, companyId }) => {
@@ -281,19 +281,19 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipListGoals",
+      "listGoals",
       "List goals in a company",
       z.object({ companyId: companyIdOptional }),
       async ({ companyId }) => client.requestJson("GET", `/companies/${client.resolveCompanyId(companyId)}/goals`),
     ),
     makeTool(
-      "paperclipGetGoal",
+      "getGoal",
       "Get a goal by id",
       z.object({ goalId: goalIdSchema }),
       async ({ goalId }) => client.requestJson("GET", `/goals/${encodeURIComponent(goalId)}`),
     ),
     makeTool(
-      "paperclipListApprovals",
+      "listApprovals",
       "List approvals in a company",
       z.object({ companyId: companyIdOptional, status: z.string().optional() }),
       async ({ companyId, status }) => {
@@ -302,7 +302,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipCreateApproval",
+      "createApproval",
       "Create a board approval request, optionally linked to one or more issues",
       createApprovalToolSchema,
       async ({ companyId, ...body }) =>
@@ -311,39 +311,39 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         }),
     ),
     makeTool(
-      "paperclipGetApproval",
+      "getApproval",
       "Get an approval by id",
       z.object({ approvalId: approvalIdSchema }),
       async ({ approvalId }) => client.requestJson("GET", `/approvals/${encodeURIComponent(approvalId)}`),
     ),
     makeTool(
-      "paperclipGetApprovalIssues",
+      "getApprovalIssues",
       "List issues linked to an approval",
       z.object({ approvalId: approvalIdSchema }),
       async ({ approvalId }) => client.requestJson("GET", `/approvals/${encodeURIComponent(approvalId)}/issues`),
     ),
     makeTool(
-      "paperclipListApprovalComments",
+      "listApprovalComments",
       "List comments for an approval",
       z.object({ approvalId: approvalIdSchema }),
       async ({ approvalId }) => client.requestJson("GET", `/approvals/${encodeURIComponent(approvalId)}/comments`),
     ),
     makeTool(
-      "paperclipCreateIssue",
+      "createIssue",
       "Create a new issue",
       createIssueToolSchema,
       async ({ companyId, ...body }) =>
         client.requestJson("POST", `/companies/${client.resolveCompanyId(companyId)}/issues`, { body }),
     ),
     makeTool(
-      "paperclipUpdateIssue",
+      "updateIssue",
       "Patch an issue, optionally including a comment",
       updateIssueToolSchema,
       async ({ issueId, ...body }) =>
         client.requestJson("PATCH", `/issues/${encodeURIComponent(issueId)}`, { body }),
     ),
     makeTool(
-      "paperclipCheckoutIssue",
+      "checkoutIssue",
       "Checkout an issue for an agent",
       checkoutIssueToolSchema,
       async ({ issueId, agentId, expectedStatuses }) =>
@@ -355,20 +355,20 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         }),
     ),
     makeTool(
-      "paperclipReleaseIssue",
+      "releaseIssue",
       "Release an issue checkout",
       z.object({ issueId: issueIdSchema }),
       async ({ issueId }) => client.requestJson("POST", `/issues/${encodeURIComponent(issueId)}/release`, { body: {} }),
     ),
     makeTool(
-      "paperclipAddComment",
+      "addComment",
       "Add a comment to an issue",
       addCommentToolSchema,
       async ({ issueId, ...body }) =>
         client.requestJson("POST", `/issues/${encodeURIComponent(issueId)}/comments`, { body }),
     ),
     makeTool(
-      "paperclipUpsertIssueDocument",
+      "upsertIssueDocument",
       "Create or update an issue document",
       upsertDocumentToolSchema,
       async ({ issueId, key, ...body }) =>
@@ -379,7 +379,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         ),
     ),
     makeTool(
-      "paperclipRestoreIssueDocumentRevision",
+      "restoreIssueDocumentRevision",
       "Restore a prior revision of an issue document",
       z.object({
         issueId: issueIdSchema,
@@ -394,7 +394,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         ),
     ),
     makeTool(
-      "paperclipLinkIssueApproval",
+      "linkIssueApproval",
       "Link an approval to an issue",
       z.object({ issueId: issueIdSchema }).merge(linkIssueApprovalSchema),
       async ({ issueId, approvalId }) =>
@@ -403,7 +403,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         }),
     ),
     makeTool(
-      "paperclipUnlinkIssueApproval",
+      "unlinkIssueApproval",
       "Unlink an approval from an issue",
       z.object({ issueId: issueIdSchema, approvalId: approvalIdSchema }),
       async ({ issueId, approvalId }) =>
@@ -413,7 +413,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         ),
     ),
     makeTool(
-      "paperclipApprovalDecision",
+      "approvalDecision",
       "Approve, reject, request revision, or resubmit an approval",
       approvalDecisionSchema,
       async ({ approvalId, action, decisionNote, payloadJson }) => {
@@ -435,7 +435,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipAddApprovalComment",
+      "addApprovalComment",
       "Add a comment to an approval",
       z.object({ approvalId: approvalIdSchema, body: z.string().min(1) }),
       async ({ approvalId, body }) =>
@@ -444,7 +444,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         }),
     ),
     makeTool(
-      "paperclipApiRequest",
+      "apiRequest",
       "Make a JSON request to an existing Paperclip /api endpoint for unsupported operations",
       apiRequestSchema,
       async ({ method, path, jsonBody }) => {
@@ -468,7 +468,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipMemorySave",
+      "memorySave",
       "Save a short factual memory for your agent (idempotent by content hash). Use for user preferences, decisions, observations you will need later. Do not use as a run scratchpad — use issue comments for that.",
       memorySaveSchema,
       async ({ content, tags }) => {
@@ -481,7 +481,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipMemorySearch",
+      "memorySearch",
       "Keyword search your agent's memories via pg_trgm similarity. Returns items ranked by score. Use multiple distinct keywords rather than natural-language sentences.",
       memorySearchSchema,
       async ({ q, limit, tags }) => {
@@ -497,7 +497,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipMemoryList",
+      "memoryList",
       "List your agent's most recent memories. Optional tag AND filter and pagination.",
       memoryListSchema,
       async ({ limit, offset, tags }) => {
@@ -514,7 +514,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
-      "paperclipMemoryDelete",
+      "memoryDelete",
       "Delete one of your agent's memories by id. No-op returns 404 if the id is not yours or does not exist.",
       memoryDeleteSchema,
       async ({ id }) => {

@@ -149,8 +149,14 @@ export function resolveSessionKey(input: {
   if (input.strategy === "run") {
     return prefixSessionKeyForAgent(`paperclip:run:${input.runId}`, input.agentId);
   }
-  if (input.strategy === "issue" && input.issueId) {
-    return prefixSessionKeyForAgent(`paperclip:issue:${input.issueId}`, input.agentId);
+  if (input.strategy === "issue") {
+    if (input.issueId) {
+      return prefixSessionKeyForAgent(`paperclip:issue:${input.issueId}`, input.agentId);
+    }
+    // No issueId in context (e.g. timer heartbeat with no current issue).
+    // Fall back to a per-run key rather than the shared "paperclip" key to
+    // prevent context from bleeding across unrelated heartbeat wakes.
+    return prefixSessionKeyForAgent(`paperclip:run:${input.runId}`, input.agentId);
   }
   return prefixSessionKeyForAgent(fallback, input.agentId);
 }
