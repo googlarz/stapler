@@ -212,7 +212,7 @@ export interface InitializeParams {
   config: Record<string, unknown>;
   /** Instance-level metadata. */
   instanceInfo: {
-    /** UUID of this Paperclip instance. */
+    /** UUID of this Stapler instance. */
     instanceId: string;
     /** Semver version of the running Paperclip host. */
     hostVersion: string;

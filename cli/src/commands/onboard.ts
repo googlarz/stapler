@@ -37,7 +37,7 @@ import {
   resolvePaperclipInstanceId,
 } from "../config/home.js";
 import { bootstrapCeoInvite } from "./auth-bootstrap-ceo.js";
-import { printPaperclipCliBanner } from "../utils/banner.js";
+import { printStaplerCliBanner } from "../utils/banner.js";
 import {
   getTelemetryClient,
   trackInstallStarted,
@@ -327,7 +327,7 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
     throw new Error(`Unsupported bind preset for onboard: ${opts.bind}. Use loopback, lan, or tailnet.`);
   }
 
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler onboard ")));
   const configPath = resolveConfigPath(opts.config);
   const instance = describeLocalInstancePaths(resolvePaperclipInstanceId());

@@ -70,7 +70,7 @@ async function ensureOpenCodeSkillsInjected(
   for (const skillName of removedSkills) {
     await onLog(
       "stderr",
-      `[paperclip] Removed maintainer-only OpenCode skill "${skillName}" from ${skillsHome}\n`,
+      `[stapler] Removed maintainer-only OpenCode skill "${skillName}" from ${skillsHome}\n`,
     );
   }
   for (const entry of selectedEntries) {
@@ -81,12 +81,12 @@ async function ensureOpenCodeSkillsInjected(
       if (result === "skipped") continue;
       await onLog(
         "stderr",
-        `[paperclip] ${result === "repaired" ? "Repaired" : "Injected"} OpenCode skill "${entry.key}" into ${skillsHome}\n`,
+        `[stapler] ${result === "repaired" ? "Repaired" : "Injected"} OpenCode skill "${entry.key}" into ${skillsHome}\n`,
       );
     } catch (err) {
       await onLog(
         "stderr",
-        `[paperclip] Failed to inject OpenCode skill "${entry.key}" into ${skillsHome}: ${err instanceof Error ? err.message : String(err)}\n`,
+        `[stapler] Failed to inject OpenCode skill "${entry.key}" into ${skillsHome}: ${err instanceof Error ? err.message : String(err)}\n`,
       );
     }
   }
@@ -223,7 +223,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (runtimeSessionId && !canResumeSession) {
       await onLog(
         "stdout",
-        `[paperclip] OpenCode session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
+        `[stapler] OpenCode session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
       );
     }
     const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
@@ -243,7 +243,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         const reason = err instanceof Error ? err.message : String(err);
         await onLog(
           "stdout",
-          `[paperclip] Warning: could not read agent instructions file "${resolvedInstructionsFilePath}": ${reason}\n`,
+          `[stapler] Warning: could not read agent instructions file "${resolvedInstructionsFilePath}": ${reason}\n`,
         );
       }
     }
@@ -428,7 +428,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     ) {
       await onLog(
         "stdout",
-        `[paperclip] OpenCode session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+        `[stapler] OpenCode session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
       );
       const retry = await runAttempt(null);
       return toResult(retry, true);
@@ -441,7 +441,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         for (let i = 0; i < MAX_DELEGATION_CONTINUATIONS; i++) {
           await onLog(
             "stdout",
-            `[paperclip] Background delegation detected; resuming session to verify completion (attempt ${i + 1}/${MAX_DELEGATION_CONTINUATIONS}).\n`,
+            `[stapler] Background delegation detected; resuming session to verify completion (attempt ${i + 1}/${MAX_DELEGATION_CONTINUATIONS}).\n`,
           );
           const continuation = await runAttempt(continuationSessionId);
           lastAttempt = continuation;

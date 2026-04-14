@@ -101,7 +101,7 @@ async function ensureGeminiSkillsInjected(
   } catch (err) {
     await onLog(
       "stderr",
-      `[paperclip] Failed to prepare Gemini skills directory ${skillsHome}: ${err instanceof Error ? err.message : String(err)}\n`,
+      `[stapler] Failed to prepare Gemini skills directory ${skillsHome}: ${err instanceof Error ? err.message : String(err)}\n`,
     );
     return;
   }
@@ -112,7 +112,7 @@ async function ensureGeminiSkillsInjected(
   for (const skillName of removedSkills) {
     await onLog(
       "stderr",
-      `[paperclip] Removed maintainer-only Gemini skill "${skillName}" from ${skillsHome}\n`,
+      `[stapler] Removed maintainer-only Gemini skill "${skillName}" from ${skillsHome}\n`,
     );
   }
 
@@ -124,12 +124,12 @@ async function ensureGeminiSkillsInjected(
       if (result === "skipped") continue;
       await onLog(
         "stderr",
-        `[paperclip] ${result === "repaired" ? "Repaired" : "Linked"} Gemini skill: ${entry.key}\n`,
+        `[stapler] ${result === "repaired" ? "Repaired" : "Linked"} Gemini skill: ${entry.key}\n`,
       );
     } catch (err) {
       await onLog(
         "stderr",
-        `[paperclip] Failed to link Gemini skill "${entry.key}": ${err instanceof Error ? err.message : String(err)}\n`,
+        `[stapler] Failed to link Gemini skill "${entry.key}": ${err instanceof Error ? err.message : String(err)}\n`,
       );
     }
   }
@@ -250,7 +250,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (runtimeSessionId && !canResumeSession) {
     await onLog(
       "stdout",
-      `[paperclip] Gemini session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
+      `[stapler] Gemini session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
     );
   }
 
@@ -268,7 +268,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       const reason = err instanceof Error ? err.message : String(err);
       await onLog(
         "stdout",
-        `[paperclip] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
+        `[stapler] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
       );
     }
   }
@@ -497,7 +497,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   ) {
     await onLog(
       "stdout",
-      `[paperclip] Gemini resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+      `[stapler] Gemini resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
     );
     const retry = await runAttempt(null);
     return toResult(retry, true, true);

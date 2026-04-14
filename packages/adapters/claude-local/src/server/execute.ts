@@ -357,7 +357,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       const reason = err instanceof Error ? err.message : String(err);
       await onLog(
         "stderr",
-        `[paperclip] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
+        `[stapler] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
       );
     }
   }
@@ -387,13 +387,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   ) {
     await onLog(
       "stdout",
-      `[paperclip] Claude session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
+      `[stapler] Claude session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
     );
   }
   if (runtimeSessionId && runtimePromptBundleKey.length > 0 && runtimePromptBundleKey !== promptBundle.bundleKey) {
     await onLog(
       "stdout",
-      `[paperclip] Claude session "${runtimeSessionId}" was saved for prompt bundle "${runtimePromptBundleKey}" and will not be resumed with "${promptBundle.bundleKey}".\n`,
+      `[stapler] Claude session "${runtimeSessionId}" was saved for prompt bundle "${runtimePromptBundleKey}" and will not be resumed with "${promptBundle.bundleKey}".\n`,
     );
   }
   const bootstrapPromptTemplate = asString(config.bootstrapPromptTemplate, "");
@@ -660,7 +660,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   ) {
     await onLog(
       "stdout",
-      `[paperclip] Claude resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+      `[stapler] Claude resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
     );
     const retry = await runAttempt(null);
     return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
@@ -674,7 +674,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (sessionId && isClaudeGhostResumeResult(initial.parsed, true)) {
     await onLog(
       "stdout",
-      `[paperclip] Claude resumed session "${sessionId}" produced no output (ghost resume). ` +
+      `[stapler] Claude resumed session "${sessionId}" produced no output (ghost resume). ` +
         `Clearing session so next heartbeat starts fresh.\n`,
     );
     return toAdapterResult(initial, { fallbackSessionId: null, clearSessionOnMissingSession: true });

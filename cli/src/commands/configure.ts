@@ -15,7 +15,7 @@ import {
   resolveDefaultLogsDir,
   resolvePaperclipInstanceId,
 } from "../config/home.js";
-import { printPaperclipCliBanner } from "../utils/banner.js";
+import { printStaplerCliBanner } from "../utils/banner.js";
 
 type Section = "llm" | "database" | "logging" | "server" | "storage" | "secrets";
 
@@ -76,7 +76,7 @@ export async function configure(opts: {
   config?: string;
   section?: string;
 }): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" paperclip configure ")));
   const configPath = resolveConfigPath(opts.config);
 

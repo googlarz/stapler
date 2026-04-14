@@ -567,7 +567,7 @@ describe("worktree helpers", () => {
         resolveWorktreeReseedTargetPaths({
           configPath,
           rootPath: worktreeRoot,
-        })).toThrow("does not look like a worktree-local Paperclip instance");
+        })).toThrow("does not look like a worktree-local Stapler instance");
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }

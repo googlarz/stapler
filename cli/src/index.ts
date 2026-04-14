@@ -31,7 +31,7 @@ const DATA_DIR_OPTION_HELP =
 
 program
   .name("stapler")
-  .description("Paperclip CLI — setup, diagnose, and configure your instance")
+  .description("Stapler CLI — setup, diagnose, and configure your instance")
   .version(cliVersion);
 
 program.hook("preAction", (_thisCommand, actionCommand) => {

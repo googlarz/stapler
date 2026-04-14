@@ -51,7 +51,7 @@ import { ensureAgentJwtSecret, loadPaperclipEnvFile, mergePaperclipEnvEntries, r
 import { expandHomePrefix } from "../config/home.js";
 import type { PaperclipConfig } from "../config/schema.js";
 import { readConfig, resolveConfigPath, writeConfig } from "../config/store.js";
-import { printPaperclipCliBanner } from "../utils/banner.js";
+import { printStaplerCliBanner } from "../utils/banner.js";
 import { resolveRuntimeLikePath } from "../utils/path-resolver.js";
 import {
   buildWorktreeConfig,
@@ -783,7 +783,7 @@ export function resolveWorktreeReseedTargetPaths(input: {
 
   if (!homeDir || !instanceId) {
     throw new Error(
-      `Target config ${input.configPath} does not look like a worktree-local Paperclip instance. Expected STAPLER_HOME and STAPLER_INSTANCE_ID in the adjacent .env.`,
+      `Target config ${input.configPath} does not look like a worktree-local Stapler instance. Expected STAPLER_HOME and STAPLER_INSTANCE_ID in the adjacent .env.`,
     );
   }
 
@@ -1152,13 +1152,13 @@ async function runWorktreeInit(opts: WorktreeInitOptions): Promise<void> {
 }
 
 export async function worktreeInitCommand(opts: WorktreeInitOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree init ")));
   await runWorktreeInit(opts);
 }
 
 export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree:make ")));
 
   const name = resolveWorktreeMakeName(nameArg);
@@ -1359,7 +1359,7 @@ function worktreePathHasUncommittedChanges(worktreePath: string): boolean {
 }
 
 export async function worktreeCleanupCommand(nameArg: string, opts: WorktreeCleanupOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree:cleanup ")));
 
   const name = resolveWorktreeMakeName(nameArg);
@@ -2708,7 +2708,7 @@ export async function worktreeMergeHistoryCommand(sourceArg: string | undefined,
 }
 
 export async function worktreeReseedCommand(opts: WorktreeReseedOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree reseed ")));
 
   const seedMode = opts.seedMode ?? "full";
@@ -2791,11 +2791,11 @@ export async function worktreeReseedCommand(opts: WorktreeReseedOptions): Promis
 }
 
 export function registerWorktreeCommands(program: Command): void {
-  const worktree = program.command("worktree").description("Worktree-local Paperclip instance helpers");
+  const worktree = program.command("worktree").description("Worktree-local Stapler instance helpers");
 
   program
     .command("worktree:make")
-    .description("Create ~/NAME as a git worktree, then initialize an isolated Paperclip instance inside it")
+    .description("Create ~/NAME as a git worktree, then initialize an isolated Stapler instance inside it")
     .argument("<name>", "Worktree name — auto-prefixed with paperclip- if needed (created at ~/paperclip-NAME)")
     .option("--start-point <ref>", "Remote ref to base the new branch on (env: STAPLER_WORKTREE_START_POINT)")
     .option("--instance <id>", "Explicit isolated instance id")
@@ -2828,7 +2828,7 @@ export function registerWorktreeCommands(program: Command): void {
 
   worktree
     .command("env")
-    .description("Print shell exports for the current worktree-local Paperclip instance")
+    .description("Print shell exports for the current worktree-local Stapler instance")
     .option("-c, --config <path>", "Path to config file")
     .option("--json", "Print JSON instead of shell exports")
     .action(worktreeEnvCommand);
@@ -2854,7 +2854,7 @@ export function registerWorktreeCommands(program: Command): void {
 
   worktree
     .command("reseed")
-    .description("Re-seed an existing worktree-local instance from another Paperclip instance or worktree")
+    .description("Re-seed an existing worktree-local instance from another Stapler instance or worktree")
     .option("--from <worktree>", "Source worktree path, directory name, branch name, or current")
     .option("--to <worktree>", "Target worktree path, directory name, branch name, or current (defaults to current)")
     .option("--from-config <path>", "Source config.json to seed from")

@@ -97,7 +97,7 @@ export async function prepareManagedCodexHome(
 
   await onLog(
     "stdout",
-    `[paperclip] Using ${isWorktreeMode(env) ? "worktree-isolated" : "Paperclip-managed"} Codex home "${targetHome}" (seeded from "${sourceHome}").\n`,
+    `[stapler] Using ${isWorktreeMode(env) ? "worktree-isolated" : "Paperclip-managed"} Codex home "${targetHome}" (seeded from "${sourceHome}").\n`,
   );
   return targetHome;
 }

@@ -218,7 +218,7 @@ export function InviteLandingPage() {
       <div className="rounded-lg border border-border bg-card p-6">
         <h1 className="text-xl font-semibold">
           {invite.inviteType === "bootstrap_ceo"
-            ? "Bootstrap your Paperclip instance"
+            ? "Bootstrap your Stapler instance"
             : companyName
               ? `Join ${companyName}`
               : "Join this Paperclip company"}

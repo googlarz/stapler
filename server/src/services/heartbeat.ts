@@ -768,7 +768,7 @@ export function shouldUseAgentRuntimeSessionForTaskScope(input: {
 export function formatRuntimeWorkspaceWarningLog(warning: string) {
   return {
     stream: "stdout" as const,
-    chunk: `[paperclip] ${warning}\n`,
+    chunk: `[stapler] ${warning}\n`,
   };
 }
 
@@ -3455,7 +3455,7 @@ export function heartbeatService(db: Db) {
         } catch (err) {
           await onLog(
             "stderr",
-            `[paperclip] Failed to post workspace-ready comment: ${err instanceof Error ? err.message : String(err)}\n`,
+            `[stapler] Failed to post workspace-ready comment: ${err instanceof Error ? err.message : String(err)}\n`,
           );
         }
       }
@@ -3560,7 +3560,7 @@ export function heartbeatService(db: Db) {
           } catch (err) {
             await onLog(
               "stderr",
-              `[paperclip] Failed to post adapter-managed runtime comment: ${err instanceof Error ? err.message : String(err)}\n`,
+              `[stapler] Failed to post adapter-managed runtime comment: ${err instanceof Error ? err.message : String(err)}\n`,
             );
           }
         }
@@ -3701,7 +3701,7 @@ export function heartbeatService(db: Db) {
           } catch (err) {
             await onLog(
               "stderr",
-              `[paperclip] Failed to post run summary comment: ${err instanceof Error ? err.message : String(err)}\n`,
+              `[stapler] Failed to post run summary comment: ${err instanceof Error ? err.message : String(err)}\n`,
             );
           }
         }

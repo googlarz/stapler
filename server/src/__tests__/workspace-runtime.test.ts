@@ -1785,7 +1785,7 @@ describe("ensureRuntimeServicesForRun", () => {
     expect(await executionResponse.text()).toBe(path.join(worktreeWorkspaceRoot, ".paperclip", "runtime-services"));
   });
 
-  it("does not leak parent Paperclip instance env into runtime service commands", async () => {
+  it("does not leak parent Stapler instance env into runtime service commands", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-runtime-env-"));
     const workspace = buildWorkspace(workspaceRoot);
     const envCapturePath = path.join(workspaceRoot, "captured-env.json");

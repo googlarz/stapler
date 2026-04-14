@@ -99,10 +99,10 @@ async function ensureWorkspaceLinksCurrent(workspaceDir: string) {
   const mismatches = findWorkspaceLinkMismatches(workspaceDir);
   if (mismatches.length === 0) return;
 
-  console.log(`[paperclip] detected stale workspace package links for ${workspaceDir}; relinking dependencies...`);
+  console.log(`[stapler] detected stale workspace package links for ${workspaceDir}; relinking dependencies...`);
   for (const mismatch of mismatches) {
     console.log(
-      `[paperclip]   ${mismatch.packageName}: ${mismatch.actualPath ?? "missing"} -> ${mismatch.expectedPath}`,
+      `[stapler]   ${mismatch.packageName}: ${mismatch.actualPath ?? "missing"} -> ${mismatch.expectedPath}`,
     );
   }
 
