@@ -8,13 +8,14 @@
 ███████║   ██║   ██║  ██║██║     ███████╗███████╗██║  ██║
 ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝  ╚═╝
 
-                                      ______________
-                           ________/               \____
-                ________/                                \____
-      _________/                                              \
-   __/    ⊙                                                    \____
-  /______________________________________________________________/   \
-                                                                 \___/
+         _____________
+      __/             \_____
+     /                      \_____
+    /                             \_____
+   /                                    \___
+   __                                       \___
+  /  \                                          ⊙\
+  \__/____________________________________________\
 ```
 
 ### Run a self-managing AI organisation — on your own machine.
@@ -31,7 +32,7 @@ Describe a mission. Hire agents. Set goals. Let the org run itself.
 
 ---
 
-**Stapler** is a personal fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip), built for running a real AI-first publishing company on your own machine. It keeps everything good about upstream Paperclip — multi-adapter, self-hosted, wizard onboarding — and adds the parts a long-running org actually needs: **semantic memory search, auto-tagging, cross-agent knowledge sharing, meta-agent orchestration, TTL memories, and a full audit trail**.
+**Stapler** is a personal fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip), built for running a real AI-first company on your own machine. It keeps everything good about upstream Paperclip — multi-adapter, self-hosted, wizard onboarding — and adds the parts a long-running org actually needs: **semantic memory search, auto-tagging, cross-agent knowledge sharing, meta-agent orchestration, TTL memories, and a full audit trail**.
 
 Agents run on any adapter the platform supports — **Claude**, **Gemini**, **Codex**, **Cursor**, **Ollama** (fully local), **OpenCode**, and more. Different agents in the same company can use different adapters. Different memories can be keyword-searched (free, always on) or semantically searched (opt-in, one env var away).
 
@@ -120,7 +121,7 @@ pnpm stapler run                     # long-running server mode
 │                                                              │
 │                           ▲                                  │
 │    ┌────────┐             │                                  │
-│    │  COO   │─── every ~30 s: snapshots org, fixes worst KPI │
+│    │  COO   │─── on its own routine: snapshot → fix worst KPI│
 │    └────────┘                                                │
 └──────────────────────────────────────────────────────────────┘
                            │
@@ -391,7 +392,7 @@ agentWake({
 
 Every new company gets a **Chief Optimization Officer** (COO) auto-hired alongside the CEO. Unlike specialist agents, the COO **never creates domain tasks** — it intervenes at the process level only. Think of it as a permanent ops-and-org consultant embedded in the company.
 
-The COO runs on its own schedule (every heartbeat tick by default — ~30 s — configurable via routines) and takes **exactly one** corrective action per run. Over time it accumulates KPI history in its own memory, so it's not just reacting to the current snapshot but responding to trends.
+The COO runs on a routine you configure at onboarding — set the cadence that suits your org (typical ranges: every few minutes for an active build phase, hourly or longer for steady-state operations). On every wake it takes **exactly one** corrective action. Over time it accumulates KPI history in its own memory, so it's not just reacting to the current snapshot but responding to trends.
 
 **On every run the COO:**
 
