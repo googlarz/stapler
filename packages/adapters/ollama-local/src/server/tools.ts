@@ -365,6 +365,91 @@ export const PAPERCLIP_TOOLS: OllamaTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_list_outputs",
+      description:
+        "List all company outputs — living documents that agents collaboratively produce and version " +
+        "(e.g. a book in English, a product spec, a research report). " +
+        "Returns title, status, latest version number, and draft availability for each.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_get_output",
+      description:
+        "Get a company output by ID, including the current draft content and full version history. " +
+        "Use before editing the draft or releasing a new version.",
+      parameters: {
+        type: "object",
+        properties: {
+          outputId: { type: "string", description: "ID of the output to fetch." },
+        },
+        required: ["outputId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_propose_output",
+      description:
+        "Propose a new company output that needs CEO approval before agents can start working on it. " +
+        "Examples: 'Book — English', 'Go-to-Market Strategy', 'Architecture Decision Record'. " +
+        "A CEO approval issue is automatically created.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short name for the output (e.g. 'Book — English')." },
+          description: { type: "string", description: "What this output is for and who it is for." },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_update_output_draft",
+      description:
+        "Overwrite the current working draft of an output. All agents share the same draft — " +
+        "you are replacing whatever is there. Read the current draft first with paperclip_get_output " +
+        "if you want to extend rather than overwrite.",
+      parameters: {
+        type: "object",
+        properties: {
+          outputId: { type: "string", description: "ID of the output to update." },
+          content: { type: "string", description: "Full new draft content (markdown supported)." },
+        },
+        required: ["outputId", "content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paperclip_release_output_version",
+      description:
+        "Snapshot the current draft as a new immutable version (v1, v2, …). " +
+        "The draft continues to evolve after the release — nothing is locked. " +
+        "Only works on outputs with status 'active'.",
+      parameters: {
+        type: "object",
+        properties: {
+          outputId: { type: "string", description: "ID of the output to release." },
+          releaseNotes: { type: "string", description: "Optional notes describing what changed in this version." },
+        },
+        required: ["outputId"],
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -621,6 +706,57 @@ export async function executePaperclipTool(
       return paperclipFetch(
         `${base}/api/companies/${encodeURIComponent(companyId)}/memories?limit=${limit}`,
         { method: "GET", authToken },
+      );
+    }
+
+    case "paperclip_list_outputs":
+      return paperclipFetch(
+        `${base}/api/companies/${encodeURIComponent(companyId)}/outputs`,
+        { method: "GET", authToken },
+      );
+
+    case "paperclip_get_output": {
+      const id = String(args.outputId ?? "").trim();
+      if (!id) return { error: "outputId is required" };
+      return paperclipFetch(
+        `${base}/api/outputs/${encodeURIComponent(id)}`,
+        { method: "GET", authToken },
+      );
+    }
+
+    case "paperclip_propose_output": {
+      const title = String(args.title ?? "").trim();
+      if (!title) return { error: "title is required" };
+      const body: Record<string, unknown> = { title };
+      if (typeof args.description === "string" && args.description.trim()) {
+        body.description = args.description.trim();
+      }
+      return paperclipFetch(
+        `${base}/api/companies/${encodeURIComponent(companyId)}/outputs`,
+        { method: "POST", body: JSON.stringify(body), authToken },
+      );
+    }
+
+    case "paperclip_update_output_draft": {
+      const id = String(args.outputId ?? "").trim();
+      if (!id) return { error: "outputId is required" };
+      const content = typeof args.content === "string" ? args.content : "";
+      return paperclipFetch(
+        `${base}/api/outputs/${encodeURIComponent(id)}/draft`,
+        { method: "PATCH", body: JSON.stringify({ content }), authToken },
+      );
+    }
+
+    case "paperclip_release_output_version": {
+      const id = String(args.outputId ?? "").trim();
+      if (!id) return { error: "outputId is required" };
+      const body: Record<string, unknown> = {};
+      if (typeof args.releaseNotes === "string" && args.releaseNotes.trim()) {
+        body.releaseNotes = args.releaseNotes.trim();
+      }
+      return paperclipFetch(
+        `${base}/api/outputs/${encodeURIComponent(id)}/versions`,
+        { method: "POST", body: JSON.stringify(body), authToken },
       );
     }
 
