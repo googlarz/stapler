@@ -17,14 +17,20 @@
 |---------|:-------:|:--------:|
 | Per-agent memory store (save, search, list, delete) | ✅ | ❌ |
 | Memory auto-injection at run-start | ✅ | ❌ |
-| Ollama adapter with agentic tool calling | ✅ | ❌ |
+| Company-wide shared memory store | ✅ | ❌ |
+| Ollama adapter with agentic tool calling (15 tools) | ✅ | ❌ |
+| Ollama model benchmark page | ✅ | ❌ |
 | Onboarding wizard with mission-driven setup | ✅ | ❌ |
+| COO agent auto-created for every new company | ✅ | ❌ |
 | Goals with acceptance criteria + target dates | ✅ | ❌ |
+| Goal progress bar (% of linked issues done) | ✅ | ❌ |
 | Automatic goal verification loop | ✅ | ❌ |
 | Editable goal parent, description, delete | ✅ | ❌ |
 | Issue list query validation (400 on bad params) | ✅ | ❌ |
 | Default model setting per company | ✅ | ❌ |
 | Propose Tasks — AI-generated task suggestions per agent | ✅ | ❌ |
+| Propose Tasks bulk-create (select multiple → create all) | ✅ | ❌ |
+| Run cost display on completed runs | ✅ | ❌ |
 
 ---
 
@@ -69,7 +75,7 @@ Run agents on a local [Ollama](https://ollama.com) instance. Full agentic loop w
 
 Works with any model Ollama has installed that supports function calling — `llama3.1`, `qwen2.5`, `mistral`, etc.
 
-Agents get 12 Paperclip tools out of the box:
+Agents get 15 Paperclip tools out of the box:
 
 | Tool | What it does |
 |------|-------------|
@@ -84,7 +90,10 @@ Agents get 12 Paperclip tools out of the box:
 | `paperclip_wake_agent` | Wake an agent on demand |
 | `paperclip_save_memory` | Save a memory for self |
 | `paperclip_search_memories` | Search own memories |
+| `paperclip_delete_memory` | Delete a specific memory by ID |
 | `paperclip_list_goals` | List company goals |
+| `paperclip_create_goal` | Create a new goal |
+| `paperclip_update_goal` | Update goal fields |
 
 ---
 
@@ -130,6 +139,68 @@ Requires a local Ollama instance. Uses the company's **default model** (configur
 ### Default Model
 
 Set a default Ollama model for your company in **Settings → Default Model**. Used by Propose Tasks and any agent that doesn't specify its own model.
+
+---
+
+### Ollama Benchmark
+
+**Adapters → Benchmark Models** runs a fixed prompt against every selected Ollama model sequentially and measures tokens-per-second for each. Results are displayed in a sortable table with a "Fastest" badge on the winner — useful for picking the right model for latency-sensitive agents.
+
+---
+
+### Company Shared Memories
+
+Alongside per-agent memories, any agent or board user can read and write **company-wide memories** — facts and context shared across the whole organisation.
+
+```bash
+# Save a shared memory
+curl -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memories" \
+  -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "We ship on Fridays", "tags": ["process"]}'
+
+# List shared memories (supports ?tags=tag1,tag2&limit=50&offset=0)
+curl "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memories" \
+  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+```
+
+All writes are activity-logged with actor and run context for a full audit trail.
+
+---
+
+### COO Agent
+
+Every company created via the wizard gets a **COO (Chief Operating Officer)** agent alongside the CEO. The COO is an independent operations auditor — it sits outside the production pipeline and intervenes at the process level only.
+
+Each run the COO:
+
+1. Reads its own memories for context
+2. Takes a full snapshot — all agents, open issues, recent outputs
+3. Computes four KPIs:
+
+| KPI | Red threshold |
+|-----|--------------|
+| Idle rate (agents with no open issue) | >30% |
+| Stale rate (in_progress, untouched >1 h) | >20% |
+| Stage congestion (open issues per status bucket) | any bucket >5 |
+| Unassigned backlog | >3 issues |
+
+4. Takes **exactly one** corrective action — rewrite an agent's instructions, recommend an org change to the CEO, cancel a stale issue, or assign an unassigned issue
+5. Stores a memory summarising what it found and what it did
+
+The COO never creates domain/pipeline tasks — specialist agents self-direct.
+
+---
+
+### Goal Progress Bar
+
+Each goal detail page shows a **progress bar** computed from linked issues: the percentage of `done` issues out of the total linked. Updates live as issues are closed.
+
+---
+
+### Run Cost
+
+Completed Claude runs display their **token cost in USD** (input + output tokens × model pricing) directly on the run detail page — useful for tracking spend per agent and per task.
 
 ---
 
