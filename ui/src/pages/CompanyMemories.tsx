@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Brain, Trash2, Plus, BookOpen } from "lucide-react";
+import { Brain, Trash2, Plus, BookOpen, Pencil } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
 import {
   companyMemoriesApi,
@@ -26,13 +26,96 @@ function isSearchResult(row: CompanyMemory | CompanyMemorySearchResult): row is 
   return typeof (row as CompanyMemorySearchResult).score === "number";
 }
 
+function EditMemoryDialog({
+  memory,
+  open,
+  onOpenChange,
+}: {
+  memory: CompanyMemory;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [rawTags, setRawTags] = useState(memory.tags.join(", "));
+  const [expiresAt, setExpiresAt] = useState(
+    memory.expiresAt ? toDatetimeLocal(new Date(memory.expiresAt)) : "",
+  );
+
+  const patchMutation = useMutation({
+    mutationFn: () =>
+      companyMemoriesApi.patch(memory.companyId, memory.id, {
+        tags: rawTags.split(/[,\s]+/).map((t) => t.trim()).filter((t) => t.length > 0),
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies", memory.companyId, "memories"] });
+      onOpenChange(false);
+    },
+  });
+
+  const minDatetime = toDatetimeLocal(new Date(Date.now() + 60_000));
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit memory</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <p className="text-sm text-muted-foreground line-clamp-3 border-l-2 border-border pl-3">
+            {memory.content}
+          </p>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Tags <span className="text-muted-foreground font-normal">(comma-separated)</span>
+            </label>
+            <Input
+              value={rawTags}
+              onChange={(e) => setRawTags(e.target.value)}
+              placeholder="e.g. style, vendors"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Expires at <span className="text-muted-foreground font-normal">(blank = never)</span>
+            </label>
+            <Input
+              type="datetime-local"
+              value={expiresAt}
+              min={minDatetime}
+              onChange={(e) => setExpiresAt(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={patchMutation.isPending} onClick={() => patchMutation.mutate()}>
+              {patchMutation.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+          {patchMutation.isError && (
+            <p className="text-sm text-destructive">
+              {patchMutation.error instanceof Error
+                ? patchMutation.error.message
+                : "Failed to save"}
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function MemoryRow({
   memory,
   onDelete,
+  onEdit,
   deleting,
 }: {
   memory: CompanyMemory | CompanyMemorySearchResult;
   onDelete: () => void;
+  onEdit?: () => void;
   deleting: boolean;
 }) {
   return (
@@ -73,16 +156,29 @@ function MemoryRow({
           )}
         </div>
       </div>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-        onClick={onDelete}
-        disabled={deleting}
-        title="Delete memory"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
+      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onEdit && !memory.wikiSlug && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={onEdit}
+            title="Edit memory"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={onDelete}
+          disabled={deleting}
+          title="Delete memory"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -305,6 +401,7 @@ export function CompanyMemories() {
   const [rawTags, setRawTags] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [addWikiOpen, setAddWikiOpen] = useState(false);
+  const [editingMemory, setEditingMemory] = useState<CompanyMemory | null>(null);
 
   const tags = useMemo(() => {
     const parts = rawTags
@@ -483,6 +580,7 @@ export function CompanyMemories() {
                     onDelete={() => handleDelete(memory)}
                   />
                 ))}
+                {/* Wiki rows intentionally omit onEdit — use wikiUpsert to update wiki content */}
               </div>
             </div>
           )}
@@ -505,12 +603,21 @@ export function CompanyMemories() {
                     memory={memory}
                     deleting={removeMutation.isPending}
                     onDelete={() => handleDelete(memory)}
+                    onEdit={() => setEditingMemory(memory)}
                   />
                 ))}
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {editingMemory && (
+        <EditMemoryDialog
+          memory={editingMemory}
+          open={!!editingMemory}
+          onOpenChange={(open) => { if (!open) setEditingMemory(null); }}
+        />
       )}
 
       {selectedCompanyId && (

@@ -92,5 +92,18 @@ export function activityRoutes(db: Db) {
     res.json(result);
   });
 
+  router.get("/heartbeat-runs/:runId/activity", async (req, res) => {
+    const runId = req.params.runId as string;
+    const action = req.query.action as string | undefined;
+    const run = await heartbeat.getRun(runId);
+    if (!run) {
+      res.json([]);
+      return;
+    }
+    assertCompanyAccess(req, run.companyId);
+    const result = await svc.forRun(runId, action);
+    res.json(result);
+  });
+
   return router;
 }

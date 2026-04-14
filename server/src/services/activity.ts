@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { activityLog, agents, heartbeatRuns, issues } from "@paperclipai/db";
 
@@ -160,6 +160,34 @@ export function activityService(db: Db) {
 
       if (!fromContext) return fromActivity;
       return [fromContext, ...fromActivity];
+    },
+
+    /**
+     * Return activity log entries for a specific heartbeat run, optionally
+     * filtered to a single action type (e.g. "memory.injected").
+     * Ordered chronologically so callers see events in execution order.
+     */
+    forRun: async (runId: string, action?: string) => {
+      const run = await db
+        .select({ companyId: heartbeatRuns.companyId })
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.id, runId))
+        .then((rows) => rows[0] ?? null);
+      if (!run) return [];
+
+      const conditions: ReturnType<typeof eq>[] = [
+        eq(activityLog.companyId, run.companyId),
+        eq(activityLog.runId, runId),
+      ];
+      if (action) {
+        conditions.push(eq(activityLog.action, action));
+      }
+
+      return db
+        .select()
+        .from(activityLog)
+        .where(and(...conditions))
+        .orderBy(asc(activityLog.createdAt));
     },
 
     create: (data: typeof activityLog.$inferInsert) =>

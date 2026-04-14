@@ -1813,6 +1813,10 @@ function ConfigurationTab({
       ? Math.max(1, Math.min(20, agentCfg.memoryInjectionLimit))
       : 5;
   const [injectionLimit, setInjectionLimit] = useState(storedInjectionLimit);
+  // Keep local state in sync when the saved config changes (e.g. after another save).
+  useEffect(() => {
+    setInjectionLimit(storedInjectionLimit);
+  }, [storedInjectionLimit]);
   const taskAssignSource = agent.access?.taskAssignSource ?? "none";
   const taskAssignLocked = agent.role === "ceo" || canCreateAgents;
   const taskAssignHint =
@@ -3346,6 +3350,19 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
     queryKey: queryKeys.runIssues(run.id),
     queryFn: () => activityApi.issuesForRun(run.id),
   });
+
+  const { data: injectionEvents } = useQuery({
+    queryKey: ["runActivity", run.id, "memory.injected"],
+    queryFn: () => activityApi.activityForRun(run.id, "memory.injected"),
+  });
+  const injectionEvent = injectionEvents?.[0];
+  const injectionDetails = injectionEvent?.details as {
+    total?: number;
+    agentWiki?: number;
+    companyWiki?: number;
+    agentEpisodic?: number;
+    companyEpisodic?: number;
+  } | null | undefined;
   const touchedIssueIds = useMemo(
     () => Array.from(new Set((touchedIssues ?? []).map((issue) => issue.issueId))),
     [touchedIssues],
@@ -3655,6 +3672,37 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
                 <span className="font-mono text-muted-foreground shrink-0 ml-2">{issue.identifier ?? issue.issueId.slice(0, 8)}</span>
               </Link>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Memory injection trace */}
+      {injectionDetails && (injectionDetails.total ?? 0) > 0 && (
+        <div className="space-y-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            Memories injected ({injectionDetails.total})
+          </span>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {(injectionDetails.agentWiki ?? 0) > 0 && (
+              <span className="rounded bg-primary/10 text-primary px-1.5 py-0.5">
+                {injectionDetails.agentWiki} agent wiki
+              </span>
+            )}
+            {(injectionDetails.companyWiki ?? 0) > 0 && (
+              <span className="rounded bg-primary/10 text-primary px-1.5 py-0.5">
+                {injectionDetails.companyWiki} company wiki
+              </span>
+            )}
+            {(injectionDetails.agentEpisodic ?? 0) > 0 && (
+              <span className="rounded bg-muted px-1.5 py-0.5">
+                {injectionDetails.agentEpisodic} agent memories
+              </span>
+            )}
+            {(injectionDetails.companyEpisodic ?? 0) > 0 && (
+              <span className="rounded bg-muted px-1.5 py-0.5">
+                {injectionDetails.companyEpisodic} company memories
+              </span>
+            )}
           </div>
         </div>
       )}

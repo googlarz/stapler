@@ -649,6 +649,15 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
+      "companyMemoryStats",
+      "Fetch the company's shared memory health statistics: episodic count and bytes, wiki page count and bytes, and totals. Useful for checking pool usage before writing or to audit shared knowledge volume.",
+      z.object({}),
+      async () => {
+        const companyId = client.resolveCompanyId();
+        return client.requestJson("GET", `/companies/${encodeURIComponent(companyId)}/memories/stats`);
+      },
+    ),
+    makeTool(
       "companyMemorySearch",
       "Keyword search the company's shared memory store via pg_trgm similarity. Returns team-wide knowledge ranked by relevance. Use for finding shared conventions, decisions, or vendor info that any agent may have saved.",
       z.object({
