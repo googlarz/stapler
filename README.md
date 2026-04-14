@@ -7,6 +7,12 @@
 ╚════██║   ██║   ██╔══██║██╔═══╝ ██║     ██╔══╝  ██╔══██╗
 ███████║   ██║   ██║  ██║██║     ███████╗███████╗██║  ██║
 ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝  ╚═╝
+
+                  ╔═════════════════════════╗
+                  ║ ███ ███ ███ ███ ███ ███ ║
+                  ╚═══════════════════╤═════╝
+                                      │
+                  ═══════════════════════════════
 ```
 
 ### Run a self-managing AI organisation — on your own machine.
@@ -188,6 +194,66 @@ STAPLER_OLLAMA_EMBEDDING_MODEL=qwen3-embedding:8b
 **Don't switch providers mid-deployment without re-embedding.** Vectors from OpenAI 1536-dim and Qwen3 4096-dim are not just different sizes — they live in different vector spaces and are not comparable. If you change providers with data already in the memory store, the search layer will detect the dimension mismatch and fall back to pg_trgm (you'll see a `[memory] Dimension drift …` warn in the logs). Re-embed everything or pick one provider and stick with it.
 
 **Language quality.** For user-facing generative output in non-English languages (German, Italian, Polish), frontier cloud models (Claude, GPT-4) still beat local Ollama models at equivalent compute. For *embeddings specifically*, `qwen3-embedding:8b` is a very competitive local option — Odysseia's German content is a reasonable use case. Mix-and-match is fully supported: generative agents can run on Claude while embeddings run on local Ollama.
+
+### Local-only stack — Gemma (generation) + Qwen3 (embeddings)
+
+If you want a fully offline, zero-cloud setup — no API keys, no network round-trips, no per-token billing — pair a generative Ollama model with a local embedding model. Stapler handles them as two independent systems, so they coexist cleanly:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Ollama (localhost:11434)                                   │
+│                                                             │
+│   ┌────────────────────┐      ┌──────────────────────────┐  │
+│   │ /api/chat          │      │ /api/embed               │  │
+│   │ gemma4:26b  (~20G) │      │ qwen3-embedding:8b (~8G) │  │
+│   └─────────▲──────────┘      └───────────▲──────────────┘  │
+└─────────────┼──────────────────────────────┼────────────────┘
+              │                              │
+   ┌──────────┴──────────┐      ┌────────────┴───────────────┐
+   │ ollama-local        │      │ server/services/           │
+   │ adapter             │      │ embeddings.ts              │
+   │ (agent runs,        │      │ (memory save + search      │
+   │  tool calls)        │      │  vectors)                  │
+   └─────────────────────┘      └────────────────────────────┘
+```
+
+**Pull both models once:**
+
+```bash
+ollama pull gemma4:26b           # generation — agent runs, tool calling
+ollama pull qwen3-embedding:8b   # embeddings — semantic memory search
+```
+
+**Per-agent adapter config** (set via UI or onboarding):
+
+```json
+{
+  "adapterType": "ollama-local",
+  "adapter": { "baseUrl": "http://localhost:11434", "model": "gemma4:26b" }
+}
+```
+
+**Server-wide embedding config** (`.env`):
+
+```bash
+STAPLER_EMBEDDING_PROVIDER=ollama
+STAPLER_OLLAMA_HOST=http://localhost:11434
+STAPLER_OLLAMA_EMBEDDING_MODEL=qwen3-embedding:8b
+```
+
+That's it. Start the server. Now every agent run goes through Gemma on `/api/chat`, every memory save/search goes through Qwen3 on `/api/embed`, and nothing ever leaves the machine.
+
+**RAM and model-swap behaviour:**
+
+| Model | RAM (Q4) | Loaded during |
+|---|:---:|---|
+| `gemma4:26b` | ~20 GB | Agent runs (streaming generation, tool calls) |
+| `qwen3-embedding:8b` | ~8 GB | Memory save + search (~50–150 ms per call) |
+| Both resident | ~28 GB | Steady-state on an active company |
+
+Ollama auto-loads on demand and unloads idle models after `OLLAMA_KEEP_ALIVE` (default 5 min). On a 32 GB Mac both fit comfortably. On 16 GB, tune `OLLAMA_KEEP_ALIVE=1m` or swap Qwen3 for the smaller `mxbai-embed-large` (~1 GB, 1024-dim, decent multilingual) to keep generation headroom.
+
+**Why this is the Odysseia-shaped default:** German book production agents doing long-horizon writing work benefit most from (a) offline privacy and (b) strong multilingual embeddings. Gemma produces solid German prose; Qwen3 indexes and recalls past chapters, character sheets, and style notes with synonym-aware precision. Hybrid setups (local gemma + cloud OpenAI embeddings, or local qwen3 + cloud Claude generation) also work — pick the axis you care about most.
 
 **Language quality.** For non-English writing (German, Italian, Polish), frontier cloud models (Claude, GPT-4) typically produce better prose than local Ollama models at equivalent compute. If a specific agent is generating user-facing copy in a non-English language, consider putting it on Claude while keeping background / scaffolding agents on Ollama. Mixing adapters inside one company is fully supported.
 
