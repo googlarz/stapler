@@ -14,6 +14,9 @@
  */
 import { createHash } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
+
+/** pg_trgm similarity threshold for company memory search (mirrors agent memory default). */
+const DEFAULT_SEARCH_THRESHOLD = 0.1;
 import type { Db } from "@paperclipai/db";
 import { companyMemories } from "@paperclipai/db";
 import { MemoryContentTooLargeError } from "./agent-memories.js";
@@ -167,6 +170,43 @@ export function companyMemoryService(db: Db) {
         .orderBy(desc(companyMemories.createdAt))
         .limit(limit)
         .offset(offset);
+    },
+
+    /**
+     * Keyword search over a company's memories via pg_trgm similarity.
+     * Rows are scored with `similarity(content, $q)` and filtered by the
+     * default threshold (0.1). Results are ordered by score descending.
+     */
+    search: async (input: {
+      companyId: string;
+      q: string;
+      tags?: string[];
+      limit?: number;
+    }): Promise<(CompanyMemory & { score: number })[]> => {
+      const trimmedQ = input.q.trim();
+      if (trimmedQ.length === 0) return [];
+      const limit = Math.max(1, Math.min(input.limit ?? 10, 100));
+      const tagsFilter = normalizeTags(input.tags);
+
+      const conditions = [
+        eq(companyMemories.companyId, input.companyId),
+        sql`similarity(${companyMemories.content}, ${trimmedQ}) >= ${DEFAULT_SEARCH_THRESHOLD}`,
+      ];
+      if (tagsFilter.length > 0) {
+        conditions.push(sql`${companyMemories.tags} @> ${JSON.stringify(tagsFilter)}::jsonb`);
+      }
+
+      const rows = await db
+        .select({
+          row: companyMemories,
+          score: sql<number>`similarity(${companyMemories.content}, ${trimmedQ})`.as("score"),
+        })
+        .from(companyMemories)
+        .where(and(...conditions))
+        .orderBy(desc(sql`score`), desc(companyMemories.createdAt))
+        .limit(limit);
+
+      return rows.map((r) => ({ ...r.row, score: Number(r.score) || 0 }));
     },
 
     /**

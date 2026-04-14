@@ -11,6 +11,7 @@ export {
   DEFAULT_SEARCH_THRESHOLD,
 } from "./agent-memories.js";
 export { companyMemoryService } from "./company-memories.js";
+export { maybeLoadMemoriesForInjection } from "./memory-injection.js";
 export { agentInstructionsService, syncInstructionsBundleConfigFromFilePath } from "./agent-instructions.js";
 export { assetService } from "./assets.js";
 export { documentService, extractLegacyPlanBody } from "./documents.js";

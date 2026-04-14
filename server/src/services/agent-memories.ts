@@ -24,7 +24,6 @@ import type {
   AgentMemory,
   AgentMemorySearchResult,
   AgentMemorySaveResult,
-  InjectedMemory,
 } from "@paperclipai/shared";
 
 /**
@@ -129,6 +128,12 @@ export interface SearchMemoryInput {
   q: string;
   tags?: string[];
   limit?: number;
+  /**
+   * When true, wiki pages (wiki_slug IS NOT NULL) are excluded from results.
+   * Use this in the MCP memorySearch tool — wiki pages are already injected
+   * at wakeup, so surfacing them again in mid-run search is redundant noise.
+   */
+  excludeWiki?: boolean;
 }
 
 export interface ListMemoryInput {
@@ -273,6 +278,9 @@ export function agentMemoryService(db: Db) {
           sql`${agentMemories.tags} @> ${JSON.stringify(tagsFilter)}::jsonb`,
         );
       }
+      if (input.excludeWiki) {
+        baseConditions.push(isNull(agentMemories.wikiSlug));
+      }
 
       const rows = await db
         .select({
@@ -394,6 +402,52 @@ export function agentMemoryService(db: Db) {
     },
 
     /**
+     * Delete a wiki page by slug. Returns the deleted row or null if it
+     * didn't exist or belonged to a different agent.
+     */
+    wikiRemove: async (agentId: string, slug: string): Promise<AgentMemory | null> => {
+      const row = await db
+        .delete(agentMemories)
+        .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.wikiSlug, slug)))
+        .returning()
+        .then((rows) => rows[0] ?? null);
+      return row ? rowToMemory(row) : null;
+    },
+
+    /**
+     * Memory health statistics for an agent — counts and byte totals split
+     * by episodic vs wiki. Useful for UI dashboards and for agents that
+     * want to self-monitor before they approach the episodic cap.
+     */
+    stats: async (agentId: string): Promise<{
+      episodic: { count: number; bytes: number };
+      wiki: { count: number; bytes: number };
+      total: { count: number; bytes: number };
+    }> => {
+      const rows = await db
+        .select({
+          isWiki: sql<boolean>`(${agentMemories.wikiSlug} IS NOT NULL)`,
+          count: sql<number>`count(*)::int`,
+          bytes: sql<number>`coalesce(sum(${agentMemories.contentBytes}), 0)::int`,
+        })
+        .from(agentMemories)
+        .where(eq(agentMemories.agentId, agentId))
+        .groupBy(sql`(${agentMemories.wikiSlug} IS NOT NULL)`);
+
+      let episodic = { count: 0, bytes: 0 };
+      let wiki = { count: 0, bytes: 0 };
+      for (const r of rows) {
+        if (r.isWiki) wiki = { count: r.count, bytes: Number(r.bytes) };
+        else episodic = { count: r.count, bytes: Number(r.bytes) };
+      }
+      return {
+        episodic,
+        wiki,
+        total: { count: episodic.count + wiki.count, bytes: episodic.bytes + wiki.bytes },
+      };
+    },
+
+    /**
      * List all wiki pages for an agent, sorted alphabetically by slug.
      * No count limit — wiki pages are deliberately maintained by the agent
      * and should all be visible in the API. A safety cap of 500 guards
@@ -409,122 +463,6 @@ export function agentMemoryService(db: Db) {
   };
 }
 
-/**
- * Default byte budget for wiki page injection. ~4K tokens — fits comfortably
- * in all adapters including small Ollama models with 8K context windows.
- * Override per-agent via `agent.config.wikiInjectionBudgetBytes`.
- */
-const DEFAULT_WIKI_INJECTION_BUDGET_BYTES = 16_000;
-
-/**
- * Load memories for injection into the adapter's prompt at run-start.
- *
- * Two independent memory tracks are loaded and returned together:
- *
- * 1. **Wiki pages** (compiled knowledge) — always injected, regardless of
- *    whether there is a search query. Pages are sorted by `updatedAt DESC`
- *    so the most actively-maintained ones arrive first. A byte budget
- *    (default 16 KB, configurable via `agent.config.wikiInjectionBudgetBytes`)
- *    prevents context blowout on long-running agents with many pages.
- *    Pages that exceed the remaining budget are skipped rather than
- *    truncating — a smaller page later in the list may still fit.
- *
- * 2. **Episodic memories** (similarity search) — only fetched when a search
- *    query can be assembled from the wakeup context. Count is bounded by
- *    `agent.config.memoryInjectionLimit` (default 5, max 20).
- *
- * Returns an empty array when `agent.config.enableMemoryInjection !== true`.
- */
-export async function maybeLoadMemoriesForInjection(
-  db: Db,
-  agent: { id: string; adapterConfig: unknown },
-  context: Record<string, unknown>,
-): Promise<InjectedMemory[]> {
-  const config = typeof agent.adapterConfig === "object" && agent.adapterConfig !== null
-    ? (agent.adapterConfig as Record<string, unknown>)
-    : {};
-
-  if (config.enableMemoryInjection !== true) return [];
-
-  const svc = agentMemoryService(db);
-
-  // ── Track 1: Wiki pages ──────────────────────────────────────────────────
-  // Always injected. Sort by updatedAt DESC so the most actively-maintained
-  // pages (which the agent is currently working on) arrive first. wikiList()
-  // returns alphabetical for API browsing; re-sort here for injection priority.
-  const wikiBudgetBytes =
-    typeof config.wikiInjectionBudgetBytes === "number" && config.wikiInjectionBudgetBytes > 0
-      ? Math.min(config.wikiInjectionBudgetBytes, 200_000)
-      : DEFAULT_WIKI_INJECTION_BUDGET_BYTES;
-
-  const allWikiPages = await svc.wikiList(agent.id);
-  const byRecency = [...allWikiPages].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-  let wikiBudgetLeft = wikiBudgetBytes;
-  const wikiInjected: InjectedMemory[] = [];
-  for (const page of byRecency) {
-    // Skip pages that don't fit but keep going — a smaller page may still fit.
-    if (page.contentBytes > wikiBudgetLeft) continue;
-    wikiInjected.push({
-      id: page.id,
-      content: page.content,
-      tags: page.tags,
-      score: 1,
-      wikiSlug: page.wikiSlug ?? undefined,
-    });
-    wikiBudgetLeft -= page.contentBytes;
-  }
-
-  // ── Track 2: Episodic memories (similarity search) ───────────────────────
-  // Only fetched when we have a non-empty query. Wiki pages above are already
-  // in the result; we return them even if no query is available.
-  const limit = typeof config.memoryInjectionLimit === "number" && config.memoryInjectionLimit > 0
-    ? Math.min(config.memoryInjectionLimit, 20)
-    : 5;
-
-  const queryParts: string[] = [];
-  if (typeof context.wakeReason === "string" && context.wakeReason.trim()) {
-    queryParts.push(context.wakeReason.trim());
-  }
-  // Prefer structured wake payload issue title (the common heartbeat path),
-  // then fall back to flat top-level fields for other callers.
-  const wakePayload = context.paperclipWake;
-  // Narrow the issue field safely: check it is a non-null object before
-  // accessing .title, avoiding the unsafe double-cast pattern.
-  const wakeIssueObj =
-    wakePayload !== null &&
-    typeof wakePayload === "object" &&
-    typeof (wakePayload as Record<string, unknown>).issue === "object" &&
-    (wakePayload as Record<string, unknown>).issue !== null
-      ? (wakePayload as Record<string, unknown>).issue as Record<string, unknown>
-      : null;
-  const wakeIssueTitle = typeof wakeIssueObj?.title === "string" ? wakeIssueObj.title : undefined;
-  if (typeof wakeIssueTitle === "string" && wakeIssueTitle.trim()) {
-    queryParts.push(wakeIssueTitle.trim());
-  } else if (typeof context.taskTitle === "string" && context.taskTitle.trim()) {
-    queryParts.push(context.taskTitle.trim());
-  } else if (typeof context.issueTitle === "string" && context.issueTitle.trim()) {
-    queryParts.push(context.issueTitle.trim());
-  }
-
-  // pg_trgm similarity degrades on very long query strings (O(n) trigrams).
-  // Cap to 200 chars — enough for a wake reason + issue title, trimmed at a
-  // word boundary where possible so we don't cut in the middle of a keyword.
-  const rawQ = queryParts.join(" ").trim();
-  const MAX_QUERY_CHARS = 200;
-  const q = rawQ.length > MAX_QUERY_CHARS
-    ? rawQ.slice(0, MAX_QUERY_CHARS).replace(/\s\S*$/, "").trim() || rawQ.slice(0, MAX_QUERY_CHARS)
-    : rawQ;
-
-  if (!q) {
-    // No search context available — return wiki pages only.
-    return wikiInjected;
-  }
-
-  const searchResults = await svc.search({ agentId: agent.id, q, limit });
-  const searchInjected: InjectedMemory[] = searchResults
-    .filter((r) => !r.wikiSlug)
-    .map((r) => ({ id: r.id, content: r.content, tags: r.tags, score: r.score }));
-
-  return [...wikiInjected, ...searchInjected];
-}
+// maybeLoadMemoriesForInjection lives in ./memory-injection.ts to avoid a
+// circular dependency: company-memories.ts already imports MemoryContentTooLargeError
+// from this file, so this file cannot import back from company-memories.ts.

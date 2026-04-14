@@ -10,6 +10,7 @@ import {
   agentService,
   logActivity,
   MemoryContentTooLargeError,
+  getMemoryLimits,
 } from "../services/index.js";
 import { assertAgentIdentity, assertCompanyAccess, getActorInfo } from "./authz.js";
 
@@ -25,6 +26,10 @@ import { assertAgentIdentity, assertCompanyAccess, getActorInfo } from "./authz.
  *      constructs `/agents/OTHER/memories`, the token resolves to its
  *      own agentId so the guard rejects the call.
  *   3. Route validators on body/query via zod.
+ *
+ * Route ordering note: specific literal segments (/wiki, /stats) are
+ * registered BEFORE parameterised segments (/:id) so Express does not
+ * shadow them.
  */
 export function agentMemoryRoutes(db: Db) {
   const router = Router();
@@ -38,6 +43,8 @@ export function agentMemoryRoutes(db: Db) {
       return null;
     }
   }
+
+  // ── List / search ────────────────────────────────────────────────────────
 
   router.get("/agents/:agentId/memories", async (req, res) => {
     const agentId = req.params.agentId as string;
@@ -56,8 +63,12 @@ export function agentMemoryRoutes(db: Db) {
     }
     const { q, tags, limit, offset } = parsed.data;
 
+    // `excludeWiki=true` lets callers (e.g. MCP memorySearch tool) hide wiki
+    // pages from results since those are already injected at run-start.
+    const excludeWiki = req.query.excludeWiki === "true";
+
     if (q) {
-      const results = await svc.search({ agentId, q, tags, limit });
+      const results = await svc.search({ agentId, q, tags, limit, excludeWiki });
       res.json({ items: results, mode: "search" });
       return;
     }
@@ -65,6 +76,157 @@ export function agentMemoryRoutes(db: Db) {
     const items = await svc.list({ agentId, tags, limit, offset });
     res.json({ items, mode: "list" });
   });
+
+  // ── Stats ────────────────────────────────────────────────────────────────
+
+  /**
+   * GET /agents/:agentId/memories/stats
+   * Returns counts and byte totals split by episodic vs wiki, plus the
+   * configured limits so UI and agents can self-monitor.
+   */
+  router.get("/agents/:agentId/memories/stats", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    assertAgentIdentity(req, agentId);
+
+    const memStats = await svc.stats(agentId);
+    const limits = getMemoryLimits();
+    res.json({ ...memStats, limits });
+  });
+
+  // ── Wiki pages ───────────────────────────────────────────────────────────
+  // All /wiki routes MUST appear before /:id so Express does not shadow them.
+
+  router.put("/agents/:agentId/memories/wiki/:slug", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const slug = req.params.slug as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    assertAgentIdentity(req, agentId);
+
+    const { content, tags } = req.body as { content?: unknown; tags?: unknown };
+    if (typeof content !== "string" || content.trim().length === 0) {
+      res.status(400).json({ error: "content must be a non-empty string" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    try {
+      const memory = await svc.wikiUpsert({
+        companyId: agent.companyId,
+        agentId,
+        wikiSlug: slug,
+        content,
+        tags: Array.isArray(tags)
+          ? tags.filter((t): t is string => typeof t === "string")
+          : undefined,
+        runId: actor.runId,
+      });
+
+      await logActivity(db, {
+        companyId: agent.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId ?? agentId,
+        runId: actor.runId,
+        action: "memory.wiki_upserted",
+        entityType: "agent_memory",
+        entityId: memory.id,
+        details: { wikiSlug: memory.wikiSlug, contentBytes: memory.contentBytes },
+      });
+
+      res.json(memory);
+    } catch (err) {
+      if (err instanceof MemoryContentTooLargeError) {
+        res.status(413).json({
+          error: "Memory content too large",
+          contentBytes: err.contentBytes,
+          maxContentBytes: err.maxContentBytes,
+        });
+        return;
+      }
+      throw err;
+    }
+  });
+
+  router.get("/agents/:agentId/memories/wiki", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    assertAgentIdentity(req, agentId);
+
+    const items = await svc.wikiList(agentId);
+    res.json({ items });
+  });
+
+  router.get("/agents/:agentId/memories/wiki/:slug", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const slug = req.params.slug as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    assertAgentIdentity(req, agentId);
+
+    const memory = await svc.wikiGet(agentId, slug);
+    if (!memory) {
+      res.status(404).json({ error: "Wiki page not found" });
+      return;
+    }
+    res.json(memory);
+  });
+
+  router.delete("/agents/:agentId/memories/wiki/:slug", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const slug = req.params.slug as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    assertAgentIdentity(req, agentId);
+
+    const removed = await svc.wikiRemove(agentId, slug);
+    if (!removed) {
+      res.status(404).json({ error: "Wiki page not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: agent.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId ?? agentId,
+      runId: actor.runId,
+      action: "memory.wiki_deleted",
+      entityType: "agent_memory",
+      entityId: removed.id,
+      details: { wikiSlug: removed.wikiSlug },
+    });
+
+    res.json(removed);
+  });
+
+  // ── Episodic memories by id ──────────────────────────────────────────────
+  // Registered AFTER /wiki/* so the literal "wiki" segment is not treated
+  // as a memory id.
 
   router.get("/agents/:agentId/memories/:id", async (req, res) => {
     const agentId = req.params.agentId as string;
@@ -142,80 +304,6 @@ export function agentMemoryRoutes(db: Db) {
       }
     },
   );
-
-  router.put("/agents/:agentId/memories/wiki/:slug", async (req, res) => {
-    const agentId = req.params.agentId as string;
-    const slug = req.params.slug as string;
-    const agent = await loadAgentOrNull(agentId);
-    if (!agent) {
-      res.status(404).json({ error: "Agent not found" });
-      return;
-    }
-    assertCompanyAccess(req, agent.companyId);
-    assertAgentIdentity(req, agentId);
-
-    const { content, tags } = req.body as { content?: unknown; tags?: unknown };
-    if (typeof content !== "string" || content.trim().length === 0) {
-      res.status(400).json({ error: "content must be a non-empty string" });
-      return;
-    }
-
-    const actor = getActorInfo(req);
-    try {
-      const memory = await svc.wikiUpsert({
-        companyId: agent.companyId,
-        agentId,
-        wikiSlug: slug,
-        content,
-        tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : undefined,
-        runId: actor.runId,
-      });
-      res.json(memory);
-    } catch (err) {
-      if (err instanceof MemoryContentTooLargeError) {
-        res.status(413).json({
-          error: "Memory content too large",
-          contentBytes: err.contentBytes,
-          maxContentBytes: err.maxContentBytes,
-        });
-        return;
-      }
-      throw err;
-    }
-  });
-
-  router.get("/agents/:agentId/memories/wiki", async (req, res) => {
-    const agentId = req.params.agentId as string;
-    const agent = await loadAgentOrNull(agentId);
-    if (!agent) {
-      res.status(404).json({ error: "Agent not found" });
-      return;
-    }
-    assertCompanyAccess(req, agent.companyId);
-    assertAgentIdentity(req, agentId);
-
-    const items = await svc.wikiList(agentId);
-    res.json({ items });
-  });
-
-  router.get("/agents/:agentId/memories/wiki/:slug", async (req, res) => {
-    const agentId = req.params.agentId as string;
-    const slug = req.params.slug as string;
-    const agent = await loadAgentOrNull(agentId);
-    if (!agent) {
-      res.status(404).json({ error: "Agent not found" });
-      return;
-    }
-    assertCompanyAccess(req, agent.companyId);
-    assertAgentIdentity(req, agentId);
-
-    const memory = await svc.wikiGet(agentId, slug);
-    if (!memory) {
-      res.status(404).json({ error: "Wiki page not found" });
-      return;
-    }
-    res.json(memory);
-  });
 
   router.delete("/agents/:agentId/memories/:id", async (req, res) => {
     const agentId = req.params.agentId as string;

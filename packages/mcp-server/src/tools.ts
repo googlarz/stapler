@@ -482,12 +482,14 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
     ),
     makeTool(
       "memorySearch",
-      "Keyword search your agent's memories via pg_trgm similarity. Returns items ranked by score. Use multiple distinct keywords rather than natural-language sentences.",
+      "Keyword search your agent's episodic memories via pg_trgm similarity. Returns items ranked by score. Wiki pages are excluded — they are already in your context. Use multiple distinct keywords rather than natural-language sentences.",
       memorySearchSchema,
       async ({ q, limit, tags }) => {
         const agentId = client.resolveAgentId();
         const params = new URLSearchParams();
         params.set("q", q);
+        // Exclude wiki pages — they are already injected at run-start.
+        params.set("excludeWiki", "true");
         if (limit !== undefined) params.set("limit", String(limit));
         if (tags && tags.length > 0) params.set("tags", tags.join(","));
         return client.requestJson(
@@ -554,6 +556,27 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       async () => {
         const agentId = client.resolveAgentId();
         return client.requestJson("GET", `/agents/${encodeURIComponent(agentId)}/memories/wiki`);
+      },
+    ),
+    makeTool(
+      "wikiDelete",
+      "Delete a named wiki page from your knowledge base by slug. Use when a compiled knowledge page is no longer relevant or has been superseded.",
+      z.object({ slug: z.string().trim().min(1).max(64) }),
+      async ({ slug }) => {
+        const agentId = client.resolveAgentId();
+        return client.requestJson(
+          "DELETE",
+          `/agents/${encodeURIComponent(agentId)}/memories/wiki/${encodeURIComponent(slug)}`,
+        );
+      },
+    ),
+    makeTool(
+      "memoryStats",
+      "Fetch your agent's memory health statistics: episodic count and bytes, wiki page count and bytes, totals, and configured limits. Useful for self-monitoring before approaching the episodic cap.",
+      z.object({}),
+      async () => {
+        const agentId = client.resolveAgentId();
+        return client.requestJson("GET", `/agents/${encodeURIComponent(agentId)}/memories/stats`);
       },
     ),
   ];

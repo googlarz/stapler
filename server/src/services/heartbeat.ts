@@ -72,7 +72,7 @@ import {
   resolveSessionCompactionPolicy,
   type SessionCompactionPolicy,
 } from "@paperclipai/adapter-utils";
-import { maybeLoadMemoriesForInjection } from "./agent-memories.js";
+import { maybeLoadMemoriesForInjection } from "./memory-injection.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
