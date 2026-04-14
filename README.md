@@ -151,6 +151,28 @@ company     →  companyMemorySave · companyMemorySearch · companyWikiUpsert �
 outputs     →  proposeOutput · updateOutputDraft · releaseOutputVersion
 ```
 
+### Ollama — honest trade-offs
+
+Ollama is excellent for privacy-sensitive, high-volume, or latency-tolerant work where per-token cost would otherwise add up. It is not a drop-in replacement for a frontier cloud model. Here's the accurate picture:
+
+| What Ollama is great for | What it isn't |
+|--------------------------|---------------|
+| Zero per-token cost — unlimited runs | Slower per token than cloud APIs on consumer hardware |
+| Fully offline / air-gapped | Needs ~20 GB free RAM for a 26B model (e.g. `gemma4:26b`) |
+| Privacy — data never leaves the machine | Smaller context window on most models |
+| 20-tool agentic loop with streaming | Tool-calling is less reliable than Claude — expect occasional malformed arg JSON |
+| Picking the fastest model via the benchmark page | Per-model quality varies wildly; benchmark results in tokens/sec don't capture reasoning quality |
+
+**Important: Ollama can't do embeddings for semantic search (in our setup).** Generative models like `gemma4:26b` are not embedding models. Stapler's semantic memory search ([Memory system](#memory-system)) needs a dedicated embedding model that produces stable 1536-dim vectors. Options:
+
+1. **Use OpenAI `text-embedding-3-small`** (current default) — set `OPENAI_API_KEY`. Excellent multilingual quality (handles German compound words / declensions well), ~$0.02 per million tokens (negligible at normal memory volumes).
+2. **Use a proper Ollama embedding model** — pull `nomic-embed-text` (768-dim, English-first) or `mxbai-embed-large` (1024-dim, decent multilingual). This requires changing the `EMBEDDING_DIMS` constant in `server/src/services/embeddings.ts` and re-embedding existing rows. Quality is below OpenAI for non-English content.
+3. **Skip semantic search entirely** — leave `OPENAI_API_KEY` unset and the system falls back to pg_trgm keyword search, which is free and always available (but misses synonyms and inflected forms).
+
+Keyword search works everywhere, offline, with no extra setup. Semantic search is an opt-in upgrade — worth it for German / multilingual content, optional for English-only work.
+
+**Language quality.** For non-English writing (German, Italian, Polish), frontier cloud models (Claude, GPT-4) typically produce better prose than local Ollama models at equivalent compute. If a specific agent is generating user-facing copy in a non-English language, consider putting it on Claude while keeping background / scaffolding agents on Ollama. Mixing adapters inside one company is fully supported.
+
 ---
 
 ## Memory system
