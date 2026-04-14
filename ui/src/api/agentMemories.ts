@@ -61,6 +61,11 @@ export const agentMemoriesApi = {
     api.delete<AgentMemory>(
       `/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(id)}`,
     ),
+  wikiUpsert: (agentId: string, slug: string, input: { content: string; tags?: string[] }) =>
+    api.put<AgentMemory>(
+      `/agents/${encodeURIComponent(agentId)}/memories/wiki/${encodeURIComponent(slug)}`,
+      input,
+    ),
   wikiRemoveBySlug: (agentId: string, slug: string) =>
     api.delete<AgentMemory>(
       `/agents/${encodeURIComponent(agentId)}/memories/wiki/${encodeURIComponent(slug)}`,

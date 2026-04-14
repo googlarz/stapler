@@ -9,7 +9,7 @@ import {
   type CompanyMemoryQueryResponse,
 } from "../api/companyMemories";
 import { queryKeys } from "../lib/queryKeys";
-import { relativeTime } from "../lib/utils";
+import { expiresLabel, relativeTime } from "../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,6 +53,18 @@ function MemoryRow({
           <span className="text-xs text-muted-foreground">
             {relativeTime(memory.createdAt)}
             {memory.contentBytes > 0 && ` · ${memory.contentBytes}B`}
+            {(() => {
+              const ttl = expiresLabel(memory.expiresAt);
+              if (!ttl) return null;
+              return (
+                <span
+                  className={ttl === "expired" ? " · text-destructive" : " · text-amber-600"}
+                  title={memory.expiresAt ?? undefined}
+                >
+                  {" · "}{ttl}
+                </span>
+              );
+            })()}
           </span>
           {isSearchResult(memory) && (
             <span className="text-xs text-muted-foreground" title="pg_trgm similarity score">

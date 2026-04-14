@@ -1,16 +1,23 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { BookOpen, Trash2 } from "lucide-react";
 import type {
   AgentMemory,
   AgentMemorySearchResult,
 } from "@paperclipai/shared";
 import { agentMemoriesApi } from "../api/agentMemories";
 import { queryKeys } from "../lib/queryKeys";
-import { relativeTime } from "../lib/utils";
+import { expiresLabel, relativeTime } from "../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Props {
   agentId: string;
@@ -22,17 +29,129 @@ function isSearchResult(
   return typeof (row as AgentMemorySearchResult).score === "number";
 }
 
+const SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
+
+function AddWikiPageDialog({
+  agentId,
+  open,
+  onOpenChange,
+}: {
+  agentId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [slug, setSlug] = useState("");
+  const [content, setContent] = useState("");
+  const [rawTags, setRawTags] = useState("");
+
+  const slugError =
+    slug.length > 0 && !SLUG_RE.test(slug)
+      ? "Slug must be lowercase: letters, digits, hyphens, underscores; start with a letter or digit."
+      : null;
+
+  const upsertMutation = useMutation({
+    mutationFn: () => {
+      const tags = rawTags
+        .split(/[,\s]+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      return agentMemoriesApi.wikiUpsert(agentId, slug.trim(), {
+        content: content.trim(),
+        tags: tags.length > 0 ? tags : undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents", agentId, "memories"] });
+      setSlug("");
+      setContent("");
+      setRawTags("");
+      onOpenChange(false);
+    },
+  });
+
+  const canSubmit =
+    slug.trim().length > 0 &&
+    !slugError &&
+    content.trim().length > 0 &&
+    !upsertMutation.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add wiki page</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Slug{" "}
+              <span className="text-muted-foreground font-normal">
+                (unique identifier, e.g. preferences)
+              </span>
+            </label>
+            <Input
+              placeholder="preferences"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value.toLowerCase())}
+              maxLength={64}
+              autoFocus
+            />
+            {slugError && <p className="text-xs text-destructive">{slugError}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Content</label>
+            <Textarea
+              placeholder="Compiled knowledge this agent should have across runs…"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className="resize-none min-h-[120px]"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Tags{" "}
+              <span className="text-muted-foreground font-normal">(optional, comma-separated)</span>
+            </label>
+            <Input
+              placeholder="e.g. style, context"
+              value={rawTags}
+              onChange={(e) => setRawTags(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={!canSubmit} onClick={() => upsertMutation.mutate()}>
+              {upsertMutation.isPending ? "Saving…" : "Save wiki page"}
+            </Button>
+          </div>
+          {upsertMutation.isError && (
+            <p className="text-sm text-destructive">
+              {upsertMutation.error instanceof Error
+                ? upsertMutation.error.message
+                : "Failed to save wiki page"}
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /**
  * Read-only (plus delete) panel for an agent's memories. Lets board
  * users inspect what the agent has remembered, filter by tag, do
- * keyword search, and delete stale rows. Create is intentionally
- * not exposed from the UI — memories are the agent's own working
- * notes, not something a human should seed.
+ * keyword search, and delete stale rows. Episodic create is intentionally
+ * not exposed — memories are the agent's own working notes. Wiki pages
+ * can be seeded here since they are compiled knowledge documents.
  */
 export function AgentMemoryList({ agentId }: Props) {
   const queryClient = useQueryClient();
   const [rawQuery, setRawQuery] = useState("");
   const [rawTags, setRawTags] = useState("");
+  const [addWikiOpen, setAddWikiOpen] = useState(false);
 
   // Parse the (comma- or whitespace-separated) tag input into a clean array.
   const tags = useMemo(() => {
@@ -110,8 +229,8 @@ export function AgentMemoryList({ agentId }: Props) {
         </div>
       )}
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-1">
           <Input
             type="search"
             placeholder="Search memories (keyword)…"
@@ -141,12 +260,16 @@ export function AgentMemoryList({ agentId }: Props) {
             </Button>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Agents save short notes here to recall across runs. Keyword search
-          uses trigram similarity; search ranks by relevance, list is
-          newest-first.
-        </p>
+        <Button size="sm" variant="outline" onClick={() => setAddWikiOpen(true)}>
+          <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+          Add wiki page
+        </Button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Agents save short notes here to recall across runs. Keyword search
+        uses trigram similarity; search ranks by relevance, list is
+        newest-first.
+      </p>
 
       {memoriesQuery.isLoading && (
         <div className="space-y-2">
@@ -179,6 +302,7 @@ export function AgentMemoryList({ agentId }: Props) {
           const isPending = isWiki
             ? wikiRemoveMutation.isPending
             : removeMutation.isPending;
+          const ttlLabel = expiresLabel((memory as AgentMemory).expiresAt);
 
           function handleDelete() {
             const msg = isWiki
@@ -215,6 +339,14 @@ export function AgentMemoryList({ agentId }: Props) {
                     </span>
                   ))}
                 <span>{relativeTime(memory.createdAt)}</span>
+                {ttlLabel && (
+                  <span
+                    className={ttlLabel === "expired" ? "text-destructive" : "text-amber-600"}
+                    title={(memory as AgentMemory).expiresAt?.toISOString()}
+                  >
+                    · {ttlLabel}
+                  </span>
+                )}
                 {isSearchResult(memory) && (
                   <span title="pg_trgm similarity score">
                     score {memory.score.toFixed(2)}
@@ -262,6 +394,12 @@ export function AgentMemoryList({ agentId }: Props) {
           </div>
         );
       })()}
+
+      <AddWikiPageDialog
+        agentId={agentId}
+        open={addWikiOpen}
+        onOpenChange={setAddWikiOpen}
+      />
     </div>
   );
 }

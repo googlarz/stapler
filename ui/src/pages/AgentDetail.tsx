@@ -1805,6 +1805,14 @@ function ConfigurationTab({
 
   const canCreateAgents = Boolean(agent.permissions?.canCreateAgents);
   const canAssignTasks = Boolean(agent.access?.canAssignTasks);
+
+  const agentCfg = (agent.adapterConfig ?? {}) as Record<string, unknown>;
+  const enableMemoryInjection = Boolean(agentCfg.enableMemoryInjection);
+  const storedInjectionLimit =
+    typeof agentCfg.memoryInjectionLimit === "number"
+      ? Math.max(1, Math.min(20, agentCfg.memoryInjectionLimit))
+      : 5;
+  const [injectionLimit, setInjectionLimit] = useState(storedInjectionLimit);
   const taskAssignSource = agent.access?.taskAssignSource ?? "none";
   const taskAssignLocked = agent.role === "ceo" || canCreateAgents;
   const taskAssignHint =
@@ -1872,6 +1880,62 @@ function ConfigurationTab({
               disabled={updatePermissions.isPending || taskAssignLocked}
             />
           </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-medium mb-3">Memory injection</h3>
+        <div className="border border-border rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between gap-4 text-sm">
+            <div className="space-y-1">
+              <div>Inject memories at wakeup</div>
+              <p className="text-xs text-muted-foreground">
+                When enabled, the agent's top matching memories are prepended to its
+                system prompt at every run start, using the task title and wake reason
+                as the search query.
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={enableMemoryInjection}
+              onCheckedChange={() =>
+                updateAgent.mutate({
+                  adapterConfig: {
+                    ...agentCfg,
+                    enableMemoryInjection: !enableMemoryInjection,
+                  },
+                })
+              }
+              disabled={updateAgent.isPending}
+            />
+          </div>
+          {enableMemoryInjection && (
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <div className="space-y-1">
+                <div>Injection limit</div>
+                <p className="text-xs text-muted-foreground">
+                  Maximum number of memories injected per run (1–20).
+                </p>
+              </div>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                value={injectionLimit}
+                onChange={(e) => setInjectionLimit(Number(e.target.value))}
+                onBlur={() => {
+                  const clamped = Math.max(1, Math.min(20, injectionLimit || 5));
+                  updateAgent.mutate({
+                    adapterConfig: {
+                      ...agentCfg,
+                      enableMemoryInjection,
+                      memoryInjectionLimit: clamped,
+                    },
+                  });
+                }}
+                className="w-20 text-right"
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

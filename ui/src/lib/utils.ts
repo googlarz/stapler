@@ -50,6 +50,24 @@ export function relativeTime(date: Date | string): string {
   return formatDate(date);
 }
 
+/**
+ * Format a future expiry timestamp as a human-readable label:
+ * "expires in 3d", "expires in 4h", "expires in 12m", or "expired".
+ * Returns null when no expiry is set.
+ */
+export function expiresLabel(date: Date | string | null | undefined): string | null {
+  if (!date) return null;
+  const diffMs = new Date(date).getTime() - Date.now();
+  if (diffMs <= 0) return "expired";
+  const diffMin = Math.round(diffMs / 60_000);
+  if (diffMin < 60) return `expires in ${diffMin}m`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `expires in ${diffHr}h`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 30) return `expires in ${diffDay}d`;
+  return `expires ${new Date(date).toLocaleDateString()}`;
+}
+
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
