@@ -62,7 +62,7 @@ function applyStatusSideEffects(
   status: string | undefined,
   patch: Partial<typeof issues.$inferInsert>,
 ): Partial<typeof issues.$inferInsert> {
-  applyScheduledForAutoBacklog(patch, existing?.status);
+  applyScheduledForAutoBacklog(patch, status);
   if (!patch.status && !status) return patch;
   const effectiveStatus = patch.status ?? status;
 
