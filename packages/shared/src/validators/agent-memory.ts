@@ -39,6 +39,7 @@ export const createAgentMemorySchema = z.object({
   expiresAt: z
     .string()
     .datetime({ message: "expiresAt must be an ISO 8601 datetime string" })
+    .refine((v) => new Date(v) > new Date(), { message: "expiresAt must be in the future" })
     .optional(),
 });
 

@@ -144,7 +144,11 @@ const memorySaveSchema = z.object({
    * searches and run-start injection. Use for time-scoped notes
    * ("today's sprint focus", "current PR under review"). Must be in the future.
    */
-  expiresAt: z.string().datetime({ message: "expiresAt must be an ISO 8601 datetime" }).optional(),
+  expiresAt: z
+    .string()
+    .datetime({ message: "expiresAt must be an ISO 8601 datetime" })
+    .refine((v) => new Date(v) > new Date(), { message: "expiresAt must be in the future" })
+    .optional(),
 });
 
 const memorySearchSchema = z.object({

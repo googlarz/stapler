@@ -42,13 +42,21 @@ function buildQuery(params: ListCompanyMemoriesParams): string {
   return qs ? `?${qs}` : "";
 }
 
-export type CompanyMemoryListResponse =
-  | { items: CompanyMemory[]; mode: "list" }
-  | { items: CompanyMemorySearchResult[]; mode: "search" };
+export interface CompanyMemoryListResponse {
+  items: CompanyMemory[];
+  mode: "list";
+}
+
+export interface CompanyMemorySearchResponse {
+  items: CompanyMemorySearchResult[];
+  mode: "search";
+}
+
+export type CompanyMemoryQueryResponse = CompanyMemoryListResponse | CompanyMemorySearchResponse;
 
 export const companyMemoriesApi = {
   list: (companyId: string, params: ListCompanyMemoriesParams = {}) =>
-    api.get<CompanyMemoryListResponse>(
+    api.get<CompanyMemoryQueryResponse>(
       `/companies/${encodeURIComponent(companyId)}/memories${buildQuery(params)}`,
     ),
   create: (companyId: string, input: { content: string; tags?: string[]; expiresAt?: string }) =>

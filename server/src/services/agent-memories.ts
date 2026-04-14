@@ -222,7 +222,9 @@ export function agentMemoryService(db: Db) {
           })
           .onConflictDoUpdate({
             target: [agentMemories.agentId, agentMemories.contentHash],
-            set: { updatedAt: sql`now()` },
+            // Also refresh expiresAt on re-save so callers can extend or
+            // set a TTL on a previously non-expiring memory.
+            set: { updatedAt: sql`now()`, expiresAt: input.expiresAt ?? null },
           })
           .returning();
 

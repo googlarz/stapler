@@ -6,6 +6,7 @@ import {
   companyMemoriesApi,
   type CompanyMemory,
   type CompanyMemorySearchResult,
+  type CompanyMemoryQueryResponse,
 } from "../api/companyMemories";
 import { queryKeys } from "../lib/queryKeys";
 import { relativeTime } from "../lib/utils";
@@ -207,7 +208,8 @@ export function CompanyMemories() {
     },
   });
 
-  const allItems = memoriesQuery.data?.items ?? [];
+  const response = memoriesQuery.data as CompanyMemoryQueryResponse | undefined;
+  const allItems = response?.items ?? [];
   const wikiItems = allItems.filter((m) => m.wikiSlug);
   const episodicItems = allItems.filter((m) => !m.wikiSlug);
   const stats = statsQuery.data;
