@@ -8,6 +8,7 @@ export default defineConfig({
       "packages/adapters/codex-local",
       "packages/adapters/gemini-local",
       "packages/adapters/opencode-local",
+      "packages/plugins/slack-sync",
       "server",
       "ui",
       "cli",
