@@ -2125,6 +2125,14 @@ function PromptsTab({
             rootPath: bundleDraft.mode === "external" ? bundleDraft.rootPath : null,
             entryFile: bundleDraft.entryFile,
           });
+        } else if (fileDirty && !bundle) {
+          // New agent — no bundle exists yet. Initialize with defaults so the
+          // subsequent saveFile call has a bundle to attach to.
+          await updateBundle.mutateAsync({
+            mode: "managed",
+            rootPath: null,
+            entryFile: currentEntryFile,
+          });
         }
         if (fileDirty) {
           await saveFile.mutateAsync({
