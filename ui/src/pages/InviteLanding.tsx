@@ -221,7 +221,7 @@ export function InviteLandingPage() {
             ? "Bootstrap your Stapler instance"
             : companyName
               ? `Join ${companyName}`
-              : "Join this Paperclip company"}
+              : "Join this Stapler company"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {invite.inviteType !== "bootstrap_ceo" && companyName

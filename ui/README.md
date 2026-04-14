@@ -1,6 +1,6 @@
 # @stapler/ui
 
-Published static assets for the Paperclip board UI.
+Published static assets for the Stapler board UI.
 
 ## What gets published
 

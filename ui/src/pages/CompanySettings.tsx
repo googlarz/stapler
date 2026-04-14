@@ -441,13 +441,13 @@ export function CompanySettings() {
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
           <ToggleField
-            label="Allow sharing voted AI outputs with Paperclip Labs"
+            label="Allow sharing voted AI outputs with Stapler Labs"
             hint="Only AI-generated outputs you explicitly vote on are eligible for feedback sharing."
             checked={!!selectedCompany.feedbackDataSharingEnabled}
             onChange={(enabled) => feedbackSharingMutation.mutate(enabled)}
           />
           <p className="text-sm text-muted-foreground">
-            Votes are always saved locally. This setting controls whether voted AI outputs may also be marked for sharing with Paperclip Labs.
+            Votes are always saved locally. This setting controls whether voted AI outputs may also be marked for sharing with Stapler Labs.
           </p>
           <div className="space-y-1 text-xs text-muted-foreground">
             <div>
