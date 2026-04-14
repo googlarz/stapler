@@ -44,7 +44,7 @@ export interface PaperclipApiContext {
 // Tool schema — matches what Ollama expects in the `tools` request field
 // ---------------------------------------------------------------------------
 
-export const PAPERCLIP_TOOLS: OllamaTool[] = [
+export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
@@ -778,10 +778,10 @@ export function buildPaperclipApiContext(
   authToken?: string,
 ): PaperclipApiContext {
   const runtimeHost = resolveHostForUrl(
-    process.env.PAPERCLIP_LISTEN_HOST ?? process.env.HOST ?? "localhost",
+    process.env.STAPLER_LISTEN_HOST ?? process.env.HOST ?? "localhost",
   );
-  const runtimePort = process.env.PAPERCLIP_LISTEN_PORT ?? process.env.PORT ?? "3100";
-  const apiUrl = process.env.PAPERCLIP_API_URL ?? `http://${runtimeHost}:${runtimePort}`;
+  const runtimePort = process.env.STAPLER_LISTEN_PORT ?? process.env.PORT ?? "3100";
+  const apiUrl = process.env.STAPLER_API_URL ?? `http://${runtimeHost}:${runtimePort}`;
   return {
     apiUrl,
     companyId: agent.companyId,

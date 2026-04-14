@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Plus, SlidersHorizontal, Trash2 } from "lucide-react";
-import type { Goal, GoalAcceptanceCriterion, GoalProgress, Project } from "@paperclipai/shared";
+import type { Goal, GoalAcceptanceCriterion, GoalProgress, Project } from "@stapler/shared";
 
 interface GoalPropertiesToggleButtonProps {
   panelVisible: boolean;

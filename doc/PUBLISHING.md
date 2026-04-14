@@ -19,9 +19,9 @@ Paperclip no longer uses release branches or Changesets for publishing.
 
 The CLI package, `paperclipai`, imports code from workspace packages such as:
 
-- `@paperclipai/server`
-- `@paperclipai/db`
-- `@paperclipai/shared`
+- `@stapler/server`
+- `@stapler/db`
+- `@stapler/shared`
 - adapter packages under `packages/adapters/`
 
 Those workspace references are valid in development but not in a publishable npm package. The release flow rewrites versions temporarily, then builds a publishable CLI bundle.
@@ -64,7 +64,7 @@ The version rewrite step now uses [`scripts/release-package-map.mjs`](../scripts
 
 Those rewrites are temporary. The working tree is restored after publish or dry-run.
 
-## `@paperclipai/ui` packaging
+## `@stapler/ui` packaging
 
 The UI package publishes prebuilt static assets, not the source workspace.
 
@@ -76,20 +76,20 @@ The `ui` package uses [`scripts/generate-ui-package-json.mjs`](../scripts/genera
 
 After packing or publishing, `postpack` restores the development manifest automatically.
 
-### Manual first publish for `@paperclipai/ui`
+### Manual first publish for `@stapler/ui`
 
 If you need to publish only the UI package once by hand, use the real package name:
 
-- `@paperclipai/ui`
+- `@stapler/ui`
 
 Recommended flow from the repo root:
 
 ```bash
 # optional sanity check: this 404s until the first publish exists
-npm view @paperclipai/ui version
+npm view @stapler/ui version
 
 # make sure the dist payload is fresh
-pnpm --filter @paperclipai/ui build
+pnpm --filter @stapler/ui build
 
 # confirm your local npm auth before the real publish
 npm whoami
@@ -106,29 +106,29 @@ Notes:
 
 - Publish from `ui/`, not the repo root.
 - `prepack` automatically rewrites `ui/package.json` to the lean publish manifest, and `postpack` restores the dev manifest after the command finishes.
-- If `npm view @paperclipai/ui version` already returns the same version that is in [`ui/package.json`](../ui/package.json), do not republish. Bump the version or use the normal repo-wide release flow in [`scripts/release.sh`](../scripts/release.sh).
+- If `npm view @stapler/ui version` already returns the same version that is in [`ui/package.json`](../ui/package.json), do not republish. Bump the version or use the normal repo-wide release flow in [`scripts/release.sh`](../scripts/release.sh).
 
 If the first real publish returns npm `E404`, check npm-side prerequisites before retrying:
 
 - `npm whoami` must succeed first. An expired or missing npm login will block the publish.
-- For an organization-scoped package like `@paperclipai/ui`, the `paperclipai` npm organization must exist and the publisher must be a member with permission to publish to that scope.
+- For an organization-scoped package like `@stapler/ui`, the `paperclipai` npm organization must exist and the publisher must be a member with permission to publish to that scope.
 - The initial publish must include `--access public` for a public scoped package.
 - npm also requires either account 2FA for publishing or a granular token that is allowed to bypass 2FA.
 
-### Manual first publish for `@paperclipai/mcp-server`
+### Manual first publish for `@stapler/mcp-server`
 
 If you need to publish only the MCP server package once by hand, use:
 
-- `@paperclipai/mcp-server`
+- `@stapler/mcp-server`
 
 Recommended flow from the repo root:
 
 ```bash
 # optional sanity check: this 404s until the first publish exists
-npm view @paperclipai/mcp-server version
+npm view @stapler/mcp-server version
 
 # make sure the build output is fresh
-pnpm --filter @paperclipai/mcp-server build
+pnpm --filter @stapler/mcp-server build
 
 # confirm your local npm auth before the real publish
 npm whoami
@@ -144,7 +144,7 @@ pnpm publish --no-git-checks --access public
 Notes:
 
 - Publish from `packages/mcp-server/`, not the repo root.
-- If `npm view @paperclipai/mcp-server version` already returns the same version that is in [`packages/mcp-server/package.json`](../packages/mcp-server/package.json), do not republish. Bump the version or use the normal repo-wide release flow in [`scripts/release.sh`](../scripts/release.sh).
+- If `npm view @stapler/mcp-server version` already returns the same version that is in [`packages/mcp-server/package.json`](../packages/mcp-server/package.json), do not republish. Bump the version or use the normal repo-wide release flow in [`scripts/release.sh`](../scripts/release.sh).
 - The same npm-side prerequisites apply as above: valid npm auth, permission to publish to the `@paperclipai` scope, `--access public`, and the required publish auth/2FA policy.
 
 ## Version formats

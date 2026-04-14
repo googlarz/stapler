@@ -105,7 +105,7 @@ None - no external service configuration required.
 ## Next Phase Readiness
 
 - company_memories table DDL is ready for `pg migrate` run
-- Drizzle schema is exported and available to routes and tools via `@paperclipai/db`
+- Drizzle schema is exported and available to routes and tools via `@stapler/db`
 - companyMemoryService is available in the services barrel for use by routes (plan 03-02) and the Ollama paperclip_remember_company tool (plan 03-03)
 
 ---

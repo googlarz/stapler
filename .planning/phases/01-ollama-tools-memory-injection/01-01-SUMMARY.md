@@ -17,7 +17,7 @@ affects: [02-ollama-streaming, 03-company-shared-memories]
 tech-stack:
   added: []
   patterns:
-    - "Tool parity: Ollama adapter mirrors Claude adapter tool surface via PAPERCLIP_TOOLS array + executePaperclipTool switch"
+    - "Tool parity: Ollama adapter mirrors Claude adapter tool surface via STAPLER_TOOLS array + executePaperclipTool switch"
 
 key-files:
   created: []
@@ -29,7 +29,7 @@ key-decisions:
   - "paperclip_update_goal uses partial PATCH pattern: only fields present in args are included in updates body"
 
 patterns-established:
-  - "New Ollama tools follow two-step pattern: add OllamaTool schema to PAPERCLIP_TOOLS array, then add case branch to executePaperclipTool switch"
+  - "New Ollama tools follow two-step pattern: add OllamaTool schema to STAPLER_TOOLS array, then add case branch to executePaperclipTool switch"
 
 requirements-completed: [OLLAMA-01, OLLAMA-02, OLLAMA-03, MEMORY-01]
 
@@ -40,7 +40,7 @@ completed: 2026-04-13
 
 # Phase 1 Plan 01: Ollama Tools + Memory Injection Summary
 
-**Three missing Ollama tool definitions added (delete_memory, create_goal, update_goal) bringing PAPERCLIP_TOOLS to 15 entries with full memory and goal management parity with Claude adapter**
+**Three missing Ollama tool definitions added (delete_memory, create_goal, update_goal) bringing STAPLER_TOOLS to 15 entries with full memory and goal management parity with Claude adapter**
 
 ## Performance
 
@@ -66,7 +66,7 @@ Each task was committed atomically:
 **Plan metadata:** (docs commit — see below)
 
 ## Files Created/Modified
-- `packages/adapters/ollama-local/src/server/tools.ts` - Added 3 tool schemas to PAPERCLIP_TOOLS (now 15 total) and 3 handler cases to executePaperclipTool switch
+- `packages/adapters/ollama-local/src/server/tools.ts` - Added 3 tool schemas to STAPLER_TOOLS (now 15 total) and 3 handler cases to executePaperclipTool switch
 
 ## Decisions Made
 - MEMORY-01 was already implemented in execute.ts — confirmed present and left unmodified, no separate task needed
@@ -78,7 +78,7 @@ None - plan executed exactly as written.
 
 ## Issues Encountered
 
-Package name in pnpm filter required correction: `@paperclipai/adapter-ollama-local` (not `@paperclipai/ollama-local`). Build succeeded immediately after using the correct name.
+Package name in pnpm filter required correction: `@stapler/adapter-ollama-local` (not `@stapler/ollama-local`). Build succeeded immediately after using the correct name.
 
 ## User Setup Required
 

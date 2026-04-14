@@ -1,4 +1,4 @@
-import type { GoalAcceptanceCriterion } from "@paperclipai/shared";
+import type { GoalAcceptanceCriterion } from "@stapler/shared";
 
 /**
  * Goal verification — prompt template and comment parser.

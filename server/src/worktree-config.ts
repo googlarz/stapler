@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { PaperclipConfig } from "@paperclipai/shared";
+import type { PaperclipConfig } from "@stapler/shared";
 import { resolvePaperclipConfigPath, resolvePaperclipEnvPath } from "./paths.js";
 
 function nonEmpty(value: string | null | undefined): string | null {
@@ -114,16 +114,16 @@ function resolveWorktreeRuntimeContext(
   env: NodeJS.ProcessEnv,
   overrideConfigPath?: string,
 ): WorktreeRuntimeContext | null {
-  if (env.PAPERCLIP_IN_WORKTREE !== "true") return null;
+  if (env.STAPLER_IN_WORKTREE !== "true") return null;
 
   const configPath = resolvePaperclipConfigPath(overrideConfigPath);
   const envPath = resolvePaperclipEnvPath(configPath);
   const worktreeRoot = path.resolve(path.dirname(configPath), "..");
-  const worktreeName = nonEmpty(env.PAPERCLIP_WORKTREE_NAME) ?? path.basename(worktreeRoot);
-  const instanceId = nonEmpty(env.PAPERCLIP_INSTANCE_ID) ?? sanitizeWorktreeInstanceId(worktreeName);
+  const worktreeName = nonEmpty(env.STAPLER_WORKTREE_NAME) ?? path.basename(worktreeRoot);
+  const instanceId = nonEmpty(env.STAPLER_INSTANCE_ID) ?? sanitizeWorktreeInstanceId(worktreeName);
   const homeDir = resolveHomeAwarePath(
-    nonEmpty(env.PAPERCLIP_HOME) ??
-      nonEmpty(env.PAPERCLIP_WORKTREES_DIR) ??
+    nonEmpty(env.STAPLER_HOME) ??
+      nonEmpty(env.STAPLER_WORKTREES_DIR) ??
       "~/.paperclip-worktrees",
   );
   const instanceRoot = path.resolve(homeDir, "instances", instanceId);
@@ -372,11 +372,11 @@ export function maybeRepairLegacyWorktreeConfigAndEnvFiles(): {
     return { repairedConfig: false, repairedEnv: false };
   }
 
-  process.env.PAPERCLIP_HOME = context.homeDir;
-  process.env.PAPERCLIP_INSTANCE_ID = context.instanceId;
-  process.env.PAPERCLIP_CONFIG = context.configPath;
-  process.env.PAPERCLIP_CONTEXT = context.contextPath;
-  process.env.PAPERCLIP_WORKTREE_NAME = context.worktreeName;
+  process.env.STAPLER_HOME = context.homeDir;
+  process.env.STAPLER_INSTANCE_ID = context.instanceId;
+  process.env.STAPLER_CONFIG = context.configPath;
+  process.env.STAPLER_CONTEXT = context.contextPath;
+  process.env.STAPLER_WORKTREE_NAME = context.worktreeName;
 
   let repairedConfig = false;
   if (fs.existsSync(context.configPath)) {
@@ -420,12 +420,12 @@ export function maybeRepairLegacyWorktreeConfigAndEnvFiles(): {
   const existingEnvEntries = readEnvEntries(context.envPath);
   const desiredEnvEntries: Record<string, string> = {
     ...existingEnvEntries,
-    PAPERCLIP_HOME: context.homeDir,
-    PAPERCLIP_INSTANCE_ID: context.instanceId,
-    PAPERCLIP_CONFIG: context.configPath,
-    PAPERCLIP_CONTEXT: context.contextPath,
-    PAPERCLIP_IN_WORKTREE: "true",
-    PAPERCLIP_WORKTREE_NAME: context.worktreeName,
+    STAPLER_HOME: context.homeDir,
+    STAPLER_INSTANCE_ID: context.instanceId,
+    STAPLER_CONFIG: context.configPath,
+    STAPLER_CONTEXT: context.contextPath,
+    STAPLER_IN_WORKTREE: "true",
+    STAPLER_WORKTREE_NAME: context.worktreeName,
   };
 
   const repairedEnv = Object.entries(desiredEnvEntries).some(

@@ -1,4 +1,4 @@
-import type { PaperclipMcpConfig } from "./config.js";
+import type { StaplerMcpConfig } from "./config.js";
 
 export class PaperclipApiError extends Error {
   readonly status: number;
@@ -48,8 +48,8 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   }
 }
 
-export class PaperclipApiClient {
-  constructor(private readonly config: PaperclipMcpConfig) {}
+export class StaplerApiClient {
+  constructor(private readonly config: StaplerMcpConfig) {}
 
   get defaults() {
     return {
@@ -62,7 +62,7 @@ export class PaperclipApiClient {
   resolveCompanyId(companyId?: string | null): string {
     const resolved = companyId?.trim() || this.config.companyId;
     if (!resolved) {
-      throw new Error("companyId is required because PAPERCLIP_COMPANY_ID is not set");
+      throw new Error("companyId is required because STAPLER_COMPANY_ID is not set");
     }
     return resolved;
   }
@@ -70,7 +70,7 @@ export class PaperclipApiClient {
   resolveAgentId(agentId?: string | null): string {
     const resolved = agentId?.trim() || this.config.agentId;
     if (!resolved) {
-      throw new Error("agentId is required because PAPERCLIP_AGENT_ID is not set");
+      throw new Error("agentId is required because STAPLER_AGENT_ID is not set");
     }
     return resolved;
   }

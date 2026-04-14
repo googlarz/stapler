@@ -8,11 +8,11 @@ async function writeEnvCaptureScript(scriptPath: string): Promise<void> {
   const script = `#!/usr/bin/env node
 const fs = require("node:fs");
 const payload = {
-  PAPERCLIP_AGENT_ID: process.env.PAPERCLIP_AGENT_ID ?? null,
-  PAPERCLIP_COMPANY_ID: process.env.PAPERCLIP_COMPANY_ID ?? null,
-  PAPERCLIP_API_URL: process.env.PAPERCLIP_API_URL ?? null,
-  PAPERCLIP_RUN_ID: process.env.PAPERCLIP_RUN_ID ?? null,
-  PAPERCLIP_API_KEY: process.env.PAPERCLIP_API_KEY ?? null
+  STAPLER_AGENT_ID: process.env.STAPLER_AGENT_ID ?? null,
+  STAPLER_COMPANY_ID: process.env.STAPLER_COMPANY_ID ?? null,
+  STAPLER_API_URL: process.env.STAPLER_API_URL ?? null,
+  STAPLER_RUN_ID: process.env.STAPLER_RUN_ID ?? null,
+  STAPLER_API_KEY: process.env.STAPLER_API_KEY ?? null
 };
 fs.writeFileSync(process.argv[2], JSON.stringify(payload), "utf8");
 `;
@@ -21,7 +21,7 @@ fs.writeFileSync(process.argv[2], JSON.stringify(payload), "utf8");
 }
 
 describe("process adapter execute", () => {
-  it("injects PAPERCLIP_RUN_ID and PAPERCLIP_API_KEY from authToken by default", async () => {
+  it("injects STAPLER_RUN_ID and STAPLER_API_KEY from authToken by default", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-process-execute-"));
     const scriptPath = path.join(root, "capture.js");
     const capturePath = path.join(root, "capture.json");
@@ -59,16 +59,16 @@ describe("process adapter execute", () => {
       expect(result.exitCode).toBe(0);
 
       const payload = JSON.parse(await fs.readFile(capturePath, "utf8")) as Record<string, string | null>;
-      expect(payload.PAPERCLIP_AGENT_ID).toBe("agent-1");
-      expect(payload.PAPERCLIP_COMPANY_ID).toBe("company-1");
-      expect(payload.PAPERCLIP_RUN_ID).toBe("run-123");
-      expect(payload.PAPERCLIP_API_KEY).toBe("run-jwt-token");
+      expect(payload.STAPLER_AGENT_ID).toBe("agent-1");
+      expect(payload.STAPLER_COMPANY_ID).toBe("company-1");
+      expect(payload.STAPLER_RUN_ID).toBe("run-123");
+      expect(payload.STAPLER_API_KEY).toBe("run-jwt-token");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
 
-  it("preserves explicit PAPERCLIP_API_KEY override from adapter config", async () => {
+  it("preserves explicit STAPLER_API_KEY override from adapter config", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-process-execute-explicit-key-"));
     const scriptPath = path.join(root, "capture.js");
     const capturePath = path.join(root, "capture.json");
@@ -95,7 +95,7 @@ describe("process adapter execute", () => {
           args: [scriptPath, capturePath],
           cwd: root,
           env: {
-            PAPERCLIP_API_KEY: "manual-agent-key",
+            STAPLER_API_KEY: "manual-agent-key",
           },
         },
         context: {},
@@ -108,8 +108,8 @@ describe("process adapter execute", () => {
       expect(result.exitCode).toBe(0);
 
       const payload = JSON.parse(await fs.readFile(capturePath, "utf8")) as Record<string, string | null>;
-      expect(payload.PAPERCLIP_RUN_ID).toBe("run-456");
-      expect(payload.PAPERCLIP_API_KEY).toBe("manual-agent-key");
+      expect(payload.STAPLER_RUN_ID).toBe("run-456");
+      expect(payload.STAPLER_API_KEY).toBe("manual-agent-key");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -142,8 +142,8 @@ describe("process adapter execute", () => {
           args: [scriptPath, capturePath],
           cwd: root,
           env: {
-            PAPERCLIP_API_KEY: "",
-            PAPERCLIP_RUN_ID: "stale-run-id",
+            STAPLER_API_KEY: "",
+            STAPLER_RUN_ID: "stale-run-id",
           },
         },
         context: {},
@@ -156,8 +156,8 @@ describe("process adapter execute", () => {
       expect(result.exitCode).toBe(0);
 
       const payload = JSON.parse(await fs.readFile(capturePath, "utf8")) as Record<string, string | null>;
-      expect(payload.PAPERCLIP_RUN_ID).toBe("run-789");
-      expect(payload.PAPERCLIP_API_KEY).toBe("fallback-run-token");
+      expect(payload.STAPLER_RUN_ID).toBe("run-789");
+      expect(payload.STAPLER_API_KEY).toBe("fallback-run-token");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

@@ -45,8 +45,8 @@ accepts it back on API requests.
   signature.
 
 **Status:** Partially implemented. The local adapter already passes
-`PAPERCLIP_API_URL`, `PAPERCLIP_AGENT_ID`, `PAPERCLIP_COMPANY_ID`. We need to
-add a `PAPERCLIP_API_KEY` (JWT) to the set of injected env vars.
+`STAPLER_API_URL`, `STAPLER_AGENT_ID`, `STAPLER_COMPANY_ID`. We need to
+add a `STAPLER_API_KEY` (JWT) to the set of injected env vars.
 
 ### Tier 2: CLI-Driven Key Exchange
 
@@ -199,7 +199,7 @@ On approval, the approver sets:
 
 | Priority | Item                              | Notes                                                                                            |
 | -------- | --------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **P0**   | Local adapter JWT injection       | Unblocks zero-config local auth. Mint a JWT per heartbeat, pass as `PAPERCLIP_API_KEY`.          |
+| **P0**   | Local adapter JWT injection       | Unblocks zero-config local auth. Mint a JWT per heartbeat, pass as `STAPLER_API_KEY`.          |
 | **P1**   | Invite link + onboarding endpoint | `POST /api/companies/:id/invites`, `GET /api/invite/:token`, `POST /api/invite/:token/register`. |
 | **P1**   | Approval flow                     | UI + API for reviewing and approving pending agent registrations.                                |
 | **P2**   | OpenClaw integration              | First real external agent onboarding via invite link.                                            |

@@ -23,10 +23,10 @@ const EMBEDDING_DIMS = 1536;
  * semantic search results. text-embedding-3-small produces values in
  * [−1, 1]; 0.25 catches semantically related content without too many
  * false positives in German-language corpora.
- * Override with PAPERCLIP_EMBEDDING_THRESHOLD env var.
+ * Override with STAPLER_EMBEDDING_THRESHOLD env var.
  */
 export function getEmbeddingThreshold(): number {
-  const raw = process.env.PAPERCLIP_EMBEDDING_THRESHOLD;
+  const raw = process.env.STAPLER_EMBEDDING_THRESHOLD;
   if (raw) {
     const n = Number.parseFloat(raw);
     if (Number.isFinite(n) && n >= -1 && n <= 1) return n;
@@ -124,10 +124,10 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 /**
  * Minimum cosine similarity required to adopt a neighbour's tags during
  * auto-tagging. 0.65 corresponds roughly to "same topic" with
- * text-embedding-3-small. Override via PAPERCLIP_AUTO_TAG_THRESHOLD.
+ * text-embedding-3-small. Override via STAPLER_AUTO_TAG_THRESHOLD.
  */
 export function getAutoTagThreshold(): number {
-  const raw = process.env.PAPERCLIP_AUTO_TAG_THRESHOLD;
+  const raw = process.env.STAPLER_AUTO_TAG_THRESHOLD;
   if (raw) {
     const n = Number.parseFloat(raw);
     if (Number.isFinite(n) && n >= 0 && n <= 1) return n;

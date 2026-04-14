@@ -20,7 +20,7 @@ score: 4/4 success criteria verified
 |---|-------|--------|----------|
 | 1 | POST /api/companies/:id/memories creates a shared memory accessible by all agents | VERIFIED | `server/src/routes/company-memories.ts` line 55: `router.post("/companies/:companyId/memories", ...)` calls `svc.save(...)` which inserts into `company_memories` table scoped to `companyId` only, not agent |
 | 2 | GET /api/companies/:id/memories returns all company-level memories (distinct from agent memories) | VERIFIED | `server/src/routes/company-memories.ts` line 15: `router.get("/companies/:companyId/memories", ...)` calls `svc.list({ companyId, ... })` which queries `company_memories` table, fully separate from `agent_memories` |
-| 3 | An Ollama agent can call `paperclip_list_company_memories` and receive the current shared memories list | VERIFIED | Tool defined in `PAPERCLIP_TOOLS` array (line 350-367 of tools.ts); executed at line 619-625 via GET to `/api/companies/:companyId/memories?limit=N`; result is returned directly to the model |
+| 3 | An Ollama agent can call `paperclip_list_company_memories` and receive the current shared memories list | VERIFIED | Tool defined in `STAPLER_TOOLS` array (line 350-367 of tools.ts); executed at line 619-625 via GET to `/api/companies/:companyId/memories?limit=N`; result is returned directly to the model |
 | 4 | A memory written by agent A is returned when agent B queries company memories in the same company | VERIFIED | Service scopes exclusively on `companyId` (no agent filter on reads); `save` stores `createdByAgentId` for attribution only — all agents in same company share the same pool |
 
 **Score:** 4/4 truths verified
@@ -34,7 +34,7 @@ score: 4/4 success criteria verified
 | `server/src/services/company-memories.ts` | VERIFIED | `save` (dedup via sha256 + ON CONFLICT DO NOTHING) and `list` (tag filter + pagination) fully implemented, 172 lines of substantive logic |
 | `server/src/routes/company-memories.ts` | VERIFIED | GET and POST handlers with input validation, auth check via `assertCompanyAccess`, error handling for `MemoryContentTooLargeError` |
 | `server/src/app.ts` | VERIFIED | `companyMemoryRoutes(db)` imported at line 17 and mounted at line 166 |
-| `packages/adapters/ollama-local/src/server/tools.ts` | VERIFIED | `paperclip_list_company_memories` tool in `PAPERCLIP_TOOLS` array and handled in `executePaperclipTool` switch at line 619-625 |
+| `packages/adapters/ollama-local/src/server/tools.ts` | VERIFIED | `paperclip_list_company_memories` tool in `STAPLER_TOOLS` array and handled in `executePaperclipTool` switch at line 619-625 |
 
 ### Key Link Verification
 
@@ -42,7 +42,7 @@ score: 4/4 success criteria verified
 |------|----|-----|--------|---------|
 | `companyMemoryRoutes` | `app.ts` | `api.use(companyMemoryRoutes(db))` | WIRED | Line 166 of app.ts |
 | `companyMemoryService` | `routes/company-memories.ts` | imported from `services/index.js` | WIRED | Line 3 and 13 of route file |
-| `companyMemories` schema | `services/company-memories.ts` | imported from `@paperclipai/db` | WIRED | Line 18 of service file |
+| `companyMemories` schema | `services/company-memories.ts` | imported from `@stapler/db` | WIRED | Line 18 of service file |
 | `paperclip_list_company_memories` tool | `executePaperclipTool` | switch case at line 619 | WIRED | Calls GET `/api/companies/:companyId/memories` |
 | `companyMemories` | `db/schema/index.ts` | `export { companyMemories }` | WIRED | Line 8 of schema index |
 

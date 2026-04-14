@@ -13,9 +13,9 @@ pnpm dev --bind tailnet
 
 Recommended behavior:
 
-- `PAPERCLIP_DEPLOYMENT_MODE=authenticated`
-- `PAPERCLIP_DEPLOYMENT_EXPOSURE=private`
-- `PAPERCLIP_BIND=tailnet`
+- `STAPLER_DEPLOYMENT_MODE=authenticated`
+- `STAPLER_DEPLOYMENT_EXPOSURE=private`
+- `STAPLER_BIND=tailnet`
 
 If you want the old broad private-network behavior instead, use:
 

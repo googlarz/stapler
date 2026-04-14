@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PaperclipApiClient } from "./client.js";
+import { StaplerApiClient } from "./client.js";
 import { createToolDefinitions } from "./tools.js";
 
 function makeClient() {
-  return new PaperclipApiClient({
+  return new StaplerApiClient({
     apiUrl: "http://localhost:3100/api",
     apiKey: "token-123",
     companyId: "11111111-1111-1111-1111-111111111111",
@@ -270,11 +270,11 @@ describe("paperclip MCP tools", () => {
       );
     });
 
-    it("memory tools throw a useful error when PAPERCLIP_AGENT_ID is not set", async () => {
+    it("memory tools throw a useful error when STAPLER_AGENT_ID is not set", async () => {
       const fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
 
-      const clientWithoutAgent = new PaperclipApiClient({
+      const clientWithoutAgent = new StaplerApiClient({
         apiUrl: "http://localhost:3100/api",
         apiKey: "token-123",
         companyId: "11111111-1111-1111-1111-111111111111",
@@ -287,7 +287,7 @@ describe("paperclip MCP tools", () => {
       if (!tool) throw new Error("missing tool");
 
       const response = await tool.execute({ content: "anything" });
-      expect(response.content[0]?.text).toContain("PAPERCLIP_AGENT_ID");
+      expect(response.content[0]?.text).toContain("STAPLER_AGENT_ID");
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });

@@ -29,14 +29,14 @@ score: 4/4 must-haves verified
 
 | Artifact                                                         | Expected                                           | Status   | Details                                                                                          |
 |------------------------------------------------------------------|----------------------------------------------------|----------|--------------------------------------------------------------------------------------------------|
-| `packages/adapters/ollama-local/src/server/tools.ts`            | Tool defs + handlers for delete_memory, create/update_goal | VERIFIED | All 3 tool schemas present in `PAPERCLIP_TOOLS` array; all 3 `case` branches present in `executePaperclipTool` switch |
+| `packages/adapters/ollama-local/src/server/tools.ts`            | Tool defs + handlers for delete_memory, create/update_goal | VERIFIED | All 3 tool schemas present in `STAPLER_TOOLS` array; all 3 `case` branches present in `executePaperclipTool` switch |
 | `packages/adapters/ollama-local/src/server/execute.ts` (~180)   | Memory injection block                             | VERIFIED | Lines 179-187 implement the injection guard matching Claude adapter behavior                     |
 
 ### Key Link Verification
 
 | From                         | To                         | Via                                       | Status   | Details                                                                         |
 |------------------------------|----------------------------|-------------------------------------------|----------|---------------------------------------------------------------------------------|
-| `PAPERCLIP_TOOLS` array      | `executePaperclipTool` switch | Tool name string matching (`case` branch) | WIRED    | `case "paperclip_delete_memory"`, `case "paperclip_create_goal"`, `case "paperclip_update_goal"` all present |
+| `STAPLER_TOOLS` array      | `executePaperclipTool` switch | Tool name string matching (`case` branch) | WIRED    | `case "paperclip_delete_memory"`, `case "paperclip_create_goal"`, `case "paperclip_update_goal"` all present |
 | `execute.ts agentMemoriesForInjection` | `systemPrompt`   | `## Relevant memories` prepend            | WIRED    | Guard `injectedMemories && injectedMemories.length > 0` at line 181; section constructed and appended at 182-186 |
 
 ### Requirements Coverage

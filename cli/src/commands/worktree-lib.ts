@@ -257,13 +257,13 @@ export function buildWorktreeEnvEntries(
   branding?: WorktreeUiBranding,
 ): Record<string, string> {
   return {
-    PAPERCLIP_HOME: paths.homeDir,
-    PAPERCLIP_INSTANCE_ID: paths.instanceId,
-    PAPERCLIP_CONFIG: paths.configPath,
-    PAPERCLIP_CONTEXT: paths.contextPath,
-    PAPERCLIP_IN_WORKTREE: "true",
-    ...(branding?.name ? { PAPERCLIP_WORKTREE_NAME: branding.name } : {}),
-    ...(branding?.color ? { PAPERCLIP_WORKTREE_COLOR: branding.color } : {}),
+    STAPLER_HOME: paths.homeDir,
+    STAPLER_INSTANCE_ID: paths.instanceId,
+    STAPLER_CONFIG: paths.configPath,
+    STAPLER_CONTEXT: paths.contextPath,
+    STAPLER_IN_WORKTREE: "true",
+    ...(branding?.name ? { STAPLER_WORKTREE_NAME: branding.name } : {}),
+    ...(branding?.color ? { STAPLER_WORKTREE_COLOR: branding.color } : {}),
   };
 }
 

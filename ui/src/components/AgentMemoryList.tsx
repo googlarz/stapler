@@ -4,7 +4,7 @@ import { BookOpen, Trash2 } from "lucide-react";
 import type {
   AgentMemory,
   AgentMemorySearchResult,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import { agentMemoriesApi } from "../api/agentMemories";
 import { queryKeys } from "../lib/queryKeys";
 import { expiresLabel, relativeTime } from "../lib/utils";

@@ -1,4 +1,4 @@
-import type { Issue } from "@paperclipai/shared";
+import type { Issue } from "@stapler/shared";
 
 export type IssueFilterState = {
   statuses: string[];

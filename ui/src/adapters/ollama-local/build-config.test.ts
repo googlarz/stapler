@@ -3,8 +3,8 @@ import {
   DEFAULT_OLLAMA_BASE_URL,
   DEFAULT_OLLAMA_MODEL,
   DEFAULT_OLLAMA_TIMEOUT_SEC,
-} from "@paperclipai/adapter-ollama-local";
-import { buildOllamaLocalConfig } from "@paperclipai/adapter-ollama-local/ui";
+} from "@stapler/adapter-ollama-local";
+import { buildOllamaLocalConfig } from "@stapler/adapter-ollama-local/ui";
 
 describe("buildOllamaLocalConfig", () => {
   it("uses Ollama-friendly defaults for create mode", () => {

@@ -1,6 +1,6 @@
 import type { UIAdapterModule } from "../types";
-import { parseOllamaStdoutLine } from "@paperclipai/adapter-ollama-local/ui";
-import { buildOllamaLocalConfig } from "@paperclipai/adapter-ollama-local/ui";
+import { parseOllamaStdoutLine } from "@stapler/adapter-ollama-local/ui";
+import { buildOllamaLocalConfig } from "@stapler/adapter-ollama-local/ui";
 import { OllamaLocalConfigFields } from "./config-fields";
 
 export const ollamaLocalUIAdapter: UIAdapterModule = {

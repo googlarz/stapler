@@ -44,13 +44,13 @@
 **Order:**
 1. Node.js built-in modules (e.g., `import fs from "node:fs"`)
 2. Third-party packages (e.g., `import { useState } from "react"`)
-3. Internal workspace packages (e.g., `import type { Agent } from "@paperclipai/shared"`)
+3. Internal workspace packages (e.g., `import type { Agent } from "@stapler/shared"`)
 4. Relative imports from same package (e.g., `import { useDialog } from "../context/DialogContext"`)
 
 **Path Aliases:**
 - UI: `@/*` resolves to `./src/` (e.g., `import { Button } from "@/components/ui/button"`)
 - CLI: No path aliases used; relative paths
-- Shared: Standard imports with package name (e.g., `import { ... } from "@paperclipai/shared"`)
+- Shared: Standard imports with package name (e.g., `import { ... } from "@stapler/shared"`)
 
 ## Error Handling
 

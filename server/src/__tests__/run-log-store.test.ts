@@ -24,7 +24,7 @@ describe("run log store", () => {
         ts: "2026-04-13T00:00:00.000Z",
         chunk: [
           "starting run",
-          `PAPERCLIP_API_KEY=${apiKey}`,
+          `STAPLER_API_KEY=${apiKey}`,
           `Authorization: Bearer ${bearer}`,
           "finished run",
         ].join("\n"),
@@ -35,7 +35,7 @@ describe("run log store", () => {
       const entry = JSON.parse(line!) as { chunk: string };
 
       expect(entry.chunk).toContain("starting run");
-      expect(entry.chunk).toContain(`PAPERCLIP_API_KEY=${RUN_LOG_CREDENTIAL_REDACTION_TOKEN}`);
+      expect(entry.chunk).toContain(`STAPLER_API_KEY=${RUN_LOG_CREDENTIAL_REDACTION_TOKEN}`);
       expect(entry.chunk).toContain(`Authorization: Bearer ${RUN_LOG_CREDENTIAL_REDACTION_TOKEN}`);
       expect(entry.chunk).toContain("finished run");
       expect(result.content).not.toContain(apiKey);

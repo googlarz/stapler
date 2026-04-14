@@ -5,7 +5,7 @@ import {
   type PluginEvent,
   type PluginJobContext,
   type PluginWebhookInput,
-} from "@paperclipai/plugin-sdk";
+} from "@stapler/plugin-sdk";
 import { SlackClient } from "./slack-client.js";
 import { WEBHOOK_KEY, JOB_KEY } from "./manifest.js";
 

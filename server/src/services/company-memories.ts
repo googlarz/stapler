@@ -9,7 +9,7 @@
  * for the same company is a no-op (ON CONFLICT DO NOTHING) and returns the
  * existing row.
  *
- * Content size: enforced at the service layer via `PAPERCLIP_MEMORY_MAX_CONTENT_BYTES`
+ * Content size: enforced at the service layer via `STAPLER_MEMORY_MAX_CONTENT_BYTES`
  * (default 4096 bytes). Callers receive `MemoryContentTooLargeError` when exceeded.
  */
 import { createHash } from "node:crypto";
@@ -23,8 +23,8 @@ import {
 
 /** pg_trgm similarity threshold for company memory search (mirrors agent memory default). */
 const DEFAULT_SEARCH_THRESHOLD = 0.1;
-import type { Db } from "@paperclipai/db";
-import { companyMemories } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
+import { companyMemories } from "@stapler/db";
 import { MemoryContentTooLargeError } from "./agent-memories.js";
 
 export { MemoryContentTooLargeError };
@@ -95,7 +95,7 @@ export function companyMemoryService(db: Db) {
       }
       const contentBytes = Buffer.byteLength(trimmed, "utf8");
       const maxContentBytes = readPositiveInt(
-        "PAPERCLIP_MEMORY_MAX_CONTENT_BYTES",
+        "STAPLER_MEMORY_MAX_CONTENT_BYTES",
         DEFAULT_MAX_CONTENT_BYTES,
       );
       if (contentBytes > maxContentBytes) {
@@ -339,7 +339,7 @@ export function companyMemoryService(db: Db) {
     }): Promise<CompanyMemory> => {
       const trimmed = input.content.trim();
       if (trimmed.length === 0) throw new Error("content cannot be empty after trimming");
-      const maxContentBytes = readPositiveInt("PAPERCLIP_MEMORY_MAX_CONTENT_BYTES", DEFAULT_MAX_CONTENT_BYTES);
+      const maxContentBytes = readPositiveInt("STAPLER_MEMORY_MAX_CONTENT_BYTES", DEFAULT_MAX_CONTENT_BYTES);
       const contentBytes = Buffer.byteLength(trimmed, "utf8");
       if (contentBytes > maxContentBytes) throw new MemoryContentTooLargeError(contentBytes, maxContentBytes);
       const contentHash = hashContent(trimmed);

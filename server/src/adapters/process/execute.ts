@@ -1,4 +1,4 @@
-import { DEFAULT_ADAPTER_TIMEOUT_SEC } from "@paperclipai/shared";
+import { DEFAULT_ADAPTER_TIMEOUT_SEC } from "@stapler/shared";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "../types.js";
 import {
   asString,
@@ -21,14 +21,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const cwd = asString(config.cwd, process.cwd());
   const envConfig = parseObject(config.env);
   const hasExplicitApiKey =
-    typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
+    typeof envConfig.STAPLER_API_KEY === "string" && envConfig.STAPLER_API_KEY.trim().length > 0;
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   for (const [k, v] of Object.entries(envConfig)) {
     if (typeof v === "string") env[k] = v;
   }
-  env.PAPERCLIP_RUN_ID = runId;
+  env.STAPLER_RUN_ID = runId;
   if (!hasExplicitApiKey && typeof authToken === "string" && authToken.trim().length > 0) {
-    env.PAPERCLIP_API_KEY = authToken;
+    env.STAPLER_API_KEY = authToken;
   }
   const runtimeEnv = ensurePathInEnv({ ...process.env, ...env });
   const resolvedCommand = await resolveCommandForLogs(command, cwd, runtimeEnv);

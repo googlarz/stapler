@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { CompanySecret, EnvBinding } from "@paperclipai/shared";
+import type { CompanySecret, EnvBinding } from "@stapler/shared";
 import { X } from "lucide-react";
 import { cn } from "../lib/utils";
 
@@ -245,7 +245,7 @@ export function EnvVarEditor({
       })}
       {sealError && <p className="text-[11px] text-destructive">{sealError}</p>}
       <p className="text-[11px] text-muted-foreground/60">
-        PAPERCLIP_* variables are injected automatically at runtime.
+        STAPLER_* variables are injected automatically at runtime.
       </p>
     </div>
   );

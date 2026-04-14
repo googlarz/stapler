@@ -2,7 +2,7 @@ import type {
   AgentMemory,
   AgentMemorySaveResult,
   AgentMemorySearchResult,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import { api } from "./client";
 
 export interface AgentMemoryListResponse {

@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentMemory } from "@paperclipai/shared";
+import type { AgentMemory } from "@stapler/shared";
 import { AgentMemoryList } from "./AgentMemoryList";
 
 const mockAgentMemoriesApi = vi.hoisted(() => ({

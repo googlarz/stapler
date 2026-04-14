@@ -57,7 +57,7 @@ const mockRoutineService = vi.hoisted(() => ({
   syncRunStatusForIssue: vi.fn(async () => undefined),
 }));
 
-vi.mock("@paperclipai/shared/telemetry", () => ({
+vi.mock("@stapler/shared/telemetry", () => ({
   trackAgentTaskCompleted: vi.fn(),
   trackErrorHandlerCrash: vi.fn(),
 }));

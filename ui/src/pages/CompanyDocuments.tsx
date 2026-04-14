@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CompanyDocument } from "@paperclipai/shared";
+import type { CompanyDocument } from "@stapler/shared";
 import { FileText, History, Plus, Save, Trash2 } from "lucide-react";
 import { useNavigate, useParams } from "@/lib/router";
 import { Button } from "@/components/ui/button";

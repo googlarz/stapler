@@ -7,7 +7,7 @@ import {
   type LinkedIssueSnapshot,
 } from "../lib/goal-verification-prompt.ts";
 import { hasCompletedLinkedWorkForVerification as hasCompletedLinkedWorkForVerificationService } from "../services/goal-verification.ts";
-import type { GoalAcceptanceCriterion } from "@paperclipai/shared";
+import type { GoalAcceptanceCriterion } from "@stapler/shared";
 
 const SAMPLE_CRITERIA: GoalAcceptanceCriterion[] = [
   { id: "c-1", text: "Landing page is live at example.com", required: true, order: 0 },

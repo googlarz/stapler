@@ -85,7 +85,7 @@ const mockLogActivity = vi.hoisted(() => vi.fn());
 const mockTrackRoutineCreated = vi.hoisted(() => vi.fn());
 const mockGetTelemetryClient = vi.hoisted(() => vi.fn());
 
-vi.mock("@paperclipai/shared/telemetry", () => ({
+vi.mock("@stapler/shared/telemetry", () => ({
   trackRoutineCreated: mockTrackRoutineCreated,
   trackErrorHandlerCrash: vi.fn(),
 }));

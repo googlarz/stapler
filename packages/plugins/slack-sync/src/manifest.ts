@@ -1,4 +1,4 @@
-import type { PaperclipPluginManifestV1 } from "@paperclipai/plugin-sdk";
+import type { PaperclipPluginManifestV1 } from "@stapler/plugin-sdk";
 
 export const PLUGIN_ID = "paperclip.slack-sync";
 export const PLUGIN_VERSION = "0.1.0";

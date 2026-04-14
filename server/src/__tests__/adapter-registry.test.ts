@@ -242,15 +242,15 @@ describe("server adapter registry", () => {
     expect(patchedCtx.agent.adapterConfig).toMatchObject({
       env: {
         OPENAI_API_KEY: "llm-token",
-        PAPERCLIP_API_KEY: "agent-run-jwt",
-        PAPERCLIP_RUN_ID: "run-123",
+        STAPLER_API_KEY: "agent-run-jwt",
+        STAPLER_RUN_ID: "run-123",
       },
     });
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toContain(
-      "Authorization: Bearer $PAPERCLIP_API_KEY",
+      "Authorization: Bearer $STAPLER_API_KEY",
     );
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toContain(
-      "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID",
+      "X-Paperclip-Run-Id: $STAPLER_RUN_ID",
     );
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toContain("Existing prompt");
   });
@@ -267,7 +267,7 @@ describe("server adapter registry", () => {
         adapterType: "hermes_local",
         adapterConfig: {
           env: {
-            PAPERCLIP_API_KEY: "server-level-key",
+            STAPLER_API_KEY: "server-level-key",
           },
           promptTemplate: "Existing prompt",
         },
@@ -299,8 +299,8 @@ describe("server adapter registry", () => {
         adapterType: "hermes_local",
         adapterConfig: {
           env: {
-            PAPERCLIP_API_KEY: "explicit-agent-key",
-            PAPERCLIP_RUN_ID: "stale-run-id",
+            STAPLER_API_KEY: "explicit-agent-key",
+            STAPLER_RUN_ID: "stale-run-id",
           },
         },
       },
@@ -314,8 +314,8 @@ describe("server adapter registry", () => {
     });
 
     const [patchedCtx] = hermesExecuteMock.mock.calls[0];
-    expect(patchedCtx.agent.adapterConfig.env.PAPERCLIP_API_KEY).toBe("explicit-agent-key");
-    expect(patchedCtx.agent.adapterConfig.env.PAPERCLIP_RUN_ID).toBe("run-123");
+    expect(patchedCtx.agent.adapterConfig.env.STAPLER_API_KEY).toBe("explicit-agent-key");
+    expect(patchedCtx.agent.adapterConfig.env.STAPLER_RUN_ID).toBe("run-123");
     // No custom promptTemplate was set — Hermes must use its built-in default.
     // Setting promptTemplate here would replace the full default with just the auth guard text,
     // stripping assigned issue / workflow instructions.
@@ -348,6 +348,6 @@ describe("server adapter registry", () => {
     // promptTemplate must remain unset so Hermes uses its built-in heartbeat/task prompt.
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toBeUndefined();
     // Auth token is still injected.
-    expect(patchedCtx.agent.adapterConfig.env.PAPERCLIP_API_KEY).toBe("agent-run-jwt");
+    expect(patchedCtx.agent.adapterConfig.env.STAPLER_API_KEY).toBe("agent-run-jwt");
   });
 });

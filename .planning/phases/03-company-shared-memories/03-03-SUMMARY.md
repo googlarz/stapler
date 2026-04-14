@@ -9,7 +9,7 @@ requires:
     provides: company_memories DB table, companyMemoryService, GET /api/companies/:companyId/memories endpoint
 
 provides:
-  - Ollama tool definition for paperclip_list_company_memories in PAPERCLIP_TOOLS array
+  - Ollama tool definition for paperclip_list_company_memories in STAPLER_TOOLS array
   - executePaperclipTool case that calls GET /api/companies/:companyId/memories with clamped limit
 
 affects:
@@ -30,7 +30,7 @@ key-decisions:
   - "limit clamped to 1-200 with default 50 (generous but bounded — consistent with list_issues pattern)"
 
 patterns-established:
-  - "List tool pattern: add definition to PAPERCLIP_TOOLS, add matching case to executePaperclipTool switch"
+  - "List tool pattern: add definition to STAPLER_TOOLS, add matching case to executePaperclipTool switch"
 
 requirements-completed:
   - MEMORY-03
@@ -41,7 +41,7 @@ completed: 2026-04-13
 
 # Phase 03 Plan 03: Company Shared Memories — Ollama Tool Summary
 
-**Ollama `paperclip_list_company_memories` tool wired end-to-end: PAPERCLIP_TOOLS definition + executePaperclipTool case calling GET /api/companies/:companyId/memories**
+**Ollama `paperclip_list_company_memories` tool wired end-to-end: STAPLER_TOOLS definition + executePaperclipTool case calling GET /api/companies/:companyId/memories**
 
 ## Performance
 
@@ -53,7 +53,7 @@ completed: 2026-04-13
 
 ## Accomplishments
 
-- Added `paperclip_list_company_memories` entry to PAPERCLIP_TOOLS with clear LLM-facing description and optional `limit` parameter
+- Added `paperclip_list_company_memories` entry to STAPLER_TOOLS with clear LLM-facing description and optional `limit` parameter
 - Added executor `case` in `executePaperclipTool` that clamps limit to 1–200 (default 50) and GETs `/api/companies/:companyId/memories`
 - TypeScript compiles cleanly with no errors
 

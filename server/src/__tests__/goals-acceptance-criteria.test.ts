@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { goalAcceptanceCriterionSchema, createGoalSchema } from "@paperclipai/shared";
+import { goalAcceptanceCriterionSchema, createGoalSchema } from "@stapler/shared";
 import { goalService } from "../services/goals.ts";
 
 describe("goalAcceptanceCriterionSchema", () => {

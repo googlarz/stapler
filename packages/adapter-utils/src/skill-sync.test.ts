@@ -311,7 +311,7 @@ describe("readPaperclipSkillMarkdown", () => {
     await fs.writeFile(path.join(skillDir, "SKILL.md"), "# My Skill\nDoes stuff.");
 
     // readPaperclipSkillMarkdown needs to find the skill via listPaperclipSkillEntries
-    // which resolves from moduleDir using PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES.
+    // which resolves from moduleDir using STAPLER_SKILL_ROOT_RELATIVE_CANDIDATES.
     // We can't pass additionalCandidates to readPaperclipSkillMarkdown directly,
     // but we CAN use tmpDir as the moduleDir so "../../skills" might not exist —
     // however, listPaperclipSkillEntries auto-discovers from moduleDir/../../skills etc.

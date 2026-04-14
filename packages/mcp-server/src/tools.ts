@@ -7,8 +7,8 @@ import {
   updateIssueSchema,
   upsertIssueDocumentSchema,
   linkIssueApprovalSchema,
-} from "@paperclipai/shared";
-import { PaperclipApiClient } from "./client.js";
+} from "@stapler/shared";
+import { StaplerApiClient } from "./client.js";
 import { formatErrorResponse, formatTextResponse } from "./format.js";
 
 export interface ToolDefinition {
@@ -129,7 +129,7 @@ const apiRequestSchema = z.object({
 // the server would reject cross-agent calls anyway (see
 // `assertAgentIdentity` in `server/src/routes/authz.ts`). The tools
 // resolve the target agent from `client.resolveAgentId()`, which
-// reads `PAPERCLIP_AGENT_ID` from the MCP config and throws if
+// reads `STAPLER_AGENT_ID` from the MCP config and throws if
 // missing — same pattern as the existing `paperclipMe` tool.
 
 const memorySaveSchema = z.object({
@@ -167,7 +167,7 @@ const memoryDeleteSchema = z.object({
   id: z.string().uuid(),
 });
 
-export function createToolDefinitions(client: PaperclipApiClient): ToolDefinition[] {
+export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[] {
   return [
     makeTool(
       "me",

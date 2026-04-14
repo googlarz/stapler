@@ -54,7 +54,7 @@ my-adapter/
     "build": "tsc"
   },
   "dependencies": {
-    "@paperclipai/adapter-utils": "^2026.325.0",
+    "@stapler/adapter-utils": "^2026.325.0",
     "picocolors": "^1.1.0"
   },
   "devDependencies": {
@@ -118,7 +118,7 @@ export { createServerAdapter } from "./server/index.js";
 ### src/server/index.ts
 
 ```ts
-import type { ServerAdapterModule } from "@paperclipai/adapter-utils";
+import type { ServerAdapterModule } from "@stapler/adapter-utils";
 import { type, models, agentConfigurationDoc } from "../index.js";
 import { execute } from "./execute.js";
 import { testEnvironment } from "./test.js";
@@ -142,13 +142,13 @@ The core execution function. Receives an `AdapterExecutionContext` and returns a
 import type {
   AdapterExecutionContext,
   AdapterExecutionResult,
-} from "@paperclipai/adapter-utils";
+} from "@stapler/adapter-utils";
 
 import {
   runChildProcess,
   buildPaperclipEnv,
   renderTemplate,
-} from "@paperclipai/adapter-utils/server-utils";
+} from "@stapler/adapter-utils/server-utils";
 
 export async function execute(
   ctx: AdapterExecutionContext,
@@ -196,12 +196,12 @@ export async function execute(
 }
 ```
 
-#### Available Helpers from `@paperclipai/adapter-utils`
+#### Available Helpers from `@stapler/adapter-utils`
 
 | Helper | Purpose |
 |--------|---------|
 | `runChildProcess(command, opts)` | Spawn a child process with timeout, grace period, and streaming callbacks |
-| `buildPaperclipEnv(agent)` | Inject `PAPERCLIP_*` environment variables |
+| `buildPaperclipEnv(agent)` | Inject `STAPLER_*` environment variables |
 | `renderTemplate(template, data)` | `{{variable}}` substitution in prompt templates |
 | `asString(v)`, `asNumber(v)`, `asBoolean(v)` | Safe config value extraction |
 
@@ -213,7 +213,7 @@ Validates the adapter configuration before running. Returns structured diagnosti
 import type {
   AdapterEnvironmentTestContext,
   AdapterEnvironmentTestResult,
-} from "@paperclipai/adapter-utils";
+} from "@stapler/adapter-utils";
 
 export async function testEnvironment(
   ctx: AdapterEnvironmentTestContext,
@@ -301,7 +301,7 @@ For development, you can also edit `~/.paperclip/adapter-plugins.json` directly:
 If your agent runtime supports sessions (conversation continuity across heartbeats), implement a session codec:
 
 ```ts
-import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
+import type { AdapterSessionCodec } from "@stapler/adapter-utils";
 
 export const sessionCodec: AdapterSessionCodec = {
   deserialize(raw) {

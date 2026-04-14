@@ -53,7 +53,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import { CircleDot, Plus, ArrowUpDown, Layers, Check, ChevronRight, List, Columns3, User, Search } from "lucide-react";
 import { KanbanBoard } from "./KanbanBoard";
 import { buildIssueTree, countDescendants } from "../lib/issue-tree";
-import type { Issue, Project } from "@paperclipai/shared";
+import type { Issue, Project } from "@stapler/shared";
 const ISSUE_SEARCH_DEBOUNCE_MS = 150;
 
 /* ── View state ── */

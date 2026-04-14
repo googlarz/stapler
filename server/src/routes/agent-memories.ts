@@ -1,9 +1,9 @@
 import { Router } from "express";
-import type { Db } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
 import {
   createAgentMemorySchema,
   listAgentMemoriesQuerySchema,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import { validate } from "../middleware/validate.js";
 import {
   agentMemoryService,

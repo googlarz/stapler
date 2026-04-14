@@ -3,13 +3,13 @@ import type { IncomingHttpHeaders } from "node:http";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { toNodeHandler } from "better-auth/node";
-import type { Db } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
 import {
   authAccounts,
   authSessions,
   authUsers,
   authVerifications,
-} from "@paperclipai/db";
+} from "@stapler/db";
 import type { Config } from "../config.js";
 
 export type BetterAuthSessionUser = {
@@ -69,14 +69,14 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins?
   const baseUrl = config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined;
   const secret =
     process.env.BETTER_AUTH_SECRET?.trim() ??
-    process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim() ??
+    process.env.STAPLER_AGENT_JWT_SECRET?.trim() ??
     "";
   if (!secret) {
-    throw new Error("BETTER_AUTH_SECRET or PAPERCLIP_AGENT_JWT_SECRET must be set for authenticated mode");
+    throw new Error("BETTER_AUTH_SECRET or STAPLER_AGENT_JWT_SECRET must be set for authenticated mode");
   }
   const effectiveTrustedOrigins = trustedOrigins ?? deriveAuthTrustedOrigins(config);
 
-  const publicUrl = process.env.PAPERCLIP_PUBLIC_URL ?? baseUrl;
+  const publicUrl = process.env.STAPLER_PUBLIC_URL ?? baseUrl;
   const isHttpOnly = publicUrl ? publicUrl.startsWith("http://") : false;
 
   const authConfig = {

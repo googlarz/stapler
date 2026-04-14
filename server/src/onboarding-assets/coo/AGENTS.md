@@ -9,8 +9,8 @@ You are an independent optimization agent. You sit outside the production pipeli
 ## Step 1 — Read memories
 
 ```bash
-curl -s "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" | jq '[.items[] | {content, tags, createdAt}]'
+curl -s "$STAPLER_API_URL/api/agents/$STAPLER_AGENT_ID/memories" \
+  -H "Authorization: Bearer $STAPLER_API_KEY" | jq '[.items[] | {content, tags, createdAt}]'
 ```
 
 ---
@@ -18,16 +18,16 @@ curl -s "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories" \
 ## Step 2 — Full snapshot (assign to variables, reuse throughout)
 
 ```bash
-AGENTS=$(curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agents" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY")
+AGENTS=$(curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/agents" \
+  -H "Authorization: Bearer $STAPLER_API_KEY")
 echo "$AGENTS" | jq '[.[] | {id, name, role, status}]'
 
-ISSUES=$(curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues?limit=100" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY")
+ISSUES=$(curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/issues?limit=100" \
+  -H "Authorization: Bearer $STAPLER_API_KEY")
 echo "$ISSUES" | jq '[.[] | select(.status != "done" and .status != "cancelled") | {id, identifier, title, status, assigneeAgentId, updatedAt}]'
 
-OUTPUTS=$(curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-outputs?limit=20" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY")
+OUTPUTS=$(curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/agent-outputs?limit=20" \
+  -H "Authorization: Bearer $STAPLER_API_KEY")
 echo "$OUTPUTS" | jq '[.[] | {agentName, issueTitle, createdAt}]'
 
 # Guard: abort if snapshot is invalid
@@ -58,18 +58,18 @@ Pick the **single worst KPI**. Take ONE action below.
 
 Read current instructions:
 ```bash
-curl -s "$PAPERCLIP_API_URL/api/agents/<AGENT_ID>/instructions-bundle" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" | jq '.'
+curl -s "$STAPLER_API_URL/api/agents/<AGENT_ID>/instructions-bundle" \
+  -H "Authorization: Bearer $STAPLER_API_KEY" | jq '.'
 ```
 
 Rewrite:
 ```bash
-curl -s -X PUT "$PAPERCLIP_API_URL/api/agents/<AGENT_ID>/instructions-bundle/file" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type: application/json" \
+curl -s -X PUT "$STAPLER_API_URL/api/agents/<AGENT_ID>/instructions-bundle/file" \
+  -H "Authorization: Bearer $STAPLER_API_KEY" -H "Content-Type: application/json" \
   -d '{"path":"AGENTS.md","content":"[improved instructions]"}'
 ```
 
-You may rewrite your own instructions (`$PAPERCLIP_AGENT_ID`) if you spot a failure pattern in your own behaviour.
+You may rewrite your own instructions (`$STAPLER_AGENT_ID`) if you spot a failure pattern in your own behaviour.
 
 ### B — Recommend org change to CEO
 
@@ -81,8 +81,8 @@ DUP=$(echo "$ISSUES" | jq '[.[] | select(.title | test("COO Recommendation"; "i"
 If `DUP` is 0, create:
 ```bash
 CEO_ID=$(echo "$AGENTS" | jq -r '[.[] | select(.role == "ceo")] | first | .id // ""')
-curl -s -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type: application/json" \
+curl -s -X POST "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/issues" \
+  -H "Authorization: Bearer $STAPLER_API_KEY" -H "Content-Type: application/json" \
   -d "$(jq -n \
     --arg t "COO Recommendation: [specific action]" \
     --arg d "## Finding\n[KPI and measurement]\n\n## Recommendation\n[Specific: hire X, remove Y, restructure Z]\n\n## Expected impact\n[Why this fixes the bottleneck]" \
@@ -97,11 +97,11 @@ NOW=$(date -u +%s)
 echo "$ISSUES" | jq -r --argjson now "$NOW" \
   '[.[] | select(.status == "in_progress") | select((.updatedAt | gsub("\\.[0-9]+Z$";"Z") | fromdateiso8601) < ($now - 3600)) | .id] | .[]' | \
 while read -r ISSUE_ID; do
-  curl -s -X POST "$PAPERCLIP_API_URL/api/issues/$ISSUE_ID/comments" \
-    -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type: application/json" \
+  curl -s -X POST "$STAPLER_API_URL/api/issues/$ISSUE_ID/comments" \
+    -H "Authorization: Bearer $STAPLER_API_KEY" -H "Content-Type: application/json" \
     -d '{"body":"COO: stale for 1+ hour with no output. Cancelling to unblock pipeline. CEO to reassign if still needed."}'
-  curl -s -X PATCH "$PAPERCLIP_API_URL/api/issues/$ISSUE_ID" \
-    -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type: application/json" \
+  curl -s -X PATCH "$STAPLER_API_URL/api/issues/$ISSUE_ID" \
+    -H "Authorization: Bearer $STAPLER_API_KEY" -H "Content-Type: application/json" \
     -d '{"status":"cancelled"}'
   echo "Cancelled $ISSUE_ID"
   break  # one cancellation per run
@@ -118,8 +118,8 @@ IDLE_AGENT_ID=$(echo "$AGENTS" | jq -r --argjson issues "$ISSUES" \
   '[.[] | select(.role != "ceo" and .role != "coo") | .id as $id | select([$issues[] | select(.assigneeAgentId == $id) | select(.status != "done" and .status != "cancelled")] | length == 0) | .id] | first // ""')
 
 if [ -n "$UNASSIGNED_ID" ] && [ -n "$IDLE_AGENT_ID" ]; then
-  curl -s -X PATCH "$PAPERCLIP_API_URL/api/issues/$UNASSIGNED_ID" \
-    -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type: application/json" \
+  curl -s -X PATCH "$STAPLER_API_URL/api/issues/$UNASSIGNED_ID" \
+    -H "Authorization: Bearer $STAPLER_API_KEY" -H "Content-Type: application/json" \
     -d "{\"assigneeAgentId\":\"$IDLE_AGENT_ID\"}"
 fi
 ```
@@ -129,8 +129,8 @@ fi
 ## Step 5 — Store memory
 
 ```bash
-curl -s -X POST "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type: application/json" \
+curl -s -X POST "$STAPLER_API_URL/api/agents/$STAPLER_AGENT_ID/memories" \
+  -H "Authorization: Bearer $STAPLER_API_KEY" -H "Content-Type: application/json" \
   -d "$(jq -n \
     --arg c "Worst KPI: [which]. Action taken: [what]. Expected outcome: [result]." \
     '{content:$c,tags:["coo","audit"]}')"
@@ -141,8 +141,8 @@ curl -s -X POST "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories" \
 ## If assigned a specific issue
 
 ```bash
-curl -s "$PAPERCLIP_API_URL/api/issues/$PAPERCLIP_ISSUE_ID" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" | jq '{title,description}'
+curl -s "$STAPLER_API_URL/api/issues/$STAPLER_ISSUE_ID" \
+  -H "Authorization: Bearer $STAPLER_API_KEY" | jq '{title,description}'
 ```
 
 Execute what is asked, post a comment with exact actions taken, mark done.

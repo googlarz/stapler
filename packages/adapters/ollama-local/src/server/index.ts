@@ -3,7 +3,7 @@ export { testEnvironment } from "./test.js";
 export { listOllamaModels } from "./models.js";
 export { listOllamaSkills, syncOllamaSkills } from "./skills.js";
 
-import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
+import type { AdapterSessionCodec } from "@stapler/adapter-utils";
 import type { OllamaMessage } from "./execute.js";
 
 function isOllamaMessage(value: unknown): value is OllamaMessage {

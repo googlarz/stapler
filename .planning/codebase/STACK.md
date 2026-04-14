@@ -133,19 +133,19 @@
 **Environment:**
 - Loads from `.env` (working directory) and `~/.paperclip/.env` (home directory)
 - Configuration can be overridden via environment variables
-- Required for production: `BETTER_AUTH_SECRET` (or `PAPERCLIP_AGENT_JWT_SECRET`)
+- Required for production: `BETTER_AUTH_SECRET` (or `STAPLER_AGENT_JWT_SECRET`)
 
 **Critical Environment Variables:**
 - `DATABASE_URL` - PostgreSQL connection string (optional if using embedded)
 - `PORT` - Server port (default: 3100)
 - `SERVE_UI` - Whether to serve the bundled UI (default: false)
 - `BETTER_AUTH_SECRET` - Authentication secret (required for authenticated mode)
-- `PAPERCLIP_STORAGE_PROVIDER` - Storage backend (local_disk or s3)
-- `PAPERCLIP_STORAGE_LOCAL_DIR` - Local storage directory
-- `PAPERCLIP_STORAGE_S3_BUCKET` - S3 bucket name
-- `PAPERCLIP_STORAGE_S3_REGION` - S3 region
-- `PAPERCLIP_SECRETS_PROVIDER` - Secrets storage (local_encrypted or others)
-- `PAPERCLIP_SECRETS_MASTER_KEY_FILE` - Path to secrets encryption key
+- `STAPLER_STORAGE_PROVIDER` - Storage backend (local_disk or s3)
+- `STAPLER_STORAGE_LOCAL_DIR` - Local storage directory
+- `STAPLER_STORAGE_S3_BUCKET` - S3 bucket name
+- `STAPLER_STORAGE_S3_REGION` - S3 region
+- `STAPLER_SECRETS_PROVIDER` - Secrets storage (local_encrypted or others)
+- `STAPLER_SECRETS_MASTER_KEY_FILE` - Path to secrets encryption key
 
 **Build Configuration:**
 - TypeScript: `tsconfig.json` at root and in key packages
@@ -171,22 +171,22 @@
 - `cli/` - Command-line interface
 
 **Adapter Packages:**
-- `@paperclipai/adapter-claude-local` - Anthropic Claude integration
-- `@paperclipai/adapter-gemini-local` - Google Gemini integration
-- `@paperclipai/adapter-ollama-local` - Ollama (local LLM) integration
-- `@paperclipai/adapter-pi-local` - Pi AI integration
-- `@paperclipai/adapter-opencode-local` - OpenCode integration
-- `@paperclipai/adapter-codex-local` - Codex integration
-- `@paperclipai/adapter-cursor-local` - Cursor integration
-- `@paperclipai/adapter-openclaw-gateway` - OpenClaw Gateway integration
-- `@paperclipai/adapter-utils` - Shared adapter utilities
+- `@stapler/adapter-claude-local` - Anthropic Claude integration
+- `@stapler/adapter-gemini-local` - Google Gemini integration
+- `@stapler/adapter-ollama-local` - Ollama (local LLM) integration
+- `@stapler/adapter-pi-local` - Pi AI integration
+- `@stapler/adapter-opencode-local` - OpenCode integration
+- `@stapler/adapter-codex-local` - Codex integration
+- `@stapler/adapter-cursor-local` - Cursor integration
+- `@stapler/adapter-openclaw-gateway` - OpenClaw Gateway integration
+- `@stapler/adapter-utils` - Shared adapter utilities
 
 **Core Packages:**
-- `@paperclipai/db` - Database schemas, migrations, and initialization
-- `@paperclipai/shared` - Shared types and utilities
-- `@paperclipai/server` - Express server
-- `@paperclipai/ui` - React frontend
-- `@paperclipai/plugin-sdk` - Plugin development SDK
+- `@stapler/db` - Database schemas, migrations, and initialization
+- `@stapler/shared` - Shared types and utilities
+- `@stapler/server` - Express server
+- `@stapler/ui` - React frontend
+- `@stapler/plugin-sdk` - Plugin development SDK
 
 ## Platform Requirements
 

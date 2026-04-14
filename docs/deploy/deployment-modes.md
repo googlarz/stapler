@@ -84,5 +84,5 @@ pnpm paperclipai configure --section server
 Runtime override via environment variable:
 
 ```sh
-PAPERCLIP_DEPLOYMENT_MODE=authenticated PAPERCLIP_BIND=lan pnpm paperclipai run
+STAPLER_DEPLOYMENT_MODE=authenticated STAPLER_BIND=lan pnpm paperclipai run
 ```

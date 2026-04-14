@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { agents, goals, type Db } from "@paperclipai/db";
+import { agents, goals, type Db } from "@stapler/db";
 import { and, eq } from "drizzle-orm";
-import { createGoalSchema, updateGoalSchema } from "@paperclipai/shared";
-import { trackGoalCreated } from "@paperclipai/shared/telemetry";
+import { createGoalSchema, updateGoalSchema } from "@stapler/shared";
+import { trackGoalCreated } from "@stapler/shared/telemetry";
 import { validate } from "../middleware/validate.js";
 import {
   goalService,

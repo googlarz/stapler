@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { isClaudeMaxTurnsResult } from "@paperclipai/adapter-claude-local/server";
-import { parseClaudeStdoutLine } from "@paperclipai/adapter-claude-local/ui";
-import { printClaudeStreamEvent } from "@paperclipai/adapter-claude-local/cli";
+import { isClaudeMaxTurnsResult } from "@stapler/adapter-claude-local/server";
+import { parseClaudeStdoutLine } from "@stapler/adapter-claude-local/ui";
+import { printClaudeStreamEvent } from "@stapler/adapter-claude-local/cli";
 
 describe("claude_local max-turn detection", () => {
   it("detects max-turn exhaustion by subtype", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RoutineTrigger } from "@paperclipai/shared";
+import type { RoutineTrigger } from "@stapler/shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

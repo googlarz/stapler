@@ -19,8 +19,8 @@
  *
  * Returns an empty array when `agent.config.enableMemoryInjection !== true`.
  */
-import type { Db } from "@paperclipai/db";
-import type { InjectedMemory } from "@paperclipai/shared";
+import type { Db } from "@stapler/db";
+import type { InjectedMemory } from "@stapler/shared";
 import { agentMemoryService } from "./agent-memories.js";
 import { companyMemoryService } from "./company-memories.js";
 import { logActivity } from "./activity-log.js";

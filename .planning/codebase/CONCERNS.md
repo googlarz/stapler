@@ -46,7 +46,7 @@
 - Fix approach: Implement cross-run process group tracking with guaranteed cleanup on boot; add metrics for orphan detection rate
 
 **Race condition in memory count on concurrent saves:**
-- Symptoms: Agent memory count exceeds `PAPERCLIP_MEMORY_MAX_PER_AGENT` after concurrent inserts
+- Symptoms: Agent memory count exceeds `STAPLER_MEMORY_MAX_PER_AGENT` after concurrent inserts
 - Files: `server/src/services/agent-memories.ts` (lines 164-237)
 - Trigger: Two rapid parallel saves to same agent before either prune completes
 - Workaround: `pg_advisory_xact_lock` serializes saves within a transaction (currently implemented), but lock is only per-transaction
@@ -175,7 +175,7 @@
 - Current capacity: 500 memories × 4 KB max content = 2 MB/agent soft limit
 - Limit: Trigram search degrades with large per-agent corpora; admin API could hit timeouts on prune queries
 - Scaling path:
-  1. Increase `PAPERCLIP_MEMORY_MAX_PER_AGENT` gradually; monitor query latency
+  1. Increase `STAPLER_MEMORY_MAX_PER_AGENT` gradually; monitor query latency
   2. Implement vector embeddings for O(1) search (PR after pgvector availability proven)
   3. Consider memory partitioning by scope (company/project/issue) in upstream #3403
 

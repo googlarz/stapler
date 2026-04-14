@@ -1,6 +1,6 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { outputs, outputVersions } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
+import { outputs, outputVersions } from "@stapler/db";
 
 export function outputService(db: Db) {
   return {

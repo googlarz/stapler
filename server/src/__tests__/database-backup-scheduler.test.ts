@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startDatabaseBackupScheduler } from "../database-backup-scheduler.js";
-import type { RunDatabaseBackupResult } from "@paperclipai/db";
+import type { RunDatabaseBackupResult } from "@stapler/db";
 
 const retention = {
   dailyDays: 30,

@@ -1,8 +1,8 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { goals, issues, issueComments, agents } from "@paperclipai/db";
-import type { GoalAcceptanceCriterion, IssueOriginKind } from "@paperclipai/shared";
-import { MAX_GOAL_VERIFICATION_ATTEMPTS } from "@paperclipai/shared";
+import type { Db } from "@stapler/db";
+import { goals, issues, issueComments, agents } from "@stapler/db";
+import type { GoalAcceptanceCriterion, IssueOriginKind } from "@stapler/shared";
+import { MAX_GOAL_VERIFICATION_ATTEMPTS } from "@stapler/shared";
 import {
   buildVerificationIssueDescription,
   interpretOutcome,

@@ -1,4 +1,4 @@
-import type { CompanySkillFileDetail } from "@paperclipai/shared";
+import type { CompanySkillFileDetail } from "@stapler/shared";
 
 export function splitSkillFrontmatter(markdown: string): { frontmatter: string | null; body: string } {
   const normalized = markdown.replace(/\r\n/g, "\n");

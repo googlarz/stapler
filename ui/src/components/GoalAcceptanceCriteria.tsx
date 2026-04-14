@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { GoalAcceptanceCriterion } from "@paperclipai/shared";
+import type { GoalAcceptanceCriterion } from "@stapler/shared";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 

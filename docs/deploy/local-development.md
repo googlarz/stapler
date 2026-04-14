@@ -101,5 +101,5 @@ pnpm dev
 Override with environment variables:
 
 ```sh
-PAPERCLIP_HOME=/custom/path PAPERCLIP_INSTANCE_ID=dev pnpm paperclipai run
+STAPLER_HOME=/custom/path STAPLER_INSTANCE_ID=dev pnpm paperclipai run
 ```

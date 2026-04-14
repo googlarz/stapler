@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AdapterEnvironmentTestResult } from "@paperclipai/shared";
+import type { AdapterEnvironmentTestResult } from "@stapler/shared";
 import { useLocation, useNavigate, useParams } from "@/lib/router";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
@@ -39,10 +39,10 @@ import { buildNewAgentRuntimeConfig } from "../lib/new-agent-runtime-config";
 import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
   DEFAULT_CODEX_LOCAL_MODEL
-} from "@paperclipai/adapter-codex-local";
-import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
-import { DEFAULT_OLLAMA_MODEL } from "@paperclipai/adapter-ollama-local";
-import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
+} from "@stapler/adapter-codex-local";
+import { DEFAULT_CURSOR_LOCAL_MODEL } from "@stapler/adapter-cursor-local";
+import { DEFAULT_OLLAMA_MODEL } from "@stapler/adapter-ollama-local";
+import { DEFAULT_GEMINI_LOCAL_MODEL } from "@stapler/adapter-gemini-local";
 import { resolveRouteOnboardingOptions } from "../lib/onboarding-route";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
 import { suggestFromGoal, type OnboardingSuggestion } from "../lib/onboarding-suggestion";
@@ -95,16 +95,16 @@ Post a brief "CPO online — [date]" note on the most recent open Company Review
 ## Reading company state
 
 \`\`\`bash
-curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agents" | jq .
-curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/goals" | jq .
-curl -s "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues?limit=50" | jq .
+curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/agents" | jq .
+curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/goals" | jq .
+curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/issues?limit=50" | jq .
 \`\`\`
 
 ## Always-on constraints
 - Ad-hoc: max 300 words, close the issue when done
 - Review: post ONE issue, no sub-issues, no agent assignments
 - Never edit agent configs, goals, or routines directly
-- You can store observations as memories: curl -X POST "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories" -H "Content-Type: application/json" -d '{"content": "...", "tags": ["review"]}'
+- You can store observations as memories: curl -X POST "$STAPLER_API_URL/api/agents/$STAPLER_AGENT_ID/memories" -H "Content-Type: application/json" -d '{"content": "...", "tags": ["review"]}'
 `;
 type AdapterType = string;
 

@@ -1,7 +1,7 @@
 import type { AdapterConfigFieldsProps } from "../types";
 import { DraftInput, DraftTextarea, Field } from "../../components/agent-config-primitives";
-import type { CreateConfigValues } from "@paperclipai/adapter-utils";
-import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from "@paperclipai/adapter-ollama-local";
+import type { CreateConfigValues } from "@stapler/adapter-utils";
+import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from "@stapler/adapter-ollama-local";
 import { OllamaModelPicker } from "./model-picker";
 
 const inputClass =

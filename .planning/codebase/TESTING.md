@@ -95,7 +95,7 @@ describe("feature name", () => {
 describe("resolveCommandContext", () => {
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
-    delete process.env.PAPERCLIP_API_URL;
+    delete process.env.STAPLER_API_URL;
   });
 
   afterEach(() => {

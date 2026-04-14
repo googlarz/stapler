@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
-import { DEFAULT_OLLAMA_BASE_URL } from "@paperclipai/adapter-ollama-local";
+import { DEFAULT_OLLAMA_BASE_URL } from "@stapler/adapter-ollama-local";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 
 const BENCH_PROMPT =

@@ -180,7 +180,7 @@ stapler/
 - Database operations use Drizzle ORM: `db.select(...).from(agents).where(...)`
 
 **Types & Enums:**
-- Database models: `Agent`, `Issue`, `Goal`, `Company` (singular, from `@paperclipai/shared`)
+- Database models: `Agent`, `Issue`, `Goal`, `Company` (singular, from `@stapler/shared`)
 - Service return types: `{ id, name, ... }` extending domain model
 - Enums for status: `IssueStatus`, `RunStatus`, `GoalStatus` (PascalCase with suffix)
 

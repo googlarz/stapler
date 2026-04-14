@@ -5,9 +5,9 @@ import net from "node:net";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import type { AdapterRuntimeServiceReport } from "@paperclipai/adapter-utils";
-import type { Db } from "@paperclipai/db";
-import { executionWorkspaces, projectWorkspaces, workspaceRuntimeServices } from "@paperclipai/db";
+import type { AdapterRuntimeServiceReport } from "@stapler/adapter-utils";
+import type { Db } from "@stapler/db";
+import { executionWorkspaces, projectWorkspaces, workspaceRuntimeServices } from "@stapler/db";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { asNumber, asString, parseObject, renderTemplate } from "../adapters/utils.js";
 import { resolveHomeAwarePath } from "../home-paths.js";
@@ -271,7 +271,7 @@ export async function ensureServerWorkspaceLinksCurrent(
 export function sanitizeRuntimeServiceBaseEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...baseEnv };
   for (const key of Object.keys(env)) {
-    if (key.startsWith("PAPERCLIP_")) {
+    if (key.startsWith("STAPLER_")) {
       delete env[key];
     }
   }
@@ -630,24 +630,24 @@ function buildWorkspaceCommandEnv(input: {
   created: boolean;
 }) {
   const env: NodeJS.ProcessEnv = { ...process.env };
-  env.PAPERCLIP_WORKSPACE_CWD = input.worktreePath;
-  env.PAPERCLIP_WORKSPACE_PATH = input.worktreePath;
-  env.PAPERCLIP_WORKSPACE_WORKTREE_PATH = input.worktreePath;
-  env.PAPERCLIP_WORKSPACE_BRANCH = input.branchName;
-  env.PAPERCLIP_WORKSPACE_BASE_CWD = input.base.baseCwd;
-  env.PAPERCLIP_WORKSPACE_REPO_ROOT = input.repoRoot;
-  env.PAPERCLIP_WORKSPACE_SOURCE = input.base.source;
-  env.PAPERCLIP_WORKSPACE_REPO_REF = input.base.repoRef ?? "";
-  env.PAPERCLIP_WORKSPACE_REPO_URL = input.base.repoUrl ?? "";
-  env.PAPERCLIP_WORKSPACE_CREATED = input.created ? "true" : "false";
-  env.PAPERCLIP_PROJECT_ID = input.base.projectId ?? "";
-  env.PAPERCLIP_PROJECT_WORKSPACE_ID = input.base.workspaceId ?? "";
-  env.PAPERCLIP_AGENT_ID = input.agent.id ?? "";
-  env.PAPERCLIP_AGENT_NAME = input.agent.name;
-  env.PAPERCLIP_COMPANY_ID = input.agent.companyId;
-  env.PAPERCLIP_ISSUE_ID = input.issue?.id ?? "";
-  env.PAPERCLIP_ISSUE_IDENTIFIER = input.issue?.identifier ?? "";
-  env.PAPERCLIP_ISSUE_TITLE = input.issue?.title ?? "";
+  env.STAPLER_WORKSPACE_CWD = input.worktreePath;
+  env.STAPLER_WORKSPACE_PATH = input.worktreePath;
+  env.STAPLER_WORKSPACE_WORKTREE_PATH = input.worktreePath;
+  env.STAPLER_WORKSPACE_BRANCH = input.branchName;
+  env.STAPLER_WORKSPACE_BASE_CWD = input.base.baseCwd;
+  env.STAPLER_WORKSPACE_REPO_ROOT = input.repoRoot;
+  env.STAPLER_WORKSPACE_SOURCE = input.base.source;
+  env.STAPLER_WORKSPACE_REPO_REF = input.base.repoRef ?? "";
+  env.STAPLER_WORKSPACE_REPO_URL = input.base.repoUrl ?? "";
+  env.STAPLER_WORKSPACE_CREATED = input.created ? "true" : "false";
+  env.STAPLER_PROJECT_ID = input.base.projectId ?? "";
+  env.STAPLER_PROJECT_WORKSPACE_ID = input.base.workspaceId ?? "";
+  env.STAPLER_AGENT_ID = input.agent.id ?? "";
+  env.STAPLER_AGENT_NAME = input.agent.name;
+  env.STAPLER_COMPANY_ID = input.agent.companyId;
+  env.STAPLER_ISSUE_ID = input.issue?.id ?? "";
+  env.STAPLER_ISSUE_IDENTIFIER = input.issue?.identifier ?? "";
+  env.STAPLER_ISSUE_TITLE = input.issue?.title ?? "";
   return env;
 }
 
@@ -884,18 +884,18 @@ function buildExecutionWorkspaceCleanupEnv(input: {
   projectWorkspaceCwd?: string | null;
 }) {
   const env: NodeJS.ProcessEnv = sanitizeRuntimeServiceBaseEnv(process.env);
-  env.PAPERCLIP_WORKSPACE_CWD = input.workspace.cwd ?? "";
-  env.PAPERCLIP_WORKSPACE_PATH = input.workspace.cwd ?? "";
-  env.PAPERCLIP_WORKSPACE_WORKTREE_PATH =
+  env.STAPLER_WORKSPACE_CWD = input.workspace.cwd ?? "";
+  env.STAPLER_WORKSPACE_PATH = input.workspace.cwd ?? "";
+  env.STAPLER_WORKSPACE_WORKTREE_PATH =
     input.workspace.providerRef ?? input.workspace.cwd ?? "";
-  env.PAPERCLIP_WORKSPACE_BRANCH = input.workspace.branchName ?? "";
-  env.PAPERCLIP_WORKSPACE_BASE_CWD = input.projectWorkspaceCwd ?? "";
-  env.PAPERCLIP_WORKSPACE_REPO_ROOT = input.projectWorkspaceCwd ?? "";
-  env.PAPERCLIP_WORKSPACE_REPO_URL = input.workspace.repoUrl ?? "";
-  env.PAPERCLIP_WORKSPACE_REPO_REF = input.workspace.baseRef ?? "";
-  env.PAPERCLIP_PROJECT_ID = input.workspace.projectId ?? "";
-  env.PAPERCLIP_PROJECT_WORKSPACE_ID = input.workspace.projectWorkspaceId ?? "";
-  env.PAPERCLIP_ISSUE_ID = input.workspace.sourceIssueId ?? "";
+  env.STAPLER_WORKSPACE_BRANCH = input.workspace.branchName ?? "";
+  env.STAPLER_WORKSPACE_BASE_CWD = input.projectWorkspaceCwd ?? "";
+  env.STAPLER_WORKSPACE_REPO_ROOT = input.projectWorkspaceCwd ?? "";
+  env.STAPLER_WORKSPACE_REPO_URL = input.workspace.repoUrl ?? "";
+  env.STAPLER_WORKSPACE_REPO_REF = input.workspace.baseRef ?? "";
+  env.STAPLER_PROJECT_ID = input.workspace.projectId ?? "";
+  env.STAPLER_PROJECT_WORKSPACE_ID = input.workspace.projectWorkspaceId ?? "";
+  env.STAPLER_ISSUE_ID = input.workspace.sourceIssueId ?? "";
   return env;
 }
 

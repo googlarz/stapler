@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import pc from "picocolors";
 import { Command } from "commander";
-import type { Company, FeedbackTrace, FeedbackTraceBundle } from "@paperclipai/shared";
+import type { Company, FeedbackTrace, FeedbackTraceBundle } from "@stapler/shared";
 import {
   addCommonClientOptions,
   handleCommandError,
@@ -179,7 +179,7 @@ export async function resolveFeedbackCompanyId(
   const companyId = companies[0]?.id?.trim();
   if (!companyId) {
     throw new Error(
-      "Company ID is required. Pass --company-id, set PAPERCLIP_COMPANY_ID, or configure a CLI context default.",
+      "Company ID is required. Pass --company-id, set STAPLER_COMPANY_ID, or configure a CLI context default.",
     );
   }
   return companyId;

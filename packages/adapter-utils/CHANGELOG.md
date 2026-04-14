@@ -1,4 +1,4 @@
-# @paperclipai/adapter-utils
+# @stapler/adapter-utils
 
 ## 0.3.1
 

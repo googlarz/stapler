@@ -18,13 +18,13 @@
  */
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { agentMemories } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
+import { agentMemories } from "@stapler/db";
 import type {
   AgentMemory,
   AgentMemorySearchResult,
   AgentMemorySaveResult,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import {
   cosineSimilarity,
   findBestTagsFromCandidates,
@@ -35,7 +35,7 @@ import {
 /**
  * Maximum number of memories a single agent may retain. Oldest are
  * evicted on save when the count exceeds this. Configurable via
- * `PAPERCLIP_MEMORY_MAX_PER_AGENT`.
+ * `STAPLER_MEMORY_MAX_PER_AGENT`.
  */
 export const DEFAULT_MAX_MEMORIES_PER_AGENT = 500;
 
@@ -43,7 +43,7 @@ export const DEFAULT_MAX_MEMORIES_PER_AGENT = 500;
  * Maximum byte size of a single memory's `content` after trimming.
  * Enforced at the service layer so all callers (HTTP route, future
  * MCP tool proxy, direct service calls from tests) share the same
- * limit. Configurable via `PAPERCLIP_MEMORY_MAX_CONTENT_BYTES`.
+ * limit. Configurable via `STAPLER_MEMORY_MAX_CONTENT_BYTES`.
  */
 export const DEFAULT_MAX_CONTENT_BYTES = 4096;
 
@@ -52,7 +52,7 @@ export const DEFAULT_MAX_CONTENT_BYTES = 4096;
  * excluded. 0.1 is deliberately lower than pg_trgm's default of 0.3
  * so short queries ("french") still match short memories ("user
  * prefers french over english"). Configurable via
- * `PAPERCLIP_MEMORY_SEARCH_THRESHOLD`.
+ * `STAPLER_MEMORY_SEARCH_THRESHOLD`.
  */
 export const DEFAULT_SEARCH_THRESHOLD = 0.1;
 
@@ -73,12 +73,12 @@ function readFloat(envName: string, fallback: number, min: number, max: number):
 
 export function getMemoryLimits() {
   return {
-    maxPerAgent: readPositiveInt("PAPERCLIP_MEMORY_MAX_PER_AGENT", DEFAULT_MAX_MEMORIES_PER_AGENT),
+    maxPerAgent: readPositiveInt("STAPLER_MEMORY_MAX_PER_AGENT", DEFAULT_MAX_MEMORIES_PER_AGENT),
     maxContentBytes: readPositiveInt(
-      "PAPERCLIP_MEMORY_MAX_CONTENT_BYTES",
+      "STAPLER_MEMORY_MAX_CONTENT_BYTES",
       DEFAULT_MAX_CONTENT_BYTES,
     ),
-    searchThreshold: readFloat("PAPERCLIP_MEMORY_SEARCH_THRESHOLD", DEFAULT_SEARCH_THRESHOLD, 0, 1),
+    searchThreshold: readFloat("STAPLER_MEMORY_SEARCH_THRESHOLD", DEFAULT_SEARCH_THRESHOLD, 0, 1),
   };
 }
 

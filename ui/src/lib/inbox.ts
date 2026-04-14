@@ -5,7 +5,7 @@ import type {
   InboxDismissal,
   Issue,
   JoinRequest,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import {
   applyIssueFilters,
   defaultIssueFilterState,

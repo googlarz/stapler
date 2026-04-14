@@ -1,4 +1,4 @@
-# @paperclipai/shared
+# @stapler/shared
 
 ## 0.3.1
 

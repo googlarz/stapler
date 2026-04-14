@@ -1,4 +1,4 @@
-import { inferBindModeFromHost } from "@paperclipai/shared";
+import { inferBindModeFromHost } from "@stapler/shared";
 import type { PaperclipConfig } from "../config/schema.js";
 import type { CheckResult } from "./index.js";
 
@@ -27,12 +27,12 @@ export function deploymentAuthCheck(config: PaperclipConfig): CheckResult {
 
   const secret =
     process.env.BETTER_AUTH_SECRET?.trim() ??
-    process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim();
+    process.env.STAPLER_AGENT_JWT_SECRET?.trim();
   if (!secret) {
     return {
       name: "Deployment/auth mode",
       status: "fail",
-      message: "authenticated mode requires BETTER_AUTH_SECRET (or PAPERCLIP_AGENT_JWT_SECRET)",
+      message: "authenticated mode requires BETTER_AUTH_SECRET (or STAPLER_AGENT_JWT_SECRET)",
       canRepair: false,
       repairHint: "Set BETTER_AUTH_SECRET before starting Paperclip",
     };

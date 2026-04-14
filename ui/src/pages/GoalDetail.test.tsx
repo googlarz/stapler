@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GoalPropertiesToggleButton, GoalProgressBar } from "./GoalDetail";
-import type { GoalProgress } from "@paperclipai/shared";
+import type { GoalProgress } from "@stapler/shared";
 
 describe("GoalPropertiesToggleButton", () => {
   it("shows the reopen control when the properties panel is hidden", () => {

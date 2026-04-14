@@ -82,7 +82,7 @@ describe("log redaction", () => {
     const secret = "fake-private-secret-value";
     const jwt = "eyJmYWtlIjoiand0In0.eyJmYWtlIjoicGF5bG9hZCJ9.ZmFrZS1zaWduYXR1cmU";
     const input = [
-      `PAPERCLIP_API_KEY=${apiKey}`,
+      `STAPLER_API_KEY=${apiKey}`,
       `Authorization: Bearer ${bearer}`,
       `SESSION_TOKEN=${token}`,
       `PRIVATE_SECRET="${secret}"`,
@@ -92,7 +92,7 @@ describe("log redaction", () => {
 
     const result = redactRunLogCredentialsText(input);
 
-    expect(result).toContain(`PAPERCLIP_API_KEY=${RUN_LOG_CREDENTIAL_REDACTION_TOKEN}`);
+    expect(result).toContain(`STAPLER_API_KEY=${RUN_LOG_CREDENTIAL_REDACTION_TOKEN}`);
     expect(result).toContain(`Authorization: Bearer ${RUN_LOG_CREDENTIAL_REDACTION_TOKEN}`);
     expect(result).toContain(`SESSION_TOKEN=${RUN_LOG_CREDENTIAL_REDACTION_TOKEN}`);
     expect(result).toContain(`PRIVATE_SECRET="${RUN_LOG_CREDENTIAL_REDACTION_TOKEN}"`);

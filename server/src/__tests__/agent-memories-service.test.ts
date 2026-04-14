@@ -6,7 +6,7 @@ import {
   agents,
   companies,
   createDb,
-} from "@paperclipai/db";
+} from "@stapler/db";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
@@ -85,9 +85,9 @@ describeEmbeddedPostgres("agentMemoryService", () => {
   // Clean memory table between tests so each test starts fresh.
   afterEach(async () => {
     await db.delete(agentMemories);
-    delete process.env.PAPERCLIP_MEMORY_MAX_PER_AGENT;
-    delete process.env.PAPERCLIP_MEMORY_MAX_CONTENT_BYTES;
-    delete process.env.PAPERCLIP_MEMORY_SEARCH_THRESHOLD;
+    delete process.env.STAPLER_MEMORY_MAX_PER_AGENT;
+    delete process.env.STAPLER_MEMORY_MAX_CONTENT_BYTES;
+    delete process.env.STAPLER_MEMORY_SEARCH_THRESHOLD;
   });
 
   describe("save", () => {
@@ -152,7 +152,7 @@ describeEmbeddedPostgres("agentMemoryService", () => {
     });
 
     it("throws MemoryContentTooLargeError when content exceeds byte limit", async () => {
-      process.env.PAPERCLIP_MEMORY_MAX_CONTENT_BYTES = "16";
+      process.env.STAPLER_MEMORY_MAX_CONTENT_BYTES = "16";
       await expect(
         svc.save({
           companyId,
@@ -169,7 +169,7 @@ describeEmbeddedPostgres("agentMemoryService", () => {
     });
 
     it("prunes oldest memories when cap is exceeded", async () => {
-      process.env.PAPERCLIP_MEMORY_MAX_PER_AGENT = "3";
+      process.env.STAPLER_MEMORY_MAX_PER_AGENT = "3";
       for (let i = 0; i < 5; i += 1) {
         await svc.save({
           companyId,
@@ -194,7 +194,7 @@ describeEmbeddedPostgres("agentMemoryService", () => {
       // by one and leave count = cap + 1. The service now excludes the
       // new row in the WHERE clause so the LIMIT returns exactly
       // `overflow` deletable rows regardless of tie behavior.
-      process.env.PAPERCLIP_MEMORY_MAX_PER_AGENT = "2";
+      process.env.STAPLER_MEMORY_MAX_PER_AGENT = "2";
       // No inter-save delay — force createdAt collisions if the host
       // clock is coarse enough.
       await svc.save({ companyId, agentId: agentIdA, content: "row-1" });
@@ -206,7 +206,7 @@ describeEmbeddedPostgres("agentMemoryService", () => {
     });
 
     it("pruning does not touch another agent's memories", async () => {
-      process.env.PAPERCLIP_MEMORY_MAX_PER_AGENT = "2";
+      process.env.STAPLER_MEMORY_MAX_PER_AGENT = "2";
       await svc.save({ companyId, agentId: agentIdA, content: "a-one" });
       await svc.save({ companyId, agentId: agentIdB, content: "b-one" });
       await svc.save({ companyId, agentId: agentIdB, content: "b-two" });

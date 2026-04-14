@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Db } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
 import { companyMemoryService, logActivity, MemoryContentTooLargeError } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 

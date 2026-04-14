@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Check, Download, Loader2, RefreshCw, Zap, AlertCircle, X, XCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { DEFAULT_OLLAMA_BASE_URL } from "@paperclipai/adapter-ollama-local";
+import { DEFAULT_OLLAMA_BASE_URL } from "@stapler/adapter-ollama-local";
 
 // ---------------------------------------------------------------------------
 // Module-level persistent download state — survives component unmount/remount

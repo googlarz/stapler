@@ -1,5 +1,5 @@
-import type { Db } from "@paperclipai/db";
-import { pluginLogs, agentTaskSessions as agentTaskSessionsTable } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
+import { pluginLogs, agentTaskSessions as agentTaskSessionsTable } from "@stapler/db";
 import { eq, and, like, desc } from "drizzle-orm";
 import type {
   HostServices,
@@ -10,7 +10,7 @@ import type {
   Goal,
   PluginWorkspace,
   IssueComment,
-} from "@paperclipai/plugin-sdk";
+} from "@stapler/plugin-sdk";
 import { companyService } from "./companies.js";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
@@ -53,9 +53,9 @@ const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
  * When true, the private-IP SSRF guard is disabled for plugin fetch requests.
  * Intended for self-hosted / homelab deployments where plugin endpoints
  * (e.g. Honcho) resolve to RFC-1918 addresses.
- * Set PAPERCLIP_PLUGIN_ALLOW_PRIVATE_IPS=true in the server environment.
+ * Set STAPLER_PLUGIN_ALLOW_PRIVATE_IPS=true in the server environment.
  */
-const PLUGIN_ALLOW_PRIVATE_IPS = process.env.PAPERCLIP_PLUGIN_ALLOW_PRIVATE_IPS === "true";
+const PLUGIN_ALLOW_PRIVATE_IPS = process.env.STAPLER_PLUGIN_ALLOW_PRIVATE_IPS === "true";
 const TELEMETRY_EVENT_NAME_REGEX = /^[a-z0-9][a-z0-9_-]*$/;
 
 /**
@@ -573,7 +573,7 @@ export function buildHostServices(
         await scopedBus.emit(params.name, params.companyId, params.payload);
       },
       async subscribe(params: { eventPattern: string; filter?: Record<string, unknown> | null }) {
-        const handler = async (event: import("@paperclipai/plugin-sdk").PluginEvent) => {
+        const handler = async (event: import("@stapler/plugin-sdk").PluginEvent) => {
           if (notifyWorker) {
             notifyWorker("onEvent", { event });
           }

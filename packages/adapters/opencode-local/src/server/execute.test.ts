@@ -24,9 +24,9 @@ const { createMockRunChildProcess } = vi.hoisted(() => {
   return { createMockRunChildProcess };
 });
 
-vi.mock("@paperclipai/adapter-utils/server-utils", async () => {
-  const actual = await vi.importActual<typeof import("@paperclipai/adapter-utils/server-utils")>(
-    "@paperclipai/adapter-utils/server-utils",
+vi.mock("@stapler/adapter-utils/server-utils", async () => {
+  const actual = await vi.importActual<typeof import("@stapler/adapter-utils/server-utils")>(
+    "@stapler/adapter-utils/server-utils",
   );
   return {
     ...actual,
@@ -55,7 +55,7 @@ vi.mock("./runtime-config.js", () => ({
 }));
 
 import { execute } from "./execute.js";
-import { runChildProcess } from "@paperclipai/adapter-utils/server-utils";
+import { runChildProcess } from "@stapler/adapter-utils/server-utils";
 
 const mockedRunChildProcess = vi.mocked(runChildProcess);
 

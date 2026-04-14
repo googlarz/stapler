@@ -146,13 +146,13 @@ For local/default installs, the active provider is `local_encrypted`:
 
 Optional overrides:
 
-- `PAPERCLIP_SECRETS_MASTER_KEY` (32-byte key as base64, hex, or raw 32-char string)
-- `PAPERCLIP_SECRETS_MASTER_KEY_FILE` (custom key file path)
+- `STAPLER_SECRETS_MASTER_KEY` (32-byte key as base64, hex, or raw 32-char string)
+- `STAPLER_SECRETS_MASTER_KEY_FILE` (custom key file path)
 
 Strict mode to block new inline sensitive env values:
 
 ```sh
-PAPERCLIP_SECRETS_STRICT_MODE=true
+STAPLER_SECRETS_STRICT_MODE=true
 ```
 
 You can set strict mode and provider defaults via:

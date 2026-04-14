@@ -6,7 +6,7 @@ import {
   type BackupRetentionPolicy,
   type RunDatabaseBackupOptions,
   type RunDatabaseBackupResult,
-} from "@paperclipai/db";
+} from "@stapler/db";
 
 export type DatabaseBackupLogger = {
   info: (...args: unknown[]) => void;

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { Goal } from "@paperclipai/shared";
-import { MAX_GOAL_VERIFICATION_ATTEMPTS } from "@paperclipai/shared";
+import type { Goal } from "@stapler/shared";
+import { MAX_GOAL_VERIFICATION_ATTEMPTS } from "@stapler/shared";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Clock, AlertCircle, XCircle, RefreshCw } from "lucide-react";
 import { api } from "../api/client";

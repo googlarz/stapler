@@ -10,7 +10,7 @@ import {
   createDb,
   projects,
   routines,
-} from "@paperclipai/db";
+} from "@stapler/db";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
