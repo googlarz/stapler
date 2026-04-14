@@ -14,10 +14,6 @@ Persist a note you want to remember in future runs.
 Semantic search across your saved memories.
 **Params:** `query` (string)
 
-### `paperclip_list_memories`
-List all your saved memories, optionally filtered by tag.
-**Params:** `tag` (string, optional)
-
 ### `paperclip_delete_memory`
 Remove a memory by ID.
 **Params:** `id` (string)

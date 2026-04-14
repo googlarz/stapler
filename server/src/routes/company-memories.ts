@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
-import { companyMemoryService, MemoryContentTooLargeError } from "../services/index.js";
+import { companyMemoryService, logActivity, MemoryContentTooLargeError } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 
 /**
@@ -77,7 +77,23 @@ export function companyMemoryRoutes(db: Db) {
         content,
         tags: tags as string[] | undefined,
         createdByAgentId,
+        createdInRunId: actor.runId ?? undefined,
       });
+
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId ?? undefined,
+        runId: actor.runId ?? undefined,
+        action: "memory.saved",
+        entityType: "company_memory",
+        entityId: memory.id,
+        details: {
+          tags: memory.tags,
+        },
+      });
+
       res.status(201).json(memory);
     } catch (err) {
       if (err instanceof MemoryContentTooLargeError) {
