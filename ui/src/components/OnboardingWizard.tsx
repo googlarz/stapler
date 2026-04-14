@@ -295,7 +295,7 @@ export function OnboardingWizard() {
     queryFn: () => agentsApi.adapterModels(createdCompanyId!, cpoAdapterType),
     enabled: Boolean(createdCompanyId) && effectiveOnboardingOpen && step === 3 && cpoEnabled
   });
-  const isCpoLocalAdapter = !NONLOCAL_TYPES.has(cpoAdapterType);
+  const isCpoLocalAdapter = getCapabilities(cpoAdapterType).supportsInstructionsBundle;
 
   // Build adapter grids dynamically from the UI registry + display metadata.
   // External/plugin adapters automatically appear with generic defaults.
