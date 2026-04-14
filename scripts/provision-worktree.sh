@@ -31,10 +31,10 @@ source_env_path="$(dirname "$source_config_path")/.env"
 
 mkdir -p "$paperclip_dir"
 
-run_paperclipai_command() {
+run_stapler_command() {
   local command_args=("$@")
-  if command -v pnpm >/dev/null 2>&1 && pnpm paperclipai --help >/dev/null 2>&1; then
-    pnpm paperclipai "${command_args[@]}"
+  if command -v pnpm >/dev/null 2>&1 && pnpm stapler --help >/dev/null 2>&1; then
+    pnpm stapler "${command_args[@]}"
     return 0
   fi
 
@@ -45,8 +45,8 @@ run_paperclipai_command() {
     return 0
   fi
 
-  if command -v paperclipai >/dev/null 2>&1; then
-    paperclipai "${command_args[@]}"
+  if command -v stapler >/dev/null 2>&1; then
+    stapler "${command_args[@]}"
     return 0
   fi
 
@@ -54,7 +54,7 @@ run_paperclipai_command() {
 }
 
 run_isolated_worktree_init() {
-  run_paperclipai_command \
+  run_stapler_command \
     worktree \
     init \
     --force \
@@ -319,7 +319,7 @@ EOF
 }
 
 if ! run_isolated_worktree_init; then
-  echo "paperclipai CLI not available in this workspace; writing isolated fallback config without DB seeding." >&2
+  echo "stapler CLI not available in this workspace; writing isolated fallback config without DB seeding." >&2
   write_fallback_worktree_config
 fi
 

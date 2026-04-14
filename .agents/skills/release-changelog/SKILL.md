@@ -126,7 +126,7 @@ When a bullet item clearly maps to a merged pull request, add inline attribution
 end of the entry in this format:
 
 ```
-- **Feature name** — Description. ([#123](https://github.com/paperclipai/paperclip/pull/123), @contributor1, @contributor2)
+- **Feature name** — Description. ([#123](https://github.com/googlarz/stapler/pull/123), @contributor1, @contributor2)
 ```
 
 Rules:

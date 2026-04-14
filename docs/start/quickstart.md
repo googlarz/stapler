@@ -21,7 +21,7 @@ To start Paperclip again later:
 npx paperclipai run
 ```
 
-> **Note:** If you used `npx` for setup, always use `npx paperclipai` to run commands. The `pnpm paperclipai` form only works inside a cloned copy of the Paperclip repository (see Local Development below).
+> **Note:** If you used `npx` for setup, always use `npx paperclipai` to run commands. The `pnpm stapler` form only works inside a cloned copy of the Paperclip repository (see Local Development below).
 
 ## Local Development
 
@@ -41,7 +41,7 @@ No external database required — Paperclip uses an embedded PostgreSQL instance
 When working from the cloned repo, you can also use:
 
 ```sh
-pnpm paperclipai run
+pnpm stapler run
 ```
 
 This auto-onboards if config is missing, runs health checks with auto-repair, and starts the server.

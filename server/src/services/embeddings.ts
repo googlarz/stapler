@@ -149,7 +149,10 @@ export function findBestTagsFromCandidates(
   queryEmbedding: number[],
   threshold = getAutoTagThreshold(),
 ): string[] {
-  let bestScore = 0;
+  // Sentinel: -Infinity (not 0) since cosine similarity ranges over [-1, 1];
+  // a candidate at -0.3 is still a better match than no candidate, and using
+  // 0 as sentinel would silently ignore any all-negative candidate set.
+  let bestScore = -Infinity;
   let bestTags: string[] = [];
 
   for (const c of candidates) {

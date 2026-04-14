@@ -29,7 +29,7 @@ No Docker or external database required. Paperclip uses embedded PostgreSQL auto
 For a first-time install:
 
 ```sh
-pnpm paperclipai run
+pnpm stapler run
 ```
 
 This does:
@@ -64,7 +64,7 @@ pnpm dev --authenticated-private
 Allow additional private hostnames:
 
 ```sh
-pnpm paperclipai allowed-hostname dotta-macbook-pro
+pnpm stapler allowed-hostname dotta-macbook-pro
 ```
 
 For full setup and troubleshooting, see [Tailscale Private Access](/deploy/tailscale-private-access).
@@ -101,5 +101,5 @@ pnpm dev
 Override with environment variables:
 
 ```sh
-STAPLER_HOME=/custom/path STAPLER_INSTANCE_ID=dev pnpm paperclipai run
+STAPLER_HOME=/custom/path STAPLER_INSTANCE_ID=dev pnpm stapler run
 ```

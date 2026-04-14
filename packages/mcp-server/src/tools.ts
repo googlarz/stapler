@@ -623,18 +623,20 @@ export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[
     ),
     makeTool(
       "agentPeerSearch",
-      "Search another agent's episodic memories by ID. Both agents must belong to the same company. Useful for cross-agent knowledge sharing — e.g. the Bavaria agent reading notes saved by the Berlin agent. Includes wiki pages (unlike memorySearch). Uses semantic search when available.",
+      "Search another agent's episodic memories by ID. Both agents must belong to the same company. Every call is audit-logged. Wiki pages are excluded by default; pass includeWiki=true only when explicitly needed. Uses semantic search when available. Minimum query length 3, max limit 25.",
       z.object({
         targetAgentId: z.string().uuid("targetAgentId must be a valid agent UUID"),
-        q: z.string().trim().min(1).max(512),
-        limit: z.number().int().positive().max(50).optional(),
+        q: z.string().trim().min(3, "q must be at least 3 characters").max(512),
+        limit: z.number().int().positive().max(25).optional(),
         tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+        includeWiki: z.boolean().optional().describe("Set true to include the peer agent's wiki pages"),
       }),
-      async ({ targetAgentId, q, limit, tags }) => {
+      async ({ targetAgentId, q, limit, tags, includeWiki }) => {
         const params = new URLSearchParams();
         params.set("q", q);
         if (limit !== undefined) params.set("limit", String(limit));
         if (tags && tags.length > 0) params.set("tags", tags.join(","));
+        if (includeWiki) params.set("includeWiki", "true");
         return client.requestJson(
           "GET",
           `/agents/${encodeURIComponent(targetAgentId)}/memories/peer-search?${params.toString()}`,

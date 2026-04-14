@@ -212,7 +212,7 @@ describe("feedbackService.saveIssueVote", () => {
       {
         id: randomUUID(),
         companyId,
-        key: "paperclipai/paperclip/paperclip",
+        key: "stapler/stapler/paperclip",
         slug: "paperclip",
         name: "Paperclip",
         markdown: "# Paperclip",
@@ -250,7 +250,7 @@ describe("feedbackService.saveIssueVote", () => {
           instructionsEntryFile: "AGENTS.md",
           instructionsFilePath: instructionsPath,
         },
-        ["paperclipai/paperclip/paperclip", "octo/research/public-skill"],
+        ["stapler/stapler/paperclip", "octo/research/public-skill"],
       ),
       runtimeConfig: {
         heartbeat: {

@@ -10,7 +10,7 @@ Instance setup and diagnostics commands.
 One-command bootstrap and start:
 
 ```sh
-pnpm paperclipai run
+pnpm stapler run
 ```
 
 Does:
@@ -22,7 +22,7 @@ Does:
 Choose a specific instance:
 
 ```sh
-pnpm paperclipai run --instance dev
+pnpm stapler run --instance dev
 ```
 
 ## `paperclipai onboard`
@@ -30,7 +30,7 @@ pnpm paperclipai run --instance dev
 Interactive first-time setup:
 
 ```sh
-pnpm paperclipai onboard
+pnpm stapler onboard
 ```
 
 If Paperclip is already configured, rerunning `onboard` keeps the existing config in place. Use `paperclipai configure` to change settings on an existing install.
@@ -43,13 +43,13 @@ First prompt:
 Start immediately after onboarding:
 
 ```sh
-pnpm paperclipai onboard --run
+pnpm stapler onboard --run
 ```
 
 Non-interactive defaults + immediate start (opens browser on server listen):
 
 ```sh
-pnpm paperclipai onboard --yes
+pnpm stapler onboard --yes
 ```
 
 On an existing install, `--yes` now preserves the current config and just starts Paperclip with that setup.
@@ -59,8 +59,8 @@ On an existing install, `--yes` now preserves the current config and just starts
 Health checks with optional auto-repair:
 
 ```sh
-pnpm paperclipai doctor
-pnpm paperclipai doctor --repair
+pnpm stapler doctor
+pnpm stapler doctor --repair
 ```
 
 Validates:
@@ -76,9 +76,9 @@ Validates:
 Update configuration sections:
 
 ```sh
-pnpm paperclipai configure --section server
-pnpm paperclipai configure --section secrets
-pnpm paperclipai configure --section storage
+pnpm stapler configure --section server
+pnpm stapler configure --section secrets
+pnpm stapler configure --section storage
 ```
 
 ## `paperclipai env`
@@ -86,7 +86,7 @@ pnpm paperclipai configure --section storage
 Show resolved environment configuration:
 
 ```sh
-pnpm paperclipai env
+pnpm stapler env
 ```
 
 This now includes bind-oriented deployment settings such as `STAPLER_BIND` and `STAPLER_BIND_HOST` when configured.
@@ -96,7 +96,7 @@ This now includes bind-oriented deployment settings such as `STAPLER_BIND` and `
 Allow a private hostname for authenticated/private mode:
 
 ```sh
-pnpm paperclipai allowed-hostname my-tailscale-host
+pnpm stapler allowed-hostname my-tailscale-host
 ```
 
 ## Local Storage Paths
@@ -112,12 +112,12 @@ pnpm paperclipai allowed-hostname my-tailscale-host
 Override with:
 
 ```sh
-STAPLER_HOME=/custom/home STAPLER_INSTANCE_ID=dev pnpm paperclipai run
+STAPLER_HOME=/custom/home STAPLER_INSTANCE_ID=dev pnpm stapler run
 ```
 
 Or pass `--data-dir` directly on any command:
 
 ```sh
-pnpm paperclipai run --data-dir ./tmp/paperclip-dev
-pnpm paperclipai doctor --data-dir ./tmp/paperclip-dev
+pnpm stapler run --data-dir ./tmp/paperclip-dev
+pnpm stapler doctor --data-dir ./tmp/paperclip-dev
 ```

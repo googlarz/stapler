@@ -192,10 +192,16 @@ export function companyMemoryService(db: Db) {
         );
 
         if (autoTags.length > 0) {
+          // Scope to still-empty tags so concurrent user-supplied tags win.
           const updated = await db
             .update(companyMemories)
             .set({ tags: autoTags, updatedAt: sql`now()` })
-            .where(eq(companyMemories.id, saved.id))
+            .where(
+              and(
+                eq(companyMemories.id, saved.id),
+                sql`jsonb_array_length(coalesce(${companyMemories.tags}, '[]'::jsonb)) = 0`,
+              ),
+            )
             .returning();
           return updated[0] ?? saved;
         }
@@ -286,6 +292,17 @@ export function companyMemoryService(db: Db) {
 
         if (scored.length > 0) {
           return scored.map(({ row, score }) => ({ ...row, score }));
+        }
+        // Warn once on dimension drift so embedding-model changes don't
+        // silently degrade search quality without operator awareness.
+        const embeddedRows = allRows.filter((r) => Array.isArray(r.embedding) && (r.embedding as number[]).length > 0);
+        const dimMismatch = embeddedRows.find(
+          (r) => (r.embedding as number[]).length !== queryEmbedding.length,
+        );
+        if (embeddedRows.length > 0 && dimMismatch) {
+          console.warn(
+            `[memory] Dimension drift in company_memories for ${input.companyId}: stored=${(dimMismatch.embedding as number[]).length}, query=${queryEmbedding.length}.`,
+          );
         }
       }
 

@@ -10,7 +10,7 @@ stapler/
 ├── .claude/                    # Claude-specific project config
 ├── .github/                    # CI/CD workflows, issue templates
 ├── .planning/                  # GSD planning outputs (this file)
-├── cli/                        # Command-line interface (pnpm paperclipai ...)
+├── cli/                        # Command-line interface (pnpm stapler ...)
 ├── doc/                        # Architecture decision records, design docs
 ├── docker/                     # Docker build configs for different modes
 ├── docs/                       # User documentation (setup guides, feature docs)

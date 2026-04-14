@@ -158,7 +158,7 @@ STAPLER_SECRETS_STRICT_MODE=true
 You can set strict mode and provider defaults via:
 
 ```sh
-pnpm paperclipai configure --section secrets
+pnpm stapler configure --section secrets
 ```
 
 Inline secret migration command:

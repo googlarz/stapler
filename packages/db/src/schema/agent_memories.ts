@@ -20,7 +20,11 @@ const float4Array = customType<{ data: number[] | null; driverData: number[] | s
   dataType() { return "real[]"; },
   toDriver(value: number[] | null): string | null {
     if (!value) return null;
-    return `{${value.join(",")}}`;
+    // PostgreSQL real[] literal. Sanitize non-finite values (NaN, ±Infinity)
+    // since PostgreSQL would reject the literal. Replace with 0.0 — a
+    // zero-magnitude component contributes nothing to cosine similarity.
+    const sanitized = value.map((n) => (Number.isFinite(n) ? n : 0));
+    return `{${sanitized.join(",")}}`;
   },
   fromDriver(value: number[] | string | null): number[] | null {
     if (!value) return null;

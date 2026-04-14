@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE_NAME="${IMAGE_NAME:-paperclip-onboard-smoke}"
 HOST_PORT="${HOST_PORT:-3131}"
-PAPERCLIPAI_VERSION="${PAPERCLIPAI_VERSION:-latest}"
+STAPLER_VERSION="${STAPLER_VERSION:-latest}"
 DATA_DIR="${DATA_DIR:-$REPO_ROOT/data/docker-onboard-smoke}"
 HOST_UID="${HOST_UID:-$(id -u)}"
 SMOKE_DETACH="${SMOKE_DETACH:-false}"
@@ -79,7 +79,7 @@ write_metadata_file() {
     printf 'SMOKE_CONTAINER_NAME=%q\n' "$CONTAINER_NAME"
     printf 'SMOKE_DATA_DIR=%q\n' "$DATA_DIR"
     printf 'SMOKE_IMAGE_NAME=%q\n' "$IMAGE_NAME"
-    printf 'SMOKE_PAPERCLIPAI_VERSION=%q\n' "$PAPERCLIPAI_VERSION"
+    printf 'SMOKE_STAPLER_VERSION=%q\n' "$STAPLER_VERSION"
   } >"$SMOKE_METADATA_FILE"
 }
 
@@ -93,7 +93,7 @@ generate_bootstrap_invite_url() {
       -e STAPLER_PUBLIC_URL="$STAPLER_PUBLIC_URL" \
       -e STAPLER_HOME="/paperclip" \
       "$CONTAINER_NAME" bash -lc \
-      'timeout 20s npx --yes "paperclipai@${PAPERCLIPAI_VERSION}" auth bootstrap-ceo --data-dir "$STAPLER_HOME" --base-url "$STAPLER_PUBLIC_URL"' \
+      'timeout 20s npx --yes "stapler@${STAPLER_VERSION}" auth bootstrap-ceo --data-dir "$STAPLER_HOME" --base-url "$STAPLER_PUBLIC_URL"' \
       2>&1
   )"; then
     bootstrap_status=0
@@ -240,7 +240,7 @@ auto_bootstrap_authenticated_smoke() {
 
 echo "==> Building onboard smoke image"
 docker build \
-  --build-arg PAPERCLIPAI_VERSION="$PAPERCLIPAI_VERSION" \
+  --build-arg STAPLER_VERSION="$STAPLER_VERSION" \
   --build-arg HOST_UID="$HOST_UID" \
   -f "$REPO_ROOT/docker/Dockerfile.onboard-smoke" \
   -t "$IMAGE_NAME" \

@@ -29,7 +29,7 @@ describe("company routes", () => {
   });
 
   /**
-   * Regression tests for https://github.com/paperclipai/paperclip/issues/2910
+   * Regression tests for https://github.com/googlarz/stapler/issues/2910
    *
    * The Export and Import links on the Company Settings page used plain
    * `<a href="/company/export">` anchors which bypass the router's Link

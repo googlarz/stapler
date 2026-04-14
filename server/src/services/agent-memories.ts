@@ -319,11 +319,23 @@ export function agentMemoryService(db: Db) {
         );
 
         if (autoTags.length > 0) {
-          await db
+          // Scope the UPDATE to rows whose tags are still empty so any
+          // concurrent user-supplied tag set wins. The UPDATE returns []
+          // if a parallel writer beat us to it — in that case we skip the
+          // cached tag override and return the transaction's memory as-is.
+          const updated = await db
             .update(agentMemories)
             .set({ tags: autoTags, updatedAt: sql`now()` })
-            .where(eq(agentMemories.id, result.memory.id));
-          return { memory: { ...result.memory, tags: autoTags }, deduped: false };
+            .where(
+              and(
+                eq(agentMemories.id, result.memory.id),
+                sql`jsonb_array_length(coalesce(${agentMemories.tags}, '[]'::jsonb)) = 0`,
+              ),
+            )
+            .returning({ id: agentMemories.id });
+          if (updated.length > 0) {
+            return { memory: { ...result.memory, tags: autoTags }, deduped: false };
+          }
         }
       }
 
@@ -392,6 +404,18 @@ export function agentMemoryService(db: Db) {
           return scored.map(({ row, score }) => ({ ...rowToMemory(row), score }));
         }
         // Fall through: no embedded rows found → pg_trgm covers un-embedded rows.
+        // Surface silent dimension drift: if rows have embeddings but none
+        // matched the query's dimension, log once so operators can spot an
+        // embedding-model change vs. a legitimate "no relevant match".
+        const embeddedRows = allRows.filter((r) => Array.isArray(r.embedding) && (r.embedding as number[]).length > 0);
+        const dimMismatch = embeddedRows.find(
+          (r) => (r.embedding as number[]).length !== queryEmbedding.length,
+        );
+        if (embeddedRows.length > 0 && dimMismatch) {
+          console.warn(
+            `[memory] Dimension drift in agent_memories for ${input.agentId}: stored=${(dimMismatch.embedding as number[]).length}, query=${queryEmbedding.length}. Re-embed or normalize.`,
+          );
+        }
       }
 
       // --- pg_trgm fallback ---

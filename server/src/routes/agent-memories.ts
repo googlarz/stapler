@@ -101,12 +101,21 @@ export function agentMemoryRoutes(db: Db) {
 
   // ── Cross-agent peer search ─────────────────────────────────────────────
   // Allows any agent (or board user) in the same company to search ANOTHER
-  // agent's episodic memories. Used for knowledge sharing between agents
-  // (e.g. the Bavaria agent reading Berlin agent episodic notes).
+  // agent's EPISODIC memories. Wiki pages are excluded by default — they
+  // often contain agent-specific compiled knowledge that shouldn't leak
+  // across trust boundaries. Pass `includeWiki=true` to opt in when the
+  // calling agent explicitly needs wiki content (e.g. a coordinator agent
+  // reading the Bavaria agent's style guide).
   //
   // Auth difference from the regular list/search route: `assertAgentIdentity`
   // is deliberately absent — any same-company caller may read. The company
   // boundary is still enforced by `assertCompanyAccess`.
+  //
+  // Hardening:
+  // - q length floor of 3 chars (prevents wildcard bulk dumps)
+  // - limit clamped to 25 for peer scope (vs 100 for self-search)
+  // - excludeWiki defaults to true; requires ?includeWiki=true to opt in
+  // - logs memory.peer_searched for every call (forensics trail)
   //
   // MUST be registered before /:id so "peer-search" is not treated as a UUID.
 
@@ -121,16 +130,44 @@ export function agentMemoryRoutes(db: Db) {
     // No assertAgentIdentity — cross-agent reads are the whole point.
 
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
-    if (!q) {
-      res.status(400).json({ error: "q is required" });
+    if (q.length < 3) {
+      res.status(400).json({ error: "q must be at least 3 characters" });
       return;
     }
     const rawLimit = req.query.limit;
-    const limit = rawLimit ? Math.max(1, Math.min(Number.parseInt(String(rawLimit), 10) || 10, 50)) : 10;
+    const limit = rawLimit ? Math.max(1, Math.min(Number.parseInt(String(rawLimit), 10) || 10, 25)) : 10;
     const rawTags = typeof req.query.tags === "string" ? req.query.tags : "";
     const tags = rawTags ? rawTags.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
+    // Default excludeWiki=true; the caller must explicitly opt in.
+    const includeWiki = req.query.includeWiki === "true";
 
-    const results = await svc.search({ agentId, q, tags, limit, excludeWiki: false });
+    const results = await svc.search({ agentId, q, tags, limit, excludeWiki: !includeWiki });
+
+    // Forensics: every cross-agent read is logged with the caller's identity
+    // so administrators can detect enumeration attacks.
+    const actor = getActorInfo(req);
+    // Only log when the caller is NOT the target (peer access). Self-calls
+    // hit the regular list/search route, but a caller using peer-search
+    // endpoint to search their own memories shouldn't be flagged as cross.
+    if (!(actor.agentId && actor.agentId === agentId)) {
+      await logActivity(db, {
+        companyId: agent.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "memory.peer_searched",
+        entityType: "agent",
+        entityId: agentId,
+        details: {
+          q: q.slice(0, 200),
+          tagCount: tags?.length ?? 0,
+          resultCount: results.length,
+          includeWiki,
+        },
+      });
+    }
+
     res.json({ items: results, mode: "peer-search", targetAgentId: agentId });
   });
 

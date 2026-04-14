@@ -76,7 +76,7 @@ describe("cli auth routes", () => {
       .post("/api/cli-auth/challenges")
       .send({
         command: "paperclipai company import",
-        clientName: "paperclipai cli",
+        clientName: "stapler cli",
         requestedAccess: "board",
       });
 
@@ -97,7 +97,7 @@ describe("cli auth routes", () => {
       id: "challenge-1",
       status: "pending",
       command: "paperclipai company import",
-      clientName: "paperclipai cli",
+      clientName: "stapler cli",
       requestedAccess: "board",
       requestedCompanyId: null,
       requestedCompanyName: null,

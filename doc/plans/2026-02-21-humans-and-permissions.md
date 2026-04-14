@@ -106,9 +106,9 @@ Problem:
 Bootstrap flow:
 
 1. If no `instance_admin` user exists for the deployment, instance is in `bootstrap_pending` state.
-2. CLI command `pnpm paperclipai auth bootstrap-ceo` creates a one-time CEO onboarding invite URL for that instance.
-3. `pnpm paperclipai onboard` runs this bootstrap check and prints the invite URL automatically when `bootstrap_pending`.
-4. Visiting the app while `bootstrap_pending` shows a blocking setup page with the exact CLI command to run (`pnpm paperclipai onboard`).
+2. CLI command `pnpm stapler auth bootstrap-ceo` creates a one-time CEO onboarding invite URL for that instance.
+3. `pnpm stapler onboard` runs this bootstrap check and prints the invite URL automatically when `bootstrap_pending`.
+4. Visiting the app while `bootstrap_pending` shows a blocking setup page with the exact CLI command to run (`pnpm stapler onboard`).
 5. Accepting that CEO invite creates the first admin user and exits bootstrap mode.
 
 Security rules:
@@ -385,7 +385,7 @@ V1 approach:
 4. `cloud_hosted` cannot start without auth configured.
 5. No request in `cloud_hosted` can mutate data without authenticated actor.
 6. If no initial admin exists, app shows bootstrap instructions with CLI command.
-7. `pnpm paperclipai onboard` outputs a CEO onboarding invite URL when bootstrap is pending.
+7. `pnpm stapler onboard` outputs a CEO onboarding invite URL when bootstrap is pending.
 8. One `company_join` link supports both human and agent onboarding via join-type selection on the invite landing page.
 9. Invite delivery in V1 is copy-link only (no built-in email delivery).
 10. Share-link acceptance creates a pending join request; it does not grant immediate access.

@@ -185,22 +185,22 @@ describe("writePaperclipSkillSyncPreference", () => {
 
 describe("resolvePaperclipDesiredSkillNames — canonicalization", () => {
   const entries = [
-    { key: "paperclipai/paperclip/core",  runtimeName: "core",  required: true  },
-    { key: "paperclipai/paperclip/extra", runtimeName: "extra", required: false },
+    { key: "stapler/stapler/core",  runtimeName: "core",  required: true  },
+    { key: "stapler/stapler/extra", runtimeName: "extra", required: false },
     { key: "vendor/tools/search",         runtimeName: "search-tool", required: false },
   ];
 
   describe("reference resolution priority (exact key → runtimeName → slug)", () => {
     it("resolves reference by exact key (case insensitive)", () => {
-      const config = { paperclipSkillSync: { desiredSkills: ["paperclipai/paperclip/extra"] } };
+      const config = { paperclipSkillSync: { desiredSkills: ["stapler/stapler/extra"] } };
       const result = resolvePaperclipDesiredSkillNames(config, entries);
-      expect(result).toContain("paperclipai/paperclip/extra");
+      expect(result).toContain("stapler/stapler/extra");
     });
 
     it("resolves reference by exact key — case insensitive", () => {
       const config = { paperclipSkillSync: { desiredSkills: ["PAPERCLIPAI/PAPERCLIP/EXTRA"] } };
       const result = resolvePaperclipDesiredSkillNames(config, entries);
-      expect(result).toContain("paperclipai/paperclip/extra");
+      expect(result).toContain("stapler/stapler/extra");
     });
 
     it("resolves reference by runtimeName", () => {
@@ -210,10 +210,10 @@ describe("resolvePaperclipDesiredSkillNames — canonicalization", () => {
     });
 
     it("resolves reference by slug (last segment of key)", () => {
-      // "extra" is the slug of "paperclipai/paperclip/extra"
+      // "extra" is the slug of "stapler/stapler/extra"
       const config = { paperclipSkillSync: { desiredSkills: ["extra"] } };
       const result = resolvePaperclipDesiredSkillNames(config, entries);
-      expect(result).toContain("paperclipai/paperclip/extra");
+      expect(result).toContain("stapler/stapler/extra");
     });
 
     it("keeps unknown reference as-is (no match found)", () => {
@@ -249,7 +249,7 @@ describe("resolvePaperclipDesiredSkillNames — canonicalization", () => {
   describe("interaction with required skills", () => {
     it("always returns required skills even when no explicit preference", () => {
       const result = resolvePaperclipDesiredSkillNames({}, entries);
-      expect(result).toEqual(["paperclipai/paperclip/core"]);
+      expect(result).toEqual(["stapler/stapler/core"]);
     });
 
     it("merges required and desired without duplicates", () => {
@@ -257,14 +257,14 @@ describe("resolvePaperclipDesiredSkillNames — canonicalization", () => {
       const config = { paperclipSkillSync: { desiredSkills: ["core", "extra"] } };
       const result = resolvePaperclipDesiredSkillNames(config, entries);
       // core appears once despite being in both required and desired
-      expect(result.filter((k) => k === "paperclipai/paperclip/core")).toHaveLength(1);
-      expect(result).toContain("paperclipai/paperclip/extra");
+      expect(result.filter((k) => k === "stapler/stapler/core")).toHaveLength(1);
+      expect(result).toContain("stapler/stapler/extra");
     });
 
     it("includes required skills even when explicit preference lists zero desired skills", () => {
       const config = { paperclipSkillSync: { desiredSkills: [] } };
       const result = resolvePaperclipDesiredSkillNames(config, entries);
-      expect(result).toEqual(["paperclipai/paperclip/core"]);
+      expect(result).toEqual(["stapler/stapler/core"]);
     });
   });
 
@@ -280,7 +280,7 @@ describe("resolvePaperclipDesiredSkillNames — canonicalization", () => {
     // empty string → canonicalizeDesiredPaperclipSkillReference returns ""
     // filter(Boolean) removes it
     expect(result).not.toContain("");
-    expect(result).toContain("paperclipai/paperclip/extra");
+    expect(result).toContain("stapler/stapler/extra");
   });
 });
 

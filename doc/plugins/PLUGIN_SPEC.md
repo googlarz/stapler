@@ -241,11 +241,11 @@ This on-disk model is the reason the current implementation expects a persistent
 
 Paperclip should add CLI commands:
 
-- `pnpm paperclipai plugin list`
-- `pnpm paperclipai plugin install <package[@version]>`
-- `pnpm paperclipai plugin uninstall <plugin-id>`
-- `pnpm paperclipai plugin upgrade <plugin-id> [version]`
-- `pnpm paperclipai plugin doctor <plugin-id>`
+- `pnpm stapler plugin list`
+- `pnpm stapler plugin install <package[@version]>`
+- `pnpm stapler plugin uninstall <plugin-id>`
+- `pnpm stapler plugin upgrade <plugin-id> [version]`
+- `pnpm stapler plugin doctor <plugin-id>`
 
 These commands are instance-level operations.
 
@@ -1318,7 +1318,7 @@ When a plugin is uninstalled, the host must handle plugin-owned data explicitly.
 3. Plugin-owned data (`plugin_state`, `plugin_entities`, `plugin_jobs`, `plugin_job_runs`, `plugin_webhook_deliveries`, `plugin_config`) is retained for a configurable grace period (default: 30 days).
 4. During the grace period, the operator can reinstall the same plugin and recover its state.
 5. After the grace period, the host purges all plugin-owned data for the uninstalled plugin.
-6. The operator may force-purge immediately via CLI: `pnpm paperclipai plugin purge <plugin-id>`.
+6. The operator may force-purge immediately via CLI: `pnpm stapler plugin purge <plugin-id>`.
 
 ### 25.2 Upgrade Data Considerations
 
@@ -1481,7 +1481,7 @@ expect(data.syncedCount).toBeGreaterThan(0);
 
 For developing a plugin against a running Paperclip instance:
 
-- The operator installs the plugin from a local path: `pnpm paperclipai plugin install ./path/to/plugin`
+- The operator installs the plugin from a local path: `pnpm stapler plugin install ./path/to/plugin`
 - The host watches the plugin directory for changes and restarts the worker on rebuild.
 - `devUiUrl` in plugin config can point to a local Vite dev server for UI hot-reload.
 - The plugin settings page shows real-time logs from the worker for debugging.

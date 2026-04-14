@@ -232,7 +232,7 @@ function uniqueImportedSkillKey(companyId: string, baseSlug: string, usedKeys: S
 }
 
 function buildSkillRuntimeName(key: string, slug: string) {
-  if (key.startsWith("paperclipai/paperclip/")) return slug;
+  if (key.startsWith("stapler/stapler/")) return slug;
   return `${slug}--${hashSkillValue(key)}`;
 }
 
@@ -263,7 +263,7 @@ function deriveCanonicalSkillKey(
 
   const sourceKind = asString(metadata?.sourceKind);
   if (sourceKind === "paperclip_bundled") {
-    return `paperclipai/paperclip/${slug}`;
+    return `stapler/stapler/${slug}`;
   }
 
   const owner = normalizeSkillSlug(asString(metadata?.owner));

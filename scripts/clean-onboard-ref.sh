@@ -83,4 +83,4 @@ env \
   HOST="$STAPLER_HOST" \
   PORT="$STAPLER_PORT" \
   STAPLER_OPEN_ON_LISTEN="$STAPLER_OPEN_ON_LISTEN" \
-  pnpm paperclipai onboard --yes --data-dir "$PC_DATA"
+  pnpm stapler onboard --yes --data-dir "$PC_DATA"

@@ -121,7 +121,7 @@ describe("readPaperclipRuntimeSkillEntries", () => {
 
       expect(result).toHaveLength(2);
       const keys = result.map((e) => e.key).sort();
-      expect(keys).toEqual(["paperclipai/paperclip/alpha", "paperclipai/paperclip/beta"]);
+      expect(keys).toEqual(["stapler/stapler/alpha", "stapler/stapler/beta"]);
       // Auto-discovered skills are always required.
       expect(result.every((e) => e.required === true)).toBe(true);
     });
@@ -136,7 +136,7 @@ describe("readPaperclipRuntimeSkillEntries", () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(result[0]?.key).toBe("paperclipai/paperclip/gamma");
+      expect(result[0]?.key).toBe("stapler/stapler/gamma");
     });
 
     it("falls back to auto-discovery when paperclipRuntimeSkills is a string (not an array)", async () => {
@@ -149,7 +149,7 @@ describe("readPaperclipRuntimeSkillEntries", () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(result[0]?.key).toBe("paperclipai/paperclip/delta");
+      expect(result[0]?.key).toBe("stapler/stapler/delta");
     });
 
     it("returns [] when no skills directory is found anywhere", async () => {
@@ -235,7 +235,7 @@ describe("skill injection pipeline (integration)", () => {
     const desired = resolvePaperclipDesiredSkillNames(config, entries);
 
     expect(entries).toHaveLength(1);
-    expect(desired).toEqual(["paperclipai/paperclip/paperclip"]); // required → injected
+    expect(desired).toEqual(["stapler/stapler/paperclip"]); // required → injected
   });
 
   it("explicit entries with required:false → nothing injected even with non-empty config", async () => {
@@ -361,7 +361,7 @@ describe("listPaperclipSkillEntries", () => {
     expect(entries).toHaveLength(2);
     const names = entries.map((e) => e.runtimeName).sort();
     expect(names).toEqual(["skill-a", "skill-b"]);
-    expect(entries.every((e) => e.key.startsWith("paperclipai/paperclip/"))).toBe(true);
+    expect(entries.every((e) => e.key.startsWith("stapler/stapler/"))).toBe(true);
     expect(entries.every((e) => e.required === true)).toBe(true);
   });
 

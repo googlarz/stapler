@@ -12,7 +12,7 @@
 
 ---
 
-Stapler is a **personal fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip)** — a multi-agent orchestration platform you run on your own machine. You describe a mission, the wizard spins up a company and hires a CEO and COO. From there, agents create issues for each other, pursue goals, and self-correct — with or without you in the loop.
+Stapler is a **personal fork of [paperclipai/paperclip](https://github.com/googlarz/stapler)** — a multi-agent orchestration platform you run on your own machine. You describe a mission, the wizard spins up a company and hires a CEO and COO. From there, agents create issues for each other, pursue goals, and self-correct — with or without you in the loop.
 
 Agents run on any adapter the platform supports — **Claude**, **Gemini**, **Codex**, **Cursor**, **Ollama** (fully local), **OpenCode**, and more. Different agents in the same company can use different adapters.
 
@@ -394,10 +394,10 @@ The server exposes a REST API at port 3000. All endpoints require an `Authorizat
 
 ## Syncing with Upstream
 
-Stapler tracks [paperclipai/paperclip](https://github.com/paperclipai/paperclip). To pull in upstream fixes:
+Stapler tracks [paperclipai/paperclip](https://github.com/googlarz/stapler). To pull in upstream fixes:
 
 ```bash
-git remote add upstream https://github.com/paperclipai/paperclip.git
+git remote add upstream https://github.com/googlarz/stapler.git
 git fetch upstream master
 git rebase upstream/master
 ```

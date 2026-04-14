@@ -27,7 +27,7 @@ This plan is based on:
 - `doc/SPEC-implementation.md`
 - `docs/agents-runtime.md`
 - `doc/plans/2026-03-13-TOKEN-OPTIMIZATION-PLAN.md`
-- Discussion #449: <https://github.com/paperclipai/paperclip/discussions/449>
+- Discussion #449: <https://github.com/googlarz/stapler/discussions/449>
 - OpenAI eval best practices: <https://developers.openai.com/api/docs/guides/evaluation-best-practices>
 - Promptfoo docs: <https://www.promptfoo.dev/docs/configuration/test-cases/> and <https://www.promptfoo.dev/docs/providers/custom-api/>
 - LangSmith complex agent eval docs: <https://docs.langchain.com/langsmith/evaluate-complex-agent>
