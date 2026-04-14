@@ -14,6 +14,7 @@
  */
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { cosineSimilarity, getEmbedding, getEmbeddingThreshold } from "./embeddings.js";
 
 /** pg_trgm similarity threshold for company memory search (mirrors agent memory default). */
 const DEFAULT_SEARCH_THRESHOLD = 0.1;
@@ -98,6 +99,10 @@ export function companyMemoryService(db: Db) {
       const contentHash = hashContent(trimmed);
       const tags = normalizeTags(input.tags);
 
+      // Generate embedding before inserting. On failure, embedding is null
+      // and search falls back to pg_trgm for this row.
+      const embedding = await getEmbedding(trimmed);
+
       // Insert-or-ignore. ON CONFLICT DO NOTHING means the RETURNING clause
       // returns nothing on conflict, so we fall back to a SELECT.
       const inserted = await db
@@ -111,6 +116,7 @@ export function companyMemoryService(db: Db) {
           createdByAgentId: input.createdByAgentId ?? null,
           createdInRunId: input.createdInRunId ?? null,
           expiresAt: input.expiresAt ?? null,
+          embedding,
         })
         .onConflictDoNothing()
         .returning();
@@ -144,6 +150,7 @@ export function companyMemoryService(db: Db) {
             tags,
             createdByAgentId: input.createdByAgentId ?? null,
             createdInRunId: input.createdInRunId ?? null,
+            embedding,
           })
           .returning();
         return retried[0];
@@ -182,9 +189,14 @@ export function companyMemoryService(db: Db) {
     },
 
     /**
-     * Keyword search over a company's memories via pg_trgm similarity.
-     * Rows are scored with `similarity(content, $q)` and filtered by the
-     * default threshold (0.1). Results are ordered by score descending.
+     * Search a company's memories. Uses the same two-path strategy as
+     * agentMemoryService.search:
+     *
+     * 1. **Semantic** — embed the query with OpenAI text-embedding-3-small,
+     *    fetch all non-expired rows in-memory (≤1 000), compute cosine
+     *    similarity for rows that have embeddings, return top-K above threshold.
+     * 2. **pg_trgm fallback** — used when OPENAI_API_KEY is absent, the API
+     *    call fails, or no embedded rows match.
      */
     search: async (input: {
       companyId: string;
@@ -197,6 +209,42 @@ export function companyMemoryService(db: Db) {
       const limit = Math.max(1, Math.min(input.limit ?? 10, 100));
       const tagsFilter = normalizeTags(input.tags);
 
+      // --- Semantic path ---
+      const queryEmbedding = await getEmbedding(trimmedQ);
+      if (queryEmbedding) {
+        const baseConditions = [eq(companyMemories.companyId, input.companyId), notExpired];
+        if (tagsFilter.length > 0) {
+          baseConditions.push(
+            sql`${companyMemories.tags} @> ${JSON.stringify(tagsFilter)}::jsonb`,
+          );
+        }
+
+        const allRows = await db
+          .select()
+          .from(companyMemories)
+          .where(and(...baseConditions))
+          .orderBy(desc(companyMemories.createdAt))
+          .limit(1000);
+
+        const threshold = getEmbeddingThreshold();
+        const scored = allRows
+          .filter((r): r is typeof r & { embedding: number[] } =>
+            Array.isArray(r.embedding) && (r.embedding as number[]).length === queryEmbedding.length,
+          )
+          .map((r) => ({
+            row: r,
+            score: cosineSimilarity(queryEmbedding, r.embedding),
+          }))
+          .filter((r) => r.score >= threshold)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, limit);
+
+        if (scored.length > 0) {
+          return scored.map(({ row, score }) => ({ ...row, score }));
+        }
+      }
+
+      // --- pg_trgm fallback ---
       const conditions = [
         eq(companyMemories.companyId, input.companyId),
         notExpired,
@@ -254,6 +302,8 @@ export function companyMemoryService(db: Db) {
       const slug = input.wikiSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 64);
       if (!slug) throw new Error("wikiSlug must produce a non-empty slug after normalization");
 
+      const embedding = await getEmbedding(trimmed);
+
       const [row] = await db
         .insert(companyMemories)
         .values({
@@ -265,11 +315,12 @@ export function companyMemoryService(db: Db) {
           wikiSlug: slug,
           createdByAgentId: input.createdByAgentId ?? null,
           createdInRunId: input.createdInRunId ?? null,
+          embedding,
         })
         .onConflictDoUpdate({
           target: [companyMemories.companyId, companyMemories.wikiSlug],
           targetWhere: sql`${companyMemories.wikiSlug} IS NOT NULL`,
-          set: { content: trimmed, contentHash, contentBytes, tags, updatedAt: sql`now()` },
+          set: { content: trimmed, contentHash, contentBytes, tags, updatedAt: sql`now()`, embedding },
         })
         .returning();
       return row;

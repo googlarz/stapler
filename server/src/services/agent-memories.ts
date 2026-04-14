@@ -25,6 +25,7 @@ import type {
   AgentMemorySearchResult,
   AgentMemorySaveResult,
 } from "@paperclipai/shared";
+import { cosineSimilarity, getEmbedding, getEmbeddingThreshold } from "./embeddings.js";
 
 /**
  * Maximum number of memories a single agent may retain. Oldest are
@@ -176,6 +177,12 @@ export function agentMemoryService(db: Db) {
       const contentHash = hashContent(trimmed);
       const tags = normalizeTags(input.tags);
 
+      // Generate embedding outside the transaction — the API call must not
+      // hold an open transaction while waiting for a network round-trip.
+      // On failure or when OPENAI_API_KEY is absent, embedding is null and
+      // search falls back to pg_trgm for this row.
+      const embedding = await getEmbedding(trimmed);
+
       return db.transaction(async (tx) => {
         // Serialize concurrent saves for the same agent so the post-insert
         // prune count is always accurate. Without this lock, two parallel
@@ -219,11 +226,13 @@ export function agentMemoryService(db: Db) {
             tags,
             createdInRunId: input.runId ?? null,
             expiresAt: input.expiresAt ?? null,
+            embedding,
           })
           .onConflictDoUpdate({
             target: [agentMemories.agentId, agentMemories.contentHash],
             // Also refresh expiresAt on re-save so callers can extend or
             // set a TTL on a previously non-expiring memory.
+            // Embedding is not updated — content is identical, so the vector is too.
             set: { updatedAt: sql`now()`, expiresAt: input.expiresAt ?? null },
           })
           .returning();
@@ -279,14 +288,21 @@ export function agentMemoryService(db: Db) {
     },
 
     /**
-     * Keyword search over one agent's memories via pg_trgm
-     * similarity. Rows are scored with `similarity(content, $q)` and
-     * filtered by a configurable threshold. Results include the
-     * similarity score for UI display and test assertions.
+     * Search an agent's memories. Strategy:
      *
-     * For small per-agent corpora (a few hundred rows) this is a
-     * seq scan + similarity() call per row. Fast enough without the
-     * GIN index; the index is maintained for future scale.
+     * 1. **Semantic (default when OPENAI_API_KEY is set)** — embed the query,
+     *    fetch up to 1 000 non-expired rows in-memory, compute cosine
+     *    similarity for rows that have an embedding, return the top-K above
+     *    a configurable threshold. Falls through to pg_trgm if the API call
+     *    fails or no embedded rows are found (e.g. all rows pre-date the
+     *    embedding feature rollout).
+     *
+     * 2. **Keyword fallback (pg_trgm)** — original trigram search used when
+     *    OPENAI_API_KEY is absent or when the semantic path yields nothing.
+     *
+     * App-side cosine similarity is fast enough at Odysseia scale (≤500
+     * episodic rows per agent). When the corpus grows, a pgvector IVFFlat
+     * index can replace the full-scan without changing the service API.
      */
     search: async (input: SearchMemoryInput): Promise<AgentMemorySearchResult[]> => {
       const trimmedQ = input.q.trim();
@@ -295,6 +311,47 @@ export function agentMemoryService(db: Db) {
       const limit = Math.max(1, Math.min(input.limit ?? 10, 100));
       const tagsFilter = normalizeTags(input.tags);
 
+      // --- Semantic path ---
+      const queryEmbedding = await getEmbedding(trimmedQ);
+      if (queryEmbedding) {
+        const baseConditions = [eq(agentMemories.agentId, input.agentId), notExpired];
+        if (tagsFilter.length > 0) {
+          baseConditions.push(
+            sql`${agentMemories.tags} @> ${JSON.stringify(tagsFilter)}::jsonb`,
+          );
+        }
+        if (input.excludeWiki) {
+          baseConditions.push(isNull(agentMemories.wikiSlug));
+        }
+
+        const allRows = await db
+          .select()
+          .from(agentMemories)
+          .where(and(...baseConditions))
+          // Fetch most-recent first so ties resolve by recency.
+          .orderBy(desc(agentMemories.createdAt))
+          .limit(1000);
+
+        const threshold = getEmbeddingThreshold();
+        const scored = allRows
+          .filter((r): r is typeof r & { embedding: number[] } =>
+            Array.isArray(r.embedding) && (r.embedding as number[]).length === queryEmbedding.length,
+          )
+          .map((r) => ({
+            row: r,
+            score: cosineSimilarity(queryEmbedding, r.embedding),
+          }))
+          .filter((r) => r.score >= threshold)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, limit);
+
+        if (scored.length > 0) {
+          return scored.map(({ row, score }) => ({ ...rowToMemory(row), score }));
+        }
+        // Fall through: no embedded rows found → pg_trgm covers un-embedded rows.
+      }
+
+      // --- pg_trgm fallback ---
       const baseConditions = [
         eq(agentMemories.agentId, input.agentId),
         notExpired,
@@ -408,13 +465,17 @@ export function agentMemoryService(db: Db) {
       const slug = input.wikiSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 64);
       if (!slug) throw new Error("wikiSlug must produce a non-empty slug after normalization");
 
+      // Generate embedding for the wiki content (outside any transaction).
+      const embedding = await getEmbedding(trimmed);
+
       const [row] = await db
         .insert(agentMemories)
-        .values({ companyId: input.companyId, agentId: input.agentId, content: trimmed, contentHash, contentBytes, tags, wikiSlug: slug, createdInRunId: input.runId ?? null })
+        .values({ companyId: input.companyId, agentId: input.agentId, content: trimmed, contentHash, contentBytes, tags, wikiSlug: slug, createdInRunId: input.runId ?? null, embedding })
         .onConflictDoUpdate({
           target: [agentMemories.agentId, agentMemories.wikiSlug],
           targetWhere: sql`${agentMemories.wikiSlug} IS NOT NULL`,
-          set: { content: trimmed, contentHash, contentBytes, tags, updatedAt: sql`now()` },
+          // Update embedding on wiki upsert — content may have changed.
+          set: { content: trimmed, contentHash, contentBytes, tags, updatedAt: sql`now()`, embedding },
         })
         .returning();
       return rowToMemory(row);

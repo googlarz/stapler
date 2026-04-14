@@ -7,7 +7,26 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  customType,
 } from "drizzle-orm/pg-core";
+
+const float4Array = customType<{ data: number[] | null; driverData: number[] | string | null }>({
+  dataType() { return "real[]"; },
+  toDriver(value: number[] | null): string | null {
+    if (!value) return null;
+    return `{${value.join(",")}}`;
+  },
+  fromDriver(value: number[] | string | null): number[] | null {
+    if (!value) return null;
+    if (Array.isArray(value)) return (value as unknown[]).map(Number);
+    if (typeof value === "string") {
+      const s = value.trim();
+      if (s === "{}") return [];
+      return s.slice(1, -1).split(",").map(Number);
+    }
+    return null;
+  },
+});
 import { sql } from "drizzle-orm";
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
@@ -51,6 +70,11 @@ export const companyMemories = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     /** Optional expiry. When set and past, the row is excluded from lists, searches, and injection. */
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /**
+     * 1536-dim float32 embedding from OpenAI text-embedding-3-small.
+     * NULL for rows saved before OPENAI_API_KEY was configured.
+     */
+    embedding: float4Array("embedding"),
   },
   (table) => ({
     companyCreatedAtIdx: index("company_memories_company_created_at_idx").on(
