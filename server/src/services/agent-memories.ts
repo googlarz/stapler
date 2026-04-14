@@ -393,29 +393,47 @@ export function agentMemoryService(db: Db) {
       return row ? rowToMemory(row) : null;
     },
 
-    wikiList: async (agentId: string, limit = 50): Promise<AgentMemory[]> => {
+    /**
+     * List all wiki pages for an agent, sorted alphabetically by slug.
+     * No count limit — wiki pages are deliberately maintained by the agent
+     * and should all be visible in the API. A safety cap of 500 guards
+     * against runaway rows from bugs; normal agents will have tens of pages.
+     */
+    wikiList: async (agentId: string): Promise<AgentMemory[]> => {
       const rows = await db.select().from(agentMemories)
         .where(and(eq(agentMemories.agentId, agentId), isNotNull(agentMemories.wikiSlug)))
         .orderBy(asc(agentMemories.wikiSlug))
-        .limit(Math.max(1, Math.min(limit, 200)));
+        .limit(500);
       return rows.map(rowToMemory);
     },
   };
 }
 
 /**
- * Load top-K memories relevant to the current run context for injection
- * into the adapter's prompt at run-start.
+ * Default byte budget for wiki page injection. ~4K tokens — fits comfortably
+ * in all adapters including small Ollama models with 8K context windows.
+ * Override per-agent via `agent.config.wikiInjectionBudgetBytes`.
+ */
+const DEFAULT_WIKI_INJECTION_BUDGET_BYTES = 16_000;
+
+/**
+ * Load memories for injection into the adapter's prompt at run-start.
  *
- * Returns an empty array when:
- * - `agent.config.enableMemoryInjection` is not `true`
- * - The assembled search query is empty
- * - No memories pass the similarity threshold
+ * Two independent memory tracks are loaded and returned together:
  *
- * The search query is assembled from `context.wakeReason` + the task title
- * from `context.taskTitle` or `context.issueTitle`. Adapters that receive a
- * non-empty result should render a `## Relevant memories` section in their
- * system / user prompt.
+ * 1. **Wiki pages** (compiled knowledge) — always injected, regardless of
+ *    whether there is a search query. Pages are sorted by `updatedAt DESC`
+ *    so the most actively-maintained ones arrive first. A byte budget
+ *    (default 16 KB, configurable via `agent.config.wikiInjectionBudgetBytes`)
+ *    prevents context blowout on long-running agents with many pages.
+ *    Pages that exceed the remaining budget are skipped rather than
+ *    truncating — a smaller page later in the list may still fit.
+ *
+ * 2. **Episodic memories** (similarity search) — only fetched when a search
+ *    query can be assembled from the wakeup context. Count is bounded by
+ *    `agent.config.memoryInjectionLimit` (default 5, max 20).
+ *
+ * Returns an empty array when `agent.config.enableMemoryInjection !== true`.
  */
 export async function maybeLoadMemoriesForInjection(
   db: Db,
@@ -428,6 +446,38 @@ export async function maybeLoadMemoriesForInjection(
 
   if (config.enableMemoryInjection !== true) return [];
 
+  const svc = agentMemoryService(db);
+
+  // ── Track 1: Wiki pages ──────────────────────────────────────────────────
+  // Always injected. Sort by updatedAt DESC so the most actively-maintained
+  // pages (which the agent is currently working on) arrive first. wikiList()
+  // returns alphabetical for API browsing; re-sort here for injection priority.
+  const wikiBudgetBytes =
+    typeof config.wikiInjectionBudgetBytes === "number" && config.wikiInjectionBudgetBytes > 0
+      ? Math.min(config.wikiInjectionBudgetBytes, 200_000)
+      : DEFAULT_WIKI_INJECTION_BUDGET_BYTES;
+
+  const allWikiPages = await svc.wikiList(agent.id);
+  const byRecency = [...allWikiPages].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+  let wikiBudgetLeft = wikiBudgetBytes;
+  const wikiInjected: InjectedMemory[] = [];
+  for (const page of byRecency) {
+    // Skip pages that don't fit but keep going — a smaller page may still fit.
+    if (page.contentBytes > wikiBudgetLeft) continue;
+    wikiInjected.push({
+      id: page.id,
+      content: page.content,
+      tags: page.tags,
+      score: 1,
+      wikiSlug: page.wikiSlug ?? undefined,
+    });
+    wikiBudgetLeft -= page.contentBytes;
+  }
+
+  // ── Track 2: Episodic memories (similarity search) ───────────────────────
+  // Only fetched when we have a non-empty query. Wiki pages above are already
+  // in the result; we return them even if no query is available.
   const limit = typeof config.memoryInjectionLimit === "number" && config.memoryInjectionLimit > 0
     ? Math.min(config.memoryInjectionLimit, 20)
     : 5;
@@ -465,21 +515,12 @@ export async function maybeLoadMemoriesForInjection(
   const q = rawQ.length > MAX_QUERY_CHARS
     ? rawQ.slice(0, MAX_QUERY_CHARS).replace(/\s\S*$/, "").trim() || rawQ.slice(0, MAX_QUERY_CHARS)
     : rawQ;
-  if (!q) return [];
 
-  const svc = agentMemoryService(db);
+  if (!q) {
+    // No search context available — return wiki pages only.
+    return wikiInjected;
+  }
 
-  // Load wiki pages unconditionally — they are compiled knowledge, always relevant.
-  const wikiPages = await svc.wikiList(agent.id);
-  const wikiInjected: InjectedMemory[] = wikiPages.map((p) => ({
-    id: p.id,
-    content: p.content,
-    tags: p.tags,
-    score: 1,
-    wikiSlug: p.wikiSlug ?? undefined,
-  }));
-
-  // Similarity search for non-wiki memories only.
   const searchResults = await svc.search({ agentId: agent.id, q, limit });
   const searchInjected: InjectedMemory[] = searchResults
     .filter((r) => !r.wikiSlug)
