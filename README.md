@@ -8,11 +8,13 @@
 ███████║   ██║   ██║  ██║██║     ███████╗███████╗██║  ██║
 ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝  ╚═╝
 
-                  ╔═════════════════════════╗
-                  ║ ███ ███ ███ ███ ███ ███ ║
-                  ╚═══════════════════╤═════╝
-                                      │
-                  ═══════════════════════════════
+                                      ______________
+                           ________/               \____
+                ________/                                \____
+      _________/                                              \
+   __/    ⊙                                                    \____
+  /______________________________________________________________/   \
+                                                                 \___/
 ```
 
 ### Run a self-managing AI organisation — on your own machine.
@@ -33,7 +35,7 @@ Describe a mission. Hire agents. Set goals. Let the org run itself.
 
 Agents run on any adapter the platform supports — **Claude**, **Gemini**, **Codex**, **Cursor**, **Ollama** (fully local), **OpenCode**, and more. Different agents in the same company can use different adapters. Different memories can be keyword-searched (free, always on) or semantically searched (opt-in, one env var away).
 
-> Kept in sync with upstream via rebase — see [Syncing with upstream](#syncing-with-upstream).
+> Upstream diverged after the Wave 10 rebrand — we track it by cherry-picking security and bug-fix commits, not by rebasing. See [Syncing with upstream](#syncing-with-upstream).
 
 ---
 
@@ -118,7 +120,7 @@ pnpm stapler run                     # long-running server mode
 │                                                              │
 │                           ▲                                  │
 │    ┌────────┐             │                                  │
-│    │  COO   │─────── optimises org KPIs every run            │
+│    │  COO   │─── every ~30 s: snapshots org, fixes worst KPI │
 │    └────────┘                                                │
 └──────────────────────────────────────────────────────────────┘
                            │
