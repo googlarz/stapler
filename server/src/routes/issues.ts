@@ -1586,7 +1586,7 @@ export function issueRoutes(
     if (scheduledForRaw !== undefined) {
       updateFields.scheduledFor = scheduledForRaw ? new Date(scheduledForRaw) : null;
     }
-    if (commentBody && reopenRequested === true && isClosed && updateFields.status === undefined) {
+    if (commentBody && reopenRequested === true && isClosed) {
       updateFields.status = "todo";
     }
     // Parent done gate: cannot mark done while direct children are still open.
