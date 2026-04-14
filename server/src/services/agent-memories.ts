@@ -25,7 +25,12 @@ import type {
   AgentMemorySearchResult,
   AgentMemorySaveResult,
 } from "@paperclipai/shared";
-import { cosineSimilarity, getEmbedding, getEmbeddingThreshold } from "./embeddings.js";
+import {
+  cosineSimilarity,
+  findBestTagsFromCandidates,
+  getEmbedding,
+  getEmbeddingThreshold,
+} from "./embeddings.js";
 
 /**
  * Maximum number of memories a single agent may retain. Oldest are
@@ -183,7 +188,7 @@ export function agentMemoryService(db: Db) {
       // search falls back to pg_trgm for this row.
       const embedding = await getEmbedding(trimmed);
 
-      return db.transaction(async (tx) => {
+      const result = await db.transaction(async (tx) => {
         // Serialize concurrent saves for the same agent so the post-insert
         // prune count is always accurate. Without this lock, two parallel
         // saves can both read the count before either prunes and leave the
@@ -285,6 +290,44 @@ export function agentMemoryService(db: Db) {
 
         return { memory: rowToMemory(memoryRow), deduped };
       });
+
+      // Auto-tag: when the caller provided no tags and this was a fresh insert
+      // with an embedding, find the nearest already-tagged neighbour and adopt
+      // its tags. Condition: input.tags === undefined (not []) signals that the
+      // caller is happy to receive suggested tags rather than explicitly opting
+      // into an empty tag set.
+      if (embedding && !result.deduped && input.tags === undefined) {
+        const candidates = await db
+          .select({ embedding: agentMemories.embedding, tags: agentMemories.tags })
+          .from(agentMemories)
+          .where(
+            and(
+              eq(agentMemories.agentId, input.agentId),
+              isNotNull(agentMemories.embedding),
+              ne(agentMemories.id, result.memory.id),
+              sql`jsonb_array_length(${agentMemories.tags}) > 0`,
+            ),
+          )
+          .limit(200);
+
+        const autoTags = findBestTagsFromCandidates(
+          candidates.map((c) => ({
+            embedding: c.embedding,
+            tags: Array.isArray(c.tags) ? (c.tags as string[]) : [],
+          })),
+          embedding,
+        );
+
+        if (autoTags.length > 0) {
+          await db
+            .update(agentMemories)
+            .set({ tags: autoTags, updatedAt: sql`now()` })
+            .where(eq(agentMemories.id, result.memory.id));
+          return { memory: { ...result.memory, tags: autoTags }, deduped: false };
+        }
+      }
+
+      return result;
     },
 
     /**

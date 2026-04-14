@@ -99,6 +99,41 @@ export function agentMemoryRoutes(db: Db) {
     res.json({ ...memStats, limits });
   });
 
+  // ── Cross-agent peer search ─────────────────────────────────────────────
+  // Allows any agent (or board user) in the same company to search ANOTHER
+  // agent's episodic memories. Used for knowledge sharing between agents
+  // (e.g. the Bavaria agent reading Berlin agent episodic notes).
+  //
+  // Auth difference from the regular list/search route: `assertAgentIdentity`
+  // is deliberately absent — any same-company caller may read. The company
+  // boundary is still enforced by `assertCompanyAccess`.
+  //
+  // MUST be registered before /:id so "peer-search" is not treated as a UUID.
+
+  router.get("/agents/:agentId/memories/peer-search", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    // No assertAgentIdentity — cross-agent reads are the whole point.
+
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (!q) {
+      res.status(400).json({ error: "q is required" });
+      return;
+    }
+    const rawLimit = req.query.limit;
+    const limit = rawLimit ? Math.max(1, Math.min(Number.parseInt(String(rawLimit), 10) || 10, 50)) : 10;
+    const rawTags = typeof req.query.tags === "string" ? req.query.tags : "";
+    const tags = rawTags ? rawTags.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
+
+    const results = await svc.search({ agentId, q, tags, limit, excludeWiki: false });
+    res.json({ items: results, mode: "peer-search", targetAgentId: agentId });
+  });
+
   // ── Wiki pages ───────────────────────────────────────────────────────────
   // All /wiki routes MUST appear before /:id so Express does not shadow them.
 

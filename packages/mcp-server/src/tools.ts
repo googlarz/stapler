@@ -492,7 +492,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
     ),
     makeTool(
       "memorySearch",
-      "Keyword search your agent's episodic memories via pg_trgm similarity. Returns items ranked by score. Wiki pages are excluded — they are already in your context. Use multiple distinct keywords rather than natural-language sentences.",
+      "Search your agent's episodic memories. Uses semantic similarity (OpenAI embeddings) when available, falls back to keyword search. Wiki pages are excluded — they are already in your context. Natural-language phrases work well.",
       memorySearchSchema,
       async ({ q, limit, tags }) => {
         const agentId = client.resolveAgentId();
@@ -589,6 +589,26 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         return client.requestJson("GET", `/agents/${encodeURIComponent(agentId)}/memories/stats`);
       },
     ),
+    makeTool(
+      "agentPeerSearch",
+      "Search another agent's episodic memories by ID. Both agents must belong to the same company. Useful for cross-agent knowledge sharing — e.g. the Bavaria agent reading notes saved by the Berlin agent. Includes wiki pages (unlike memorySearch). Uses semantic search when available.",
+      z.object({
+        targetAgentId: z.string().uuid("targetAgentId must be a valid agent UUID"),
+        q: z.string().trim().min(1).max(512),
+        limit: z.number().int().positive().max(50).optional(),
+        tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+      }),
+      async ({ targetAgentId, q, limit, tags }) => {
+        const params = new URLSearchParams();
+        params.set("q", q);
+        if (limit !== undefined) params.set("limit", String(limit));
+        if (tags && tags.length > 0) params.set("tags", tags.join(","));
+        return client.requestJson(
+          "GET",
+          `/agents/${encodeURIComponent(targetAgentId)}/memories/peer-search?${params.toString()}`,
+        );
+      },
+    ),
     // ── Company memory tools ───────────────────────────────────────────────
     makeTool(
       "companyMemorySave",
@@ -659,7 +679,7 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
     ),
     makeTool(
       "companyMemorySearch",
-      "Keyword search the company's shared memory store via pg_trgm similarity. Returns team-wide knowledge ranked by relevance. Use for finding shared conventions, decisions, or vendor info that any agent may have saved.",
+      "Search the company's shared memory store. Uses semantic similarity (OpenAI embeddings) when available, falls back to keyword search. Returns team-wide knowledge ranked by relevance. Natural-language phrases work well.",
       z.object({
         q: z.string().trim().min(1).max(512),
         limit: z.number().int().positive().max(50).optional(),

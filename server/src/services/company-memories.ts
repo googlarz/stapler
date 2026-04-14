@@ -13,8 +13,13 @@
  * (default 4096 bytes). Callers receive `MemoryContentTooLargeError` when exceeded.
  */
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
-import { cosineSimilarity, getEmbedding, getEmbeddingThreshold } from "./embeddings.js";
+import { and, asc, desc, eq, gt, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  cosineSimilarity,
+  findBestTagsFromCandidates,
+  getEmbedding,
+  getEmbeddingThreshold,
+} from "./embeddings.js";
 
 /** pg_trgm similarity threshold for company memory search (mirrors agent memory default). */
 const DEFAULT_SEARCH_THRESHOLD = 0.1;
@@ -121,42 +126,82 @@ export function companyMemoryService(db: Db) {
         .onConflictDoNothing()
         .returning();
 
-      if (inserted.length > 0) {
-        return inserted[0];
+      // Determine whether this was a fresh insert or a dedup hit.
+      const isNew = inserted.length > 0;
+      let saved: typeof companyMemories.$inferSelect;
+
+      if (isNew) {
+        saved = inserted[0];
+      } else {
+        // Row already exists — return it.
+        const existing = await db
+          .select()
+          .from(companyMemories)
+          .where(
+            and(
+              eq(companyMemories.companyId, input.companyId),
+              eq(companyMemories.contentHash, contentHash),
+            ),
+          )
+          .limit(1);
+
+        if (!existing[0]) {
+          // Extremely unlikely race: another transaction deleted the row between
+          // our INSERT and this SELECT. Retry once by re-inserting.
+          const retried = await db
+            .insert(companyMemories)
+            .values({
+              companyId: input.companyId,
+              content: trimmed,
+              contentHash,
+              contentBytes,
+              tags,
+              createdByAgentId: input.createdByAgentId ?? null,
+              createdInRunId: input.createdInRunId ?? null,
+              embedding,
+            })
+            .returning();
+          saved = retried[0];
+        } else {
+          saved = existing[0];
+        }
       }
 
-      // Row already exists — return it.
-      const existing = await db
-        .select()
-        .from(companyMemories)
-        .where(
-          and(
-            eq(companyMemories.companyId, input.companyId),
-            eq(companyMemories.contentHash, contentHash),
-          ),
-        )
-        .limit(1);
+      // Auto-tag: fresh insert + embedding + no explicit tags → find nearest
+      // tagged neighbour and adopt its tags.
+      if (embedding && isNew && input.tags === undefined) {
+        const candidates = await db
+          .select({ embedding: companyMemories.embedding, tags: companyMemories.tags })
+          .from(companyMemories)
+          .where(
+            and(
+              eq(companyMemories.companyId, input.companyId),
+              isNotNull(companyMemories.embedding),
+              ne(companyMemories.id, saved.id),
+              sql`jsonb_array_length(${companyMemories.tags}) > 0`,
+            ),
+          )
+          .limit(200);
 
-      if (!existing[0]) {
-        // Extremely unlikely race: another transaction deleted the row between
-        // our INSERT and this SELECT. Retry once by re-inserting.
-        const retried = await db
-          .insert(companyMemories)
-          .values({
-            companyId: input.companyId,
-            content: trimmed,
-            contentHash,
-            contentBytes,
-            tags,
-            createdByAgentId: input.createdByAgentId ?? null,
-            createdInRunId: input.createdInRunId ?? null,
-            embedding,
-          })
-          .returning();
-        return retried[0];
+        const autoTags = findBestTagsFromCandidates(
+          candidates.map((c) => ({
+            embedding: c.embedding,
+            tags: Array.isArray(c.tags) ? (c.tags as string[]) : [],
+          })),
+          embedding,
+        );
+
+        if (autoTags.length > 0) {
+          const updated = await db
+            .update(companyMemories)
+            .set({ tags: autoTags, updatedAt: sql`now()` })
+            .where(eq(companyMemories.id, saved.id))
+            .returning();
+          return updated[0] ?? saved;
+        }
       }
 
-      return existing[0];
+      return saved;
     },
 
     /**

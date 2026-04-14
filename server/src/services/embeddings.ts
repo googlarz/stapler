@@ -120,3 +120,46 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   const denom = Math.sqrt(magA) * Math.sqrt(magB);
   return denom === 0 ? 0 : dot / denom;
 }
+
+/**
+ * Minimum cosine similarity required to adopt a neighbour's tags during
+ * auto-tagging. 0.65 corresponds roughly to "same topic" with
+ * text-embedding-3-small. Override via PAPERCLIP_AUTO_TAG_THRESHOLD.
+ */
+export function getAutoTagThreshold(): number {
+  const raw = process.env.PAPERCLIP_AUTO_TAG_THRESHOLD;
+  if (raw) {
+    const n = Number.parseFloat(raw);
+    if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+  }
+  return 0.65;
+}
+
+/**
+ * Given a list of candidates that each carry an embedding and a tags array,
+ * find the one most similar to `queryEmbedding` and return its tags if
+ * similarity ≥ `threshold`. Returns an empty array when no candidate
+ * exceeds the threshold (no tag suggestion).
+ *
+ * Used for post-save auto-tagging: the caller fetches tagged neighbours
+ * from the DB and passes them here; the function is pure and testable.
+ */
+export function findBestTagsFromCandidates(
+  candidates: Array<{ embedding: number[] | null; tags: string[] }>,
+  queryEmbedding: number[],
+  threshold = getAutoTagThreshold(),
+): string[] {
+  let bestScore = 0;
+  let bestTags: string[] = [];
+
+  for (const c of candidates) {
+    if (!Array.isArray(c.embedding) || c.embedding.length !== queryEmbedding.length) continue;
+    const score = cosineSimilarity(queryEmbedding, c.embedding);
+    if (score > bestScore) {
+      bestScore = score;
+      bestTags = c.tags;
+    }
+  }
+
+  return bestScore >= threshold ? bestTags : [];
+}
