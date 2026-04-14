@@ -720,6 +720,17 @@ export function OnboardingWizard() {
         runtimeConfig: buildNewAgentRuntimeConfig()
       });
       setCreatedAgentId(agent.id);
+
+      // Auto-create COO alongside the CEO — operations auditor present in every company by default.
+      // Uses the same adapter so it can run without extra configuration.
+      await agentsApi.create(createdCompanyId, {
+        name: "COO",
+        role: "coo",
+        adapterType,
+        adapterConfig: buildAdapterConfig(),
+        runtimeConfig: buildNewAgentRuntimeConfig(),
+      });
+
       queryClient.invalidateQueries({
         queryKey: queryKeys.agents.list(createdCompanyId)
       });
