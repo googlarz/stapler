@@ -296,30 +296,49 @@ agentWake({
 
 ---
 
-## COO — Organisation Health
+## COO — Chief Optimization Officer
 
-Every new company gets a **Chief Optimization Officer** alongside the CEO. The COO is a process agent — it never creates domain tasks, only interventions.
+Every new company gets a **Chief Optimization Officer** (COO) auto-hired alongside the CEO. Unlike specialist agents, the COO **never creates domain tasks** — it intervenes at the process level only. Think of it as a permanent ops-and-org consultant embedded in the company.
 
-On each run the COO:
+The COO runs on its own schedule (every heartbeat tick by default — ~30 s — configurable via routines) and takes **exactly one** corrective action per run. Over time it accumulates KPI history in its own memory, so it's not just reacting to the current snapshot but responding to trends.
 
-1. Reads its own memories for context.
-2. Snapshots all agents, open issues, recent outputs.
-3. Computes four KPIs:
+**On every run the COO:**
 
-| KPI | Red threshold |
-|-----|---------------|
-| Idle rate — agents with no open assigned issue | > 30% |
-| Stale rate — in-progress issues untouched > 1h | > 20% |
-| Stage congestion — open issues in any single status bucket | > 5 |
-| Unassigned backlog — open issues with no assignee | > 3 |
+1. **Reads its own memories** — all prior audit entries, giving it a history of what was wrong before and what was tried.
+2. **Snapshots the whole org** — every agent with role & status, every non-terminal issue with age & assignee, every recent agent output. This is the COO's view of the organisation.
+3. **Computes 4 KPIs, picks the worst single one**:
 
-4. Takes **exactly one** corrective action:
-   - **A.** Rewrite agent instructions (can include its own)
-   - **B.** Recommend a structural change to the CEO (overstaffed, missing role)
-   - **C.** Cancel a stale issue to unblock the pipeline
-   - **D.** Assign an unassigned issue to the best-fit idle agent
+   | KPI | Red threshold |
+   |-----|---------------|
+   | Idle rate — non-CEO/COO agents with no open assigned issue | >30 % |
+   | Stale rate — `in_progress` issues untouched > 1 h | >20 % |
+   | Stage congestion — open issues in any single status bucket | >5 |
+   | Unassigned backlog — open issues with no assignee | >3 |
 
-5. Stores a memory — worst KPI, action taken, expected outcome. Next run starts from that.
+4. **Takes one corrective action**:
+
+   | Action | What it does | Typical cause |
+   |--------|--------------|---------------|
+   | **A. Rewrite instructions** | Overwrite an agent's `AGENTS.md` with improved guidance. **Can target its own file** — the COO is the only agent with permission to rewrite itself when it spots a failure pattern in its own behaviour. | Agent keeps misbehaving in the same way across runs |
+   | **B. Recommend org change to CEO** | Creates a structured `COO Recommendation: …` issue assigned to the CEO: proposes hires, consolidations, role rewrites, or ownership transfers. De-duplicates against open recommendations to avoid spam. | Repeat KPI breaches suggest a structural problem: overstaffed, missing specialty, role overlap |
+   | **C. Cancel stale issue** | Force-cancel a single `in_progress` issue untouched for > 1 h with a rationale comment. CEO reassigns if still needed. | Someone picked up work and got stuck or abandoned it |
+   | **D. Assign unassigned issue** | Route the oldest unassigned open issue to the most-idle non-CEO/COO agent. | Load imbalance — backlog growing while agents sit idle |
+
+5. **Stores a memory** — worst KPI, action taken, expected outcome. Tagged `coo,audit`. Next run's history is that much richer.
+
+**What makes the COO distinctive, compared to a generic watchdog:**
+
+- **Self-improving.** When the COO detects a failure pattern *in itself* (e.g. "I keep reassigning the same issue") it rewrites its own instructions. This is the only agent in the org with this permission.
+- **Structural, not tactical.** The COO deliberately *avoids* micro-managing issues. Its Recommendation-to-CEO messages read like "agents X and Y have 70 % assignment overlap — consolidate" or "no owner for 9 open issues tagged `quality` — hire a dedicated QA" — not "please look at issue #42".
+- **History-aware.** Because every run's audit is memoised, the COO can detect "idle rate has been >30 % for 5 runs" and escalate to a structural action (B) instead of papering over it with repeated reassignments (D).
+- **Self-limiting.** Exactly one action per run. One cancelled issue per run. One recommendation at a time. This prevents the COO from flooding the company with churn during a single wake.
+
+**Hard constraints** the COO's instruction bundle enforces:
+
+- Never create domain/pipeline tasks — specialists self-direct
+- Never manually set goal progress (the server computes it)
+- Never rewrite agent instructions without saving a memory about the change
+- Always guard against duplicate CEO recommendations before creating a new one
 
 ---
 
@@ -505,19 +524,49 @@ pnpm db:migrate
 
 ## Syncing with upstream
 
-Stapler tracks [paperclipai/paperclip](https://github.com/paperclipai/paperclip). To pull in upstream fixes:
+**Honest status:** Stapler is no longer linearly in sync with [paperclipai/paperclip](https://github.com/paperclipai/paperclip). The Wave 10 rebrand renamed ~700 files (`@paperclipai/*` → `@stapler/*`, `PAPERCLIP_*` → `STAPLER_*`, plus class names, CLI commands, banners, and UI strings). A straight `git rebase upstream/main` would now collide with nearly every source file.
+
+**The new sync model is cherry-pick only.** When upstream ships a bug fix or security patch we care about:
 
 ```bash
-git remote add upstream https://github.com/paperclipai/paperclip.git
-git fetch upstream main
-git rebase upstream/main
+git remote add upstream https://github.com/paperclipai/paperclip.git   # one-time
+git fetch upstream
+git log upstream/main --since="2026-04-01" --oneline                    # browse recent work
+git cherry-pick <sha>                                                   # grab one commit
 ```
 
-**Migration conflicts** are the common rebase pain point. When they hit:
+Expect conflicts — mostly mechanical renames. Resolve by applying the Stapler naming to the incoming hunk:
 
-1. Rename the colliding migration file (bump the `idx` prefix to the next free number).
-2. Update `packages/db/src/migrations/meta/_journal.json` with the new `idx` and `when` timestamp.
-3. Keep **both** migrations — do not merge them.
+| Upstream writes | Stapler uses |
+|-----------------|--------------|
+| `@paperclipai/db` | `@stapler/db` |
+| `@paperclipai/shared` | `@stapler/shared` |
+| `process.env.PAPERCLIP_API_KEY` | `process.env.STAPLER_API_KEY` |
+| `PaperclipApiClient` | `StaplerApiClient` |
+| `[paperclip]` log prefix | `[stapler]` |
+| `pnpm paperclipai <cmd>` | `pnpm stapler <cmd>` |
+
+**Migration collisions** are the other recurring pain point. When you cherry-pick a commit that adds a new upstream migration (`00NN_*.sql`) and the number is already taken locally:
+
+1. Renumber the incoming migration to the next free `idx` in `packages/db/src/migrations/`.
+2. Update `packages/db/src/migrations/meta/_journal.json` — add the new entry with a fresh `when` timestamp.
+3. Keep **both** migrations — never merge SQL contents across. Drizzle tracks migrations by exact filename, so collisions are destructive.
+
+**What's worth cherry-picking vs. skipping:**
+
+- ✅ Security fixes (always)
+- ✅ Bug fixes in shared infrastructure — heartbeat service, migration runtime, adapter utils
+- ✅ Performance improvements in the DB layer
+- 🤔 New adapters — usually worth it; check if the adapter package structure diverged before merging
+- ❌ New upstream features that conflict with Stapler's memory system, peer-search, or meta-agent wakeup — re-implement locally in Stapler's idiom instead
+
+The convention is to tag each upstream cherry-pick with a trailer line in the commit message:
+
+```
+upstream: cherry-picked from paperclipai/paperclip@abc1234
+```
+
+…so the full provenance is visible in `git log`.
 
 ---
 
