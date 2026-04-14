@@ -42,7 +42,7 @@ export interface InjectedMemory {
   score: number;
   wikiSlug?: string | null;
   /** "agent" = this agent's own memory; "company" = shared company knowledge. */
-  source?: "agent" | "company";
+  source: "agent" | "company";
 }
 
 /** A named wiki page belonging to an agent (Karpathy-style compiled knowledge). */

@@ -119,7 +119,7 @@ export interface InjectedMemory {
   score: number;
   wikiSlug?: string | null;
   /** "agent" = this agent's own memory; "company" = shared company knowledge. */
-  source?: "agent" | "company";
+  source: "agent" | "company";
 }
 
 export interface AdapterInvocationMeta {

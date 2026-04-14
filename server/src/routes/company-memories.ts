@@ -89,9 +89,21 @@ export function companyMemoryRoutes(db: Db) {
   // ── Wiki pages ───────────────────────────────────────────────────────────
   // All /wiki routes MUST appear before /:id.
 
+  /**
+   * Normalize a slug the same way the service does, so URL-encoded or
+   * mixed-case slugs resolve to the same stored key.
+   */
+  function normalizeSlug(raw: string): string {
+    return raw.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 64);
+  }
+
   router.put("/companies/:companyId/memories/wiki/:slug", async (req, res) => {
     const companyId = req.params.companyId as string;
-    const slug = req.params.slug as string;
+    const slug = normalizeSlug(req.params.slug as string);
+    if (!slug) {
+      res.status(400).json({ error: "Invalid slug" });
+      return;
+    }
     assertCompanyAccess(req, companyId);
 
     const { content, tags } = req.body as { content?: unknown; tags?: unknown };
@@ -144,7 +156,7 @@ export function companyMemoryRoutes(db: Db) {
 
   router.get("/companies/:companyId/memories/wiki/:slug", async (req, res) => {
     const companyId = req.params.companyId as string;
-    const slug = req.params.slug as string;
+    const slug = normalizeSlug(req.params.slug as string);
     assertCompanyAccess(req, companyId);
     const memory = await svc.wikiGet(companyId, slug);
     if (!memory) {
@@ -156,7 +168,7 @@ export function companyMemoryRoutes(db: Db) {
 
   router.delete("/companies/:companyId/memories/wiki/:slug", async (req, res) => {
     const companyId = req.params.companyId as string;
-    const slug = req.params.slug as string;
+    const slug = normalizeSlug(req.params.slug as string);
     assertCompanyAccess(req, companyId);
 
     const removed = await svc.wikiRemove(companyId, slug);

@@ -24,8 +24,15 @@ import type { InjectedMemory } from "@paperclipai/shared";
 import { agentMemoryService } from "./agent-memories.js";
 import { companyMemoryService } from "./company-memories.js";
 
-/** Default byte budget for wiki page injection. ~4K tokens. */
+/** Default byte budget for agent wiki page injection. ~4K tokens. */
 const DEFAULT_WIKI_INJECTION_BUDGET_BYTES = 16_000;
+
+/**
+ * Default byte budget for company wiki page injection — separate pool so
+ * a company with many large wiki pages cannot crowd out an agent's own
+ * compiled knowledge. ~4K tokens, same default as agent wiki.
+ */
+const DEFAULT_COMPANY_WIKI_INJECTION_BUDGET_BYTES = 16_000;
 
 export async function maybeLoadMemoriesForInjection(
   db: Db,
@@ -71,14 +78,23 @@ export async function maybeLoadMemoriesForInjection(
     wikiBudgetLeft -= page.contentBytes;
   }
 
-  // ── Company wiki pages (always injected, same byte budget pool) ──────────
+  // ── Company wiki pages (always injected, independent byte budget) ────────
+  // Uses its own budget pool so a company with many large pages cannot
+  // crowd out this agent's own wiki pages.
   const companySvc = companyMemoryService(db);
+  const companyWikiBudgetBytes =
+    typeof config.companyWikiInjectionBudgetBytes === "number" &&
+    config.companyWikiInjectionBudgetBytes > 0
+      ? Math.min(config.companyWikiInjectionBudgetBytes, 200_000)
+      : DEFAULT_COMPANY_WIKI_INJECTION_BUDGET_BYTES;
+
   const allCompanyWikiPages = await companySvc.wikiList(agent.companyId);
   const companyWikiByRecency = [...allCompanyWikiPages].sort(
     (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
   );
+  let companyWikiBudgetLeft = companyWikiBudgetBytes;
   for (const page of companyWikiByRecency) {
-    if (page.contentBytes > wikiBudgetLeft) continue;
+    if (page.contentBytes > companyWikiBudgetLeft) continue;
     wikiInjected.push({
       id: page.id,
       content: page.content,
@@ -87,7 +103,7 @@ export async function maybeLoadMemoriesForInjection(
       wikiSlug: page.wikiSlug ?? undefined,
       source: "company",
     });
-    wikiBudgetLeft -= page.contentBytes;
+    companyWikiBudgetLeft -= page.contentBytes;
   }
 
   // ── Build search query from wakeup context ───────────────────────────────
