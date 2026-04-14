@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Brain, Trash2, Plus } from "lucide-react";
+import { Brain, Trash2, Plus, BookOpen } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
 import {
   companyMemoriesApi,
@@ -75,6 +75,12 @@ function MemoryRow({
   );
 }
 
+/** Format a Date as a `datetime-local` input value (YYYY-MM-DDTHH:MM). */
+function toDatetimeLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function AddMemoryDialog({
   companyId,
   open,
@@ -87,6 +93,7 @@ function AddMemoryDialog({
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
   const [rawTags, setRawTags] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
 
   const createMutation = useMutation({
     mutationFn: () => {
@@ -97,15 +104,20 @@ function AddMemoryDialog({
       return companyMemoriesApi.create(companyId, {
         content: content.trim(),
         tags: tags.length > 0 ? tags : undefined,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["companies", companyId, "memories"] });
       setContent("");
       setRawTags("");
+      setExpiresAt("");
       onOpenChange(false);
     },
   });
+
+  // Min datetime = now + 1 min, formatted for datetime-local
+  const minDatetime = toDatetimeLocal(new Date(Date.now() + 60_000));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -134,6 +146,17 @@ function AddMemoryDialog({
               onChange={(e) => setRawTags(e.target.value)}
             />
           </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Expires at <span className="text-muted-foreground font-normal">(optional — leave blank to keep forever)</span>
+            </label>
+            <Input
+              type="datetime-local"
+              value={expiresAt}
+              min={minDatetime}
+              onChange={(e) => setExpiresAt(e.target.value)}
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
@@ -159,12 +182,117 @@ function AddMemoryDialog({
   );
 }
 
+/** Slug must start with a lowercase letter or digit, then lowercase alphanumeric / hyphens / underscores. */
+const SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
+
+function AddWikiPageDialog({
+  companyId,
+  open,
+  onOpenChange,
+}: {
+  companyId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [slug, setSlug] = useState("");
+  const [content, setContent] = useState("");
+  const [rawTags, setRawTags] = useState("");
+
+  const slugError =
+    slug.length > 0 && !SLUG_RE.test(slug)
+      ? "Slug must be lowercase: letters, digits, hyphens, underscores; start with a letter or digit."
+      : null;
+
+  const upsertMutation = useMutation({
+    mutationFn: () => {
+      const tags = rawTags
+        .split(/[,\s]+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      return companyMemoriesApi.wikiUpsert(companyId, slug.trim(), {
+        content: content.trim(),
+        tags: tags.length > 0 ? tags : undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies", companyId, "memories"] });
+      setSlug("");
+      setContent("");
+      setRawTags("");
+      onOpenChange(false);
+    },
+  });
+
+  const canSubmit = slug.trim().length > 0 && !slugError && content.trim().length > 0 && !upsertMutation.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add wiki page</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Slug <span className="text-muted-foreground font-normal">(unique identifier, e.g. tech-stack)</span>
+            </label>
+            <Input
+              placeholder="tech-stack"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value.toLowerCase())}
+              maxLength={64}
+              autoFocus
+            />
+            {slugError && <p className="text-xs text-destructive">{slugError}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Content</label>
+            <Textarea
+              placeholder="Describe this knowledge page in detail…"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className="resize-none min-h-[120px]"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Tags <span className="text-muted-foreground font-normal">(optional, comma-separated)</span>
+            </label>
+            <Input
+              placeholder="e.g. architecture, style"
+              value={rawTags}
+              onChange={(e) => setRawTags(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={!canSubmit} onClick={() => upsertMutation.mutate()}>
+              {upsertMutation.isPending ? "Saving…" : "Save wiki page"}
+            </Button>
+          </div>
+          {upsertMutation.isError && (
+            <p className="text-sm text-destructive">
+              {upsertMutation.error instanceof Error
+                ? upsertMutation.error.message
+                : "Failed to save wiki page"}
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function CompanyMemories() {
   const { selectedCompanyId } = useCompany();
   const queryClient = useQueryClient();
   const [rawQuery, setRawQuery] = useState("");
   const [rawTags, setRawTags] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [addWikiOpen, setAddWikiOpen] = useState(false);
 
   const tags = useMemo(() => {
     const parts = rawTags
@@ -234,10 +362,16 @@ export function CompanyMemories() {
           <Brain className="h-5 w-5 text-muted-foreground" />
           <h1 className="text-xl font-semibold">Company memories</h1>
         </div>
-        <Button size="sm" onClick={() => setAddOpen(true)}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Add memory
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setAddWikiOpen(true)}>
+            <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+            Add wiki page
+          </Button>
+          <Button size="sm" onClick={() => setAddOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Add memory
+          </Button>
+        </div>
       </div>
 
       <p className="text-sm text-muted-foreground">
@@ -368,11 +502,18 @@ export function CompanyMemories() {
       )}
 
       {selectedCompanyId && (
-        <AddMemoryDialog
-          companyId={selectedCompanyId}
-          open={addOpen}
-          onOpenChange={setAddOpen}
-        />
+        <>
+          <AddMemoryDialog
+            companyId={selectedCompanyId}
+            open={addOpen}
+            onOpenChange={setAddOpen}
+          />
+          <AddWikiPageDialog
+            companyId={selectedCompanyId}
+            open={addWikiOpen}
+            onOpenChange={setAddWikiOpen}
+          />
+        </>
       )}
     </div>
   );

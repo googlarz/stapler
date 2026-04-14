@@ -591,6 +591,64 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
     ),
     // ── Company memory tools ───────────────────────────────────────────────
     makeTool(
+      "companyMemorySave",
+      "Save a short episodic memory to the company's shared memory pool. Available to all agents and board users. Idempotent by content hash — saving the same text twice returns the existing row. Do not use for temporary notes; use issue comments instead.",
+      z.object({
+        content: z
+          .string()
+          .trim()
+          .min(1, "content is required")
+          .max(4096, "content must be at most 4096 characters"),
+        tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+        expiresAt: z
+          .string()
+          .datetime({ message: "expiresAt must be an ISO 8601 datetime" })
+          .refine((v) => new Date(v) > new Date(), { message: "expiresAt must be in the future" })
+          .optional(),
+      }),
+      async ({ content, tags, expiresAt }) => {
+        const companyId = client.resolveCompanyId();
+        return client.requestJson(
+          "POST",
+          `/companies/${encodeURIComponent(companyId)}/memories`,
+          { body: { content, tags, expiresAt } },
+        );
+      },
+    ),
+    makeTool(
+      "companyMemoryList",
+      "List company episodic memories, newest first. Use companyMemorySearch when you have a keyword — listing is for browsing or pagination.",
+      z.object({
+        limit: z.number().int().positive().max(100).optional(),
+        offset: z.number().int().min(0).optional(),
+        tags: z.array(z.string().trim().min(1).max(64)).max(8).optional(),
+      }),
+      async ({ limit, offset, tags }) => {
+        const companyId = client.resolveCompanyId();
+        const params = new URLSearchParams();
+        if (limit !== undefined) params.set("limit", String(limit));
+        if (offset !== undefined) params.set("offset", String(offset));
+        if (tags && tags.length > 0) params.set("tags", tags.join(","));
+        const qs = params.toString();
+        return client.requestJson(
+          "GET",
+          `/companies/${encodeURIComponent(companyId)}/memories${qs ? `?${qs}` : ""}`,
+        );
+      },
+    ),
+    makeTool(
+      "companyMemoryDelete",
+      "Delete a company episodic memory by id. Returns 404 if the id does not exist or belongs to a different company.",
+      z.object({ id: z.string().uuid() }),
+      async ({ id }) => {
+        const companyId = client.resolveCompanyId();
+        return client.requestJson(
+          "DELETE",
+          `/companies/${encodeURIComponent(companyId)}/memories/${encodeURIComponent(id)}`,
+        );
+      },
+    ),
+    makeTool(
       "companyMemorySearch",
       "Keyword search the company's shared memory store via pg_trgm similarity. Returns team-wide knowledge ranked by relevance. Use for finding shared conventions, decisions, or vendor info that any agent may have saved.",
       z.object({

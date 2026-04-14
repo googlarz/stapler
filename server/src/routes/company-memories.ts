@@ -286,6 +286,62 @@ export function companyMemoryRoutes(db: Db) {
     }
   });
 
+  // ── Patch episodic memory metadata ────────────────────────────────────────
+  // Only tags and expiresAt may be changed. Content is immutable (tied to hash).
+  // Wiki pages are excluded — use PUT /wiki/:slug to update them.
+
+  router.patch("/companies/:companyId/memories/:id", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const id = req.params.id as string;
+    assertCompanyAccess(req, companyId);
+
+    const body = req.body as Record<string, unknown>;
+    const update: { tags?: string[]; expiresAt?: Date | null } = {};
+
+    if (body.tags !== undefined) {
+      const tags = body.tags;
+      if (!Array.isArray(tags) || tags.some((t) => typeof t !== "string")) {
+        res.status(400).json({ error: "Invalid body: tags must be an array of strings" });
+        return;
+      }
+      update.tags = tags as string[];
+    }
+
+    if ("expiresAt" in body) {
+      const rawExpiry = body.expiresAt;
+      if (rawExpiry === null) {
+        update.expiresAt = null;
+      } else if (typeof rawExpiry === "string") {
+        const d = new Date(rawExpiry);
+        if (Number.isNaN(d.getTime())) {
+          res.status(400).json({ error: "Invalid body: expiresAt is not a valid datetime" });
+          return;
+        }
+        if (d <= new Date()) {
+          res.status(400).json({ error: "Invalid body: expiresAt must be in the future" });
+          return;
+        }
+        update.expiresAt = d;
+      } else {
+        res.status(400).json({ error: "Invalid body: expiresAt must be an ISO 8601 datetime string or null" });
+        return;
+      }
+    }
+
+    if (Object.keys(update).length === 0) {
+      res.status(400).json({ error: "No updatable fields supplied (tags, expiresAt)" });
+      return;
+    }
+
+    const updated = await svc.patch(id, companyId, update);
+    if (!updated) {
+      res.status(404).json({ error: "Memory not found" });
+      return;
+    }
+
+    res.json(updated);
+  });
+
   router.delete("/companies/:companyId/memories/:id", async (req, res) => {
     const companyId = req.params.companyId as string;
     const id = req.params.id as string;

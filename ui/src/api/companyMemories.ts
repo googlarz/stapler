@@ -64,9 +64,23 @@ export const companyMemoriesApi = {
       `/companies/${encodeURIComponent(companyId)}/memories`,
       input,
     ),
+  patch: (
+    companyId: string,
+    id: string,
+    update: { tags?: string[]; expiresAt?: string | null },
+  ) =>
+    api.patch<CompanyMemory>(
+      `/companies/${encodeURIComponent(companyId)}/memories/${encodeURIComponent(id)}`,
+      update,
+    ),
   remove: (companyId: string, id: string) =>
     api.delete<CompanyMemory>(
       `/companies/${encodeURIComponent(companyId)}/memories/${encodeURIComponent(id)}`,
+    ),
+  wikiUpsert: (companyId: string, slug: string, input: { content: string; tags?: string[] }) =>
+    api.put<CompanyMemory>(
+      `/companies/${encodeURIComponent(companyId)}/memories/wiki/${encodeURIComponent(slug)}`,
+      input,
     ),
   wikiList: (companyId: string) =>
     api.get<{ items: CompanyMemory[] }>(

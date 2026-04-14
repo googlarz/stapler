@@ -295,6 +295,50 @@ export function companyMemoryService(db: Db) {
         .then((rows) => rows[0] ?? null),
 
     /**
+     * Patch mutable metadata on an existing episodic company memory.
+     * Only episodic memories (wikiSlug IS NULL) can be patched; wiki pages
+     * use `wikiUpsert` for updates.
+     *
+     * Fields not present in `update` are left unchanged.
+     * Pass `expiresAt: null` explicitly to clear an existing TTL.
+     *
+     * Returns the updated row, or null if not found / wrong company.
+     */
+    patch: async (
+      id: string,
+      companyId: string,
+      update: {
+        tags?: string[];
+        expiresAt?: Date | null;
+      },
+    ): Promise<CompanyMemory | null> => {
+      const setValues: {
+        updatedAt: ReturnType<typeof sql>;
+        tags?: string[];
+        expiresAt?: Date | null;
+      } = { updatedAt: sql`now()` };
+      if (update.tags !== undefined) {
+        setValues.tags = normalizeTags(update.tags);
+      }
+      if ("expiresAt" in update) {
+        setValues.expiresAt = update.expiresAt ?? null;
+      }
+
+      return db
+        .update(companyMemories)
+        .set(setValues)
+        .where(
+          and(
+            eq(companyMemories.id, id),
+            eq(companyMemories.companyId, companyId),
+            isNull(companyMemories.wikiSlug),
+          ),
+        )
+        .returning()
+        .then((rows) => rows[0] ?? null);
+    },
+
+    /**
      * Memory health statistics for a company — counts and byte totals split by
      * episodic vs wiki. Non-expired rows only.
      */
