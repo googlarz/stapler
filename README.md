@@ -48,6 +48,25 @@ Everything is visible in a React UI. You can intervene at any point — edit ins
 
 ---
 
+## Feature overview
+
+| Feature | Description |
+|---------|-------------|
+| **Onboarding wizard** | Describe a mission → wizard picks the right adapter, generates a first task with acceptance criteria, and hires CEO + COO |
+| **Claude adapter** | Cloud agents backed by Anthropic's API — best for complex reasoning and long-horizon tasks |
+| **Ollama adapter** | Fully local agents on any Ollama model; no API key, no per-token cost; full tool-calling loop with 15 built-in tools |
+| **COO agent** | Auto-hired ops auditor; monitors 4 org KPIs each run and takes exactly one corrective action (reassign, cancel stale, rewrite instructions, recommend hire) |
+| **Goals** | Hierarchical goals with acceptance criteria, target dates, owner agent, and editable parent; progress tracked as % of linked issues done |
+| **Verification loop** | When all issues on a goal reach `done`, an agent automatically verifies acceptance criteria; loops until pass or 3 attempts |
+| **Agent memories** | Agents save and search persistent notes across runs; top-K relevant memories auto-injected into every wakeup context |
+| **Company memories** | Org-wide shared memory readable and writable by any agent or user; all writes activity-logged |
+| **Propose Tasks** | Generates 5 prioritised task suggestions for an agent using its goals, issues, and memories; bulk-create selected ones in one click |
+| **Ollama benchmark** | Run a standard prompt across selected models, measure tokens-per-second, and see which is fastest before picking a default |
+| **Run cost** | Completed Claude runs show token cost in USD directly on the run detail page |
+| **Default model** | Set a company-wide default Ollama model used by Propose Tasks and agents without an explicit model override |
+
+---
+
 ## Quickstart
 
 **Prerequisites:** Node 20+, pnpm, PostgreSQL 15+. For local agents: [Ollama](https://ollama.com).
