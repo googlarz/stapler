@@ -7,8 +7,15 @@ export const queryKeys = {
     document: (companyId: string, documentId: string) => ["companies", companyId, "documents", documentId] as const,
     documentRevisions: (companyId: string, documentId: string) =>
       ["companies", companyId, "documents", documentId, "revisions"] as const,
-    memories: (companyId: string, tags: string[] | null) =>
-      ["companies", companyId, "memories", tags && tags.length > 0 ? tags.join(",") : "__no-tags__"] as const,
+    memories: (companyId: string, q: string | null, tags: string[] | null) =>
+      [
+        "companies",
+        companyId,
+        "memories",
+        q ?? "__no-q__",
+        tags && tags.length > 0 ? tags.join(",") : "__no-tags__",
+      ] as const,
+    memoriesStats: (companyId: string) => ["companies", companyId, "memories", "stats"] as const,
   },
   companySkills: {
     list: (companyId: string) => ["company-skills", companyId] as const,

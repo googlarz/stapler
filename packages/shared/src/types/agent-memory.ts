@@ -11,6 +11,8 @@ export interface AgentMemory {
   createdInRunId: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** When set and past, the memory is excluded from lists, searches, and run-start injection. */
+  expiresAt?: Date | null;
 }
 
 export type AgentMemoryScope = "agent";

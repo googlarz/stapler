@@ -23,6 +23,7 @@ import type { Db } from "@paperclipai/db";
 import type { InjectedMemory } from "@paperclipai/shared";
 import { agentMemoryService } from "./agent-memories.js";
 import { companyMemoryService } from "./company-memories.js";
+import { logActivity } from "./activity-log.js";
 
 /** Default byte budget for agent wiki page injection. ~4K tokens. */
 const DEFAULT_WIKI_INJECTION_BUDGET_BYTES = 16_000;
@@ -184,5 +185,35 @@ export async function maybeLoadMemoriesForInjection(
       source: "company" as const,
     }));
 
-  return [...wikiInjected, ...agentSearchInjected, ...companyEpisodicInjected];
+  const result = [...wikiInjected, ...agentSearchInjected, ...companyEpisodicInjected];
+
+  // ── Injection audit log (fire-and-forget) ────────────────────────────────
+  // Record what was injected so operators can inspect "what context did this
+  // agent have at wakeup?" via the activity log. Runs non-blocking so a log
+  // write failure never delays agent wakeup.
+  if (result.length > 0) {
+    const runId = typeof context.runId === "string" ? context.runId : undefined;
+    void logActivity(db, {
+      companyId: agent.companyId,
+      actorType: "system",
+      actorId: agent.id,
+      agentId: agent.id,
+      runId,
+      action: "memory.injected",
+      entityType: "agent",
+      entityId: agent.id,
+      details: {
+        total: result.length,
+        agentWiki: wikiInjected.filter((m) => m.source === "agent").length,
+        companyWiki: wikiInjected.filter((m) => m.source === "company").length,
+        agentEpisodic: agentSearchInjected.length,
+        companyEpisodic: companyEpisodicInjected.length,
+        query: q || null,
+      },
+    }).catch(() => {
+      // Swallow — audit logging must not block or crash agent wakeup.
+    });
+  }
+
+  return result;
 }

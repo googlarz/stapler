@@ -17,7 +17,7 @@
  * is already compatible — their adapter change is the same +3 lines Wave 3 added.
  */
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { agentMemories } from "@paperclipai/db";
 import type {
@@ -112,8 +112,15 @@ function rowToMemory(row: typeof agentMemories.$inferSelect): AgentMemory {
     createdInRunId: row.createdInRunId ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    expiresAt: row.expiresAt ?? null,
   };
 }
+
+/** SQL predicate that filters out expired rows at query time. */
+const notExpired = or(
+  isNull(agentMemories.expiresAt),
+  gt(agentMemories.expiresAt, sql`NOW()`),
+)!;
 
 export interface SaveMemoryInput {
   companyId: string;
@@ -121,6 +128,8 @@ export interface SaveMemoryInput {
   content: string;
   tags?: string[];
   runId?: string | null;
+  /** Optional TTL. When set and past, the memory is excluded from lists/searches/injection. */
+  expiresAt?: Date | null;
 }
 
 export interface SearchMemoryInput {
@@ -185,6 +194,20 @@ export function agentMemoryService(db: Db) {
         //
         // Bumping updated_at on conflict is intentional: it records when the
         // memory was last encountered, which is useful for UI display.
+        // Delete any expired episodic rows for this agent before counting.
+        // This keeps the cap accurate without a separate cron job — garbage
+        // collection happens organically on every save.
+        await tx
+          .delete(agentMemories)
+          .where(
+            and(
+              eq(agentMemories.agentId, input.agentId),
+              isNull(agentMemories.wikiSlug),
+              isNotNull(agentMemories.expiresAt),
+              lt(agentMemories.expiresAt, sql`NOW()`),
+            ),
+          );
+
         const [memoryRow] = await tx
           .insert(agentMemories)
           .values({
@@ -195,6 +218,7 @@ export function agentMemoryService(db: Db) {
             contentBytes,
             tags,
             createdInRunId: input.runId ?? null,
+            expiresAt: input.expiresAt ?? null,
           })
           .onConflictDoUpdate({
             target: [agentMemories.agentId, agentMemories.contentHash],
@@ -271,6 +295,7 @@ export function agentMemoryService(db: Db) {
 
       const baseConditions = [
         eq(agentMemories.agentId, input.agentId),
+        notExpired,
         sql`similarity(${agentMemories.content}, ${trimmedQ}) >= ${limits.searchThreshold}`,
       ];
       if (tagsFilter.length > 0) {
@@ -307,7 +332,7 @@ export function agentMemoryService(db: Db) {
       const offset = Math.max(0, input.offset ?? 0);
       const tagsFilter = normalizeTags(input.tags);
 
-      const conditions = [eq(agentMemories.agentId, input.agentId)];
+      const conditions = [eq(agentMemories.agentId, input.agentId), notExpired];
       if (tagsFilter.length > 0) {
         conditions.push(sql`${agentMemories.tags} @> ${JSON.stringify(tagsFilter)}::jsonb`);
       }
@@ -455,7 +480,7 @@ export function agentMemoryService(db: Db) {
      */
     wikiList: async (agentId: string): Promise<AgentMemory[]> => {
       const rows = await db.select().from(agentMemories)
-        .where(and(eq(agentMemories.agentId, agentId), isNotNull(agentMemories.wikiSlug)))
+        .where(and(eq(agentMemories.agentId, agentId), isNotNull(agentMemories.wikiSlug), notExpired))
         .orderBy(asc(agentMemories.wikiSlug))
         .limit(500);
       return rows.map(rowToMemory);

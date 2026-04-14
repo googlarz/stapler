@@ -13,7 +13,7 @@
  * (default 4096 bytes). Callers receive `MemoryContentTooLargeError` when exceeded.
  */
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 /** pg_trgm similarity threshold for company memory search (mirrors agent memory default). */
 const DEFAULT_SEARCH_THRESHOLD = 0.1;
@@ -33,6 +33,8 @@ export interface SaveCompanyMemoryInput {
   tags?: string[];
   createdByAgentId?: string;
   createdInRunId?: string;
+  /** Optional TTL. When set and past, the memory is excluded from lists/searches/injection. */
+  expiresAt?: Date | null;
 }
 
 export interface ListCompanyMemoryInput {
@@ -63,6 +65,12 @@ function normalizeTags(tags: string[] | undefined | null): string[] {
     ),
   );
 }
+
+/** SQL predicate that filters out expired company memory rows at query time. */
+const notExpired = or(
+  isNull(companyMemories.expiresAt),
+  gt(companyMemories.expiresAt, sql`NOW()`),
+)!;
 
 export function companyMemoryService(db: Db) {
   return {
@@ -102,6 +110,7 @@ export function companyMemoryService(db: Db) {
           tags,
           createdByAgentId: input.createdByAgentId ?? null,
           createdInRunId: input.createdInRunId ?? null,
+          expiresAt: input.expiresAt ?? null,
         })
         .onConflictDoNothing()
         .returning();
@@ -156,7 +165,7 @@ export function companyMemoryService(db: Db) {
       const offset = Math.max(0, input.offset ?? 0);
       const tagsFilter = normalizeTags(input.tags);
 
-      const conditions = [eq(companyMemories.companyId, input.companyId)];
+      const conditions = [eq(companyMemories.companyId, input.companyId), notExpired];
       if (tagsFilter.length > 0) {
         conditions.push(
           sql`${companyMemories.tags} @> ${JSON.stringify(tagsFilter)}::jsonb`,
@@ -190,6 +199,7 @@ export function companyMemoryService(db: Db) {
 
       const conditions = [
         eq(companyMemories.companyId, input.companyId),
+        notExpired,
         sql`similarity(${companyMemories.content}, ${trimmedQ}) >= ${DEFAULT_SEARCH_THRESHOLD}`,
       ];
       if (tagsFilter.length > 0) {
@@ -274,7 +284,7 @@ export function companyMemoryService(db: Db) {
     /** List all wiki pages for a company, alphabetical by slug. Safety cap 500. */
     wikiList: async (companyId: string): Promise<CompanyMemory[]> =>
       db.select().from(companyMemories)
-        .where(and(eq(companyMemories.companyId, companyId), isNotNull(companyMemories.wikiSlug)))
+        .where(and(eq(companyMemories.companyId, companyId), isNotNull(companyMemories.wikiSlug), notExpired))
         .orderBy(asc(companyMemories.wikiSlug))
         .limit(500),
 
@@ -283,5 +293,37 @@ export function companyMemoryService(db: Db) {
         .where(and(eq(companyMemories.companyId, companyId), eq(companyMemories.wikiSlug, slug)))
         .returning()
         .then((rows) => rows[0] ?? null),
+
+    /**
+     * Memory health statistics for a company — counts and byte totals split by
+     * episodic vs wiki. Non-expired rows only.
+     */
+    stats: async (companyId: string): Promise<{
+      episodic: { count: number; bytes: number };
+      wiki: { count: number; bytes: number };
+      total: { count: number; bytes: number };
+    }> => {
+      const rows = await db
+        .select({
+          isWiki: sql<boolean>`(${companyMemories.wikiSlug} IS NOT NULL)`,
+          count: sql<number>`count(*)::int`,
+          bytes: sql<number>`coalesce(sum(${companyMemories.contentBytes}), 0)::int`,
+        })
+        .from(companyMemories)
+        .where(and(eq(companyMemories.companyId, companyId), notExpired))
+        .groupBy(sql`(${companyMemories.wikiSlug} IS NOT NULL)`);
+
+      let episodic = { count: 0, bytes: 0 };
+      let wiki = { count: 0, bytes: 0 };
+      for (const r of rows) {
+        if (r.isWiki) wiki = { count: r.count, bytes: Number(r.bytes) };
+        else episodic = { count: r.count, bytes: Number(r.bytes) };
+      }
+      return {
+        episodic,
+        wiki,
+        total: { count: episodic.count + wiki.count, bytes: episodic.bytes + wiki.bytes },
+      };
+    },
   };
 }

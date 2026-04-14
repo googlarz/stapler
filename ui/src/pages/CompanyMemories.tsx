@@ -2,7 +2,11 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Brain, Trash2, Plus } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
-import { companyMemoriesApi, type CompanyMemory } from "../api/companyMemories";
+import {
+  companyMemoriesApi,
+  type CompanyMemory,
+  type CompanyMemorySearchResult,
+} from "../api/companyMemories";
 import { queryKeys } from "../lib/queryKeys";
 import { relativeTime } from "../lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,12 +21,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+function isSearchResult(row: CompanyMemory | CompanyMemorySearchResult): row is CompanyMemorySearchResult {
+  return typeof (row as CompanyMemorySearchResult).score === "number";
+}
+
 function MemoryRow({
   memory,
   onDelete,
   deleting,
 }: {
-  memory: CompanyMemory;
+  memory: CompanyMemory | CompanyMemorySearchResult;
   onDelete: () => void;
   deleting: boolean;
 }) {
@@ -31,6 +39,11 @@ function MemoryRow({
       <div className="flex-1 min-w-0 space-y-1">
         <p className="text-sm whitespace-pre-wrap break-words">{memory.content}</p>
         <div className="flex items-center gap-2 flex-wrap">
+          {memory.wikiSlug && (
+            <span className="rounded bg-primary/10 text-primary px-1.5 py-0.5 font-mono text-[10px]">
+              wiki:{memory.wikiSlug}
+            </span>
+          )}
           {memory.tags.map((tag) => (
             <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0">
               {tag}
@@ -40,6 +53,11 @@ function MemoryRow({
             {relativeTime(memory.createdAt)}
             {memory.contentBytes > 0 && ` · ${memory.contentBytes}B`}
           </span>
+          {isSearchResult(memory) && (
+            <span className="text-xs text-muted-foreground" title="pg_trgm similarity score">
+              score {memory.score.toFixed(2)}
+            </span>
+          )}
         </div>
       </div>
       <Button
@@ -143,9 +161,9 @@ function AddMemoryDialog({
 export function CompanyMemories() {
   const { selectedCompanyId } = useCompany();
   const queryClient = useQueryClient();
+  const [rawQuery, setRawQuery] = useState("");
   const [rawTags, setRawTags] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const tags = useMemo(() => {
     const parts = rawTags
@@ -155,27 +173,57 @@ export function CompanyMemories() {
     return parts.length > 0 ? parts : null;
   }, [rawTags]);
 
+  const trimmedQuery = rawQuery.trim();
+  const effectiveQuery = trimmedQuery.length > 0 ? trimmedQuery : null;
+
   const memoriesQuery = useQuery({
-    queryKey: queryKeys.companies.memories(selectedCompanyId!, tags),
+    queryKey: queryKeys.companies.memories(selectedCompanyId!, effectiveQuery, tags),
     queryFn: () =>
       companyMemoriesApi.list(selectedCompanyId!, {
+        q: effectiveQuery ?? undefined,
         tags: tags ?? undefined,
         limit: 100,
       }),
     enabled: !!selectedCompanyId,
   });
 
+  const statsQuery = useQuery({
+    queryKey: queryKeys.companies.memoriesStats(selectedCompanyId!),
+    queryFn: () => companyMemoriesApi.stats(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
   const removeMutation = useMutation({
     mutationFn: (id: string) => companyMemoriesApi.remove(selectedCompanyId!, id),
-    onSettled: () => setDeletingId(null),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["companies", selectedCompanyId, "memories"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["companies", selectedCompanyId, "memories"] });
     },
   });
 
-  const items = memoriesQuery.data?.items ?? [];
+  const wikiRemoveMutation = useMutation({
+    mutationFn: (slug: string) => companyMemoriesApi.wikiRemoveBySlug(selectedCompanyId!, slug),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies", selectedCompanyId, "memories"] });
+    },
+  });
+
+  const allItems = memoriesQuery.data?.items ?? [];
+  const wikiItems = allItems.filter((m) => m.wikiSlug);
+  const episodicItems = allItems.filter((m) => !m.wikiSlug);
+  const stats = statsQuery.data;
+
+  function handleDelete(memory: CompanyMemory) {
+    const isWiki = !!memory.wikiSlug;
+    const msg = isWiki
+      ? `Delete wiki page "${memory.wikiSlug}"? This cannot be undone.`
+      : "Delete this memory? This cannot be undone.";
+    if (!window.confirm(msg)) return;
+    if (isWiki && memory.wikiSlug) {
+      wikiRemoveMutation.mutate(memory.wikiSlug);
+    } else {
+      removeMutation.mutate(memory.id);
+    }
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 p-6">
@@ -197,14 +245,62 @@ export function CompanyMemories() {
         enabled receive relevant entries automatically at run-start.
       </p>
 
-      <Input
-        type="search"
-        placeholder="Filter by tag…"
-        value={rawTags}
-        onChange={(e) => setRawTags(e.target.value)}
-        className="max-w-xs"
-        aria-label="Filter memories by tag"
-      />
+      {/* Stats bar */}
+      {stats && (
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground rounded-md border border-border bg-muted/30 px-3 py-2">
+          <span>
+            <span className="font-medium text-foreground">{stats.episodic.count}</span>
+            {" episodic"}
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            <span className="font-medium text-foreground">{stats.wiki.count}</span>
+            {" wiki pages"}
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            {(stats.total.bytes / 1024).toFixed(1)}
+            {" KB stored"}
+          </span>
+        </div>
+      )}
+
+      {/* Search + tag filter */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Input
+            type="search"
+            placeholder="Search memories (keyword)…"
+            value={rawQuery}
+            onChange={(e) => setRawQuery(e.target.value)}
+            className="max-w-md"
+            aria-label="Search memories"
+          />
+          <Input
+            type="text"
+            placeholder="Filter by tag…"
+            value={rawTags}
+            onChange={(e) => setRawTags(e.target.value)}
+            className="max-w-xs"
+            aria-label="Filter by tags"
+          />
+          {(rawQuery || rawTags) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setRawQuery("");
+                setRawTags("");
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Keyword search uses trigram similarity; search ranks by relevance, list is newest-first.
+        </p>
+      </div>
 
       {memoriesQuery.isLoading ? (
         <div className="space-y-3">
@@ -212,28 +308,60 @@ export function CompanyMemories() {
             <Skeleton key={i} className="h-14 w-full" />
           ))}
         </div>
-      ) : items.length === 0 ? (
+      ) : memoriesQuery.isError ? (
+        <p className="text-sm text-destructive">
+          Couldn't load memories: {(memoriesQuery.error as Error).message}
+        </p>
+      ) : allItems.length === 0 ? (
         <p className="text-sm text-muted-foreground py-8 text-center">
-          {tags ? "No memories match these tags." : "No company memories yet."}
+          {effectiveQuery || tags
+            ? "No memories matched the current filter."
+            : "No company memories yet."}
         </p>
       ) : (
-        <div>
-          <p className="text-xs text-muted-foreground mb-2">
-            {items.length} {items.length === 1 ? "memory" : "memories"}
-          </p>
-          <div className="border border-border rounded-md px-3">
-            {items.map((memory) => (
-              <MemoryRow
-                key={memory.id}
-                memory={memory}
-                deleting={deletingId === memory.id}
-                onDelete={() => {
-                  setDeletingId(memory.id);
-                  removeMutation.mutate(memory.id);
-                }}
-              />
-            ))}
-          </div>
+        <div className="space-y-4">
+          {/* Knowledge base (wiki pages) */}
+          {wikiItems.length > 0 && (
+            <div className="space-y-1">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Knowledge base
+              </h3>
+              <div className="border border-border rounded-md px-3">
+                {wikiItems.map((memory) => (
+                  <MemoryRow
+                    key={memory.id}
+                    memory={memory}
+                    deleting={wikiRemoveMutation.isPending}
+                    onDelete={() => handleDelete(memory)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Episodic memories */}
+          {episodicItems.length > 0 && (
+            <div className="space-y-1">
+              {wikiItems.length > 0 && (
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Memories
+                </h3>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {episodicItems.length} {episodicItems.length === 1 ? "memory" : "memories"}
+              </p>
+              <div className="border border-border rounded-md px-3">
+                {episodicItems.map((memory) => (
+                  <MemoryRow
+                    key={memory.id}
+                    memory={memory}
+                    deleting={removeMutation.isPending}
+                    onDelete={() => handleDelete(memory)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -8,14 +8,16 @@ import { assertCompanyAccess, getActorInfo } from "./authz.js";
  * and enforce company-level authorization — any agent or board user with access
  * to the company may read and write shared memories.
  *
- * Route ordering: specific literal segments (/wiki, /search) come before
+ * Route ordering: specific literal segments (/wiki, /search, /stats) come before
  * parameterised segments (/:id) so Express does not shadow them.
  */
 export function companyMemoryRoutes(db: Db) {
   const router = Router();
   const svc = companyMemoryService(db);
 
-  // ── List ─────────────────────────────────────────────────────────────────
+  // ── List / search ─────────────────────────────────────────────────────────
+  // When `q` is present, dispatches to the similarity search path and returns
+  // `{items, mode: "search"}`. Otherwise returns `{items, mode: "list"}`.
 
   router.get("/companies/:companyId/memories", async (req, res) => {
     const companyId = req.params.companyId as string;
@@ -24,6 +26,7 @@ export function companyMemoryRoutes(db: Db) {
     const rawTags = req.query.tags as string | undefined;
     const rawLimit = req.query.limit as string | undefined;
     const rawOffset = req.query.offset as string | undefined;
+    const q = (req.query.q as string | undefined)?.trim();
 
     let tags: string[] | undefined;
     if (rawTags !== undefined) {
@@ -40,6 +43,13 @@ export function companyMemoryRoutes(db: Db) {
       limit = parsed;
     }
 
+    // Dispatch to similarity search when a keyword query is supplied.
+    if (q) {
+      const items = await svc.search({ companyId, q, tags, limit: Math.min(limit, 100) });
+      res.json({ items, mode: "search" });
+      return;
+    }
+
     let offset = 0;
     if (rawOffset !== undefined) {
       const parsed = Number(rawOffset);
@@ -51,10 +61,19 @@ export function companyMemoryRoutes(db: Db) {
     }
 
     const items = await svc.list({ companyId, tags, limit, offset });
-    res.json({ items });
+    res.json({ items, mode: "list" });
   });
 
-  // ── Search ───────────────────────────────────────────────────────────────
+  // ── Stats ─────────────────────────────────────────────────────────────────
+
+  router.get("/companies/:companyId/memories/stats", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const stats = await svc.stats(companyId);
+    res.json(stats);
+  });
+
+  // ── Search (dedicated endpoint — kept for backwards compat) ───────────────
 
   router.get("/companies/:companyId/memories/search", async (req, res) => {
     const companyId = req.params.companyId as string;
@@ -198,7 +217,11 @@ export function companyMemoryRoutes(db: Db) {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
 
-    const { content, tags } = req.body as { content?: unknown; tags?: unknown };
+    const { content, tags, expiresAt } = req.body as {
+      content?: unknown;
+      tags?: unknown;
+      expiresAt?: unknown;
+    };
 
     if (typeof content !== "string" || content.trim().length === 0) {
       res.status(400).json({ error: "Invalid body: content is required and must be a non-empty string" });
@@ -208,6 +231,20 @@ export function companyMemoryRoutes(db: Db) {
     if (tags !== undefined && (!Array.isArray(tags) || tags.some((t) => typeof t !== "string"))) {
       res.status(400).json({ error: "Invalid body: tags must be an array of strings" });
       return;
+    }
+
+    let parsedExpiresAt: Date | undefined;
+    if (expiresAt !== undefined) {
+      if (typeof expiresAt !== "string") {
+        res.status(400).json({ error: "Invalid body: expiresAt must be an ISO 8601 datetime string" });
+        return;
+      }
+      const d = new Date(expiresAt);
+      if (Number.isNaN(d.getTime())) {
+        res.status(400).json({ error: "Invalid body: expiresAt is not a valid datetime" });
+        return;
+      }
+      parsedExpiresAt = d;
     }
 
     const actor = getActorInfo(req);
@@ -220,6 +257,7 @@ export function companyMemoryRoutes(db: Db) {
         tags: tags as string[] | undefined,
         createdByAgentId,
         createdInRunId: actor.runId ?? undefined,
+        expiresAt: parsedExpiresAt,
       });
 
       await logActivity(db, {
@@ -231,7 +269,7 @@ export function companyMemoryRoutes(db: Db) {
         action: "memory.saved",
         entityType: "company_memory",
         entityId: memory.id,
-        details: { tags: memory.tags },
+        details: { tags: memory.tags, expiresAt: memory.expiresAt },
       });
 
       res.status(201).json(memory);

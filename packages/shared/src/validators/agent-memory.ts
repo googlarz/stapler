@@ -30,6 +30,16 @@ export const createAgentMemorySchema = z.object({
     .min(1, "content is required")
     .max(MAX_AGENT_MEMORY_CONTENT_CHARS, `content must be at most ${MAX_AGENT_MEMORY_CONTENT_CHARS} characters`),
   tags: agentMemoryTagsSchema.optional(),
+  /**
+   * ISO 8601 datetime after which the memory is automatically excluded from
+   * searches and run-start injection. Useful for time-scoped notes
+   * ("today's sprint focus", "current PR under review"). Must be in the future.
+   * Wiki pages ignore this field — they are maintained documents not subject to TTL.
+   */
+  expiresAt: z
+    .string()
+    .datetime({ message: "expiresAt must be an ISO 8601 datetime string" })
+    .optional(),
 });
 
 export type CreateAgentMemoryInput = z.infer<typeof createAgentMemorySchema>;

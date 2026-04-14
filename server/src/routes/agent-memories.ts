@@ -269,6 +269,7 @@ export function agentMemoryRoutes(db: Db) {
           content: req.body.content,
           tags: req.body.tags,
           runId: actor.runId,
+          expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt as string) : undefined,
         });
 
         // Only log on genuine inserts — dedupes are idempotent and

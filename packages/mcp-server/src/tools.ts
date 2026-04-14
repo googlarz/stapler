@@ -139,6 +139,12 @@ const memorySaveSchema = z.object({
     .min(1, "content is required")
     .max(4096, "content must be at most 4096 characters"),
   tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+  /**
+   * ISO 8601 datetime after which the memory is automatically excluded from
+   * searches and run-start injection. Use for time-scoped notes
+   * ("today's sprint focus", "current PR under review"). Must be in the future.
+   */
+  expiresAt: z.string().datetime({ message: "expiresAt must be an ISO 8601 datetime" }).optional(),
 });
 
 const memorySearchSchema = z.object({
@@ -471,12 +477,12 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       "memorySave",
       "Save a short factual memory for your agent (idempotent by content hash). Use for user preferences, decisions, observations you will need later. Do not use as a run scratchpad — use issue comments for that.",
       memorySaveSchema,
-      async ({ content, tags }) => {
+      async ({ content, tags, expiresAt }) => {
         const agentId = client.resolveAgentId();
         return client.requestJson(
           "POST",
           `/agents/${encodeURIComponent(agentId)}/memories`,
-          { body: { content, tags } },
+          { body: { content, tags, expiresAt } },
         );
       },
     ),

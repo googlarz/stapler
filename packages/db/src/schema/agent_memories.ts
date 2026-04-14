@@ -49,6 +49,8 @@ export const agentMemories = pgTable(
     createdInRunId: uuid("created_in_run_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Optional expiry. When set and past, the row is excluded from lists, searches, and injection. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
   },
   (table) => ({
     agentCreatedAtIdx: index("agent_memories_agent_created_at_idx").on(
