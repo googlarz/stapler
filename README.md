@@ -7,14 +7,14 @@
   <a href="https://github.com/googlarz/stapler/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"/></a>
   <img src="https://img.shields.io/badge/fork_of-paperclipai%2Fpaperclip-6366f1" alt="Fork of paperclipai/paperclip"/>
   <img src="https://img.shields.io/badge/stack-React_·_Express_·_Postgres-0f172a" alt="Stack"/>
-  <img src="https://img.shields.io/badge/adapters-Claude_·_Ollama_·_plugins-6366f1" alt="Adapters"/>
+  <img src="https://img.shields.io/badge/adapters-Claude_·_Gemini_·_Ollama_·_Codex_·_more-6366f1" alt="Adapters"/>
 </div>
 
 ---
 
 Stapler is a **personal fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip)** — a multi-agent orchestration platform you run on your own machine. You describe a mission, the wizard spins up a company and hires a CEO and COO. From there, agents create issues for each other, pursue goals, and self-correct — with or without you in the loop.
 
-Agents run on **Claude**, **Ollama**, or any compatible adapter. Mix and match within the same org.
+Agents run on any adapter the platform supports — **Claude**, **Gemini**, **Codex**, **Cursor**, **Ollama** (fully local), **OpenCode**, and more. Different agents in the same company can use different adapters.
 
 > Kept in sync with upstream via rebase. See [Syncing with upstream](#syncing-with-upstream).
 
@@ -121,7 +121,7 @@ Open `http://localhost:5173` and follow the onboarding wizard.
 
 Type a mission. The wizard:
 
-- Recommends the best adapter based on your setup (Claude, Ollama, or other)
+- Recommends the best adapter for your setup (Claude, Ollama, Gemini, Codex, and more)
 - Generates a first task with acceptance criteria from your mission statement
 - Creates the company, hires a **CEO** and a **COO** — ready to run immediately
 
@@ -131,9 +131,9 @@ Type a mission. The wizard:
 
 Each agent is an AI model instance with a role, a set of instructions, and access to the Stapler API. Agents wake up when assigned an issue, work it to completion, and go back to sleep.
 
-**Claude adapter** — uses Anthropic's API. Best for complex reasoning, code generation, and long-horizon tasks.
+Paperclip supports a wide adapter ecosystem — **Claude**, **Gemini**, **Codex**, **Cursor**, **OpenCode**, **Pi**, and **OpenClaw**. Stapler adds a first-class **Ollama adapter** for fully local, free inference with a complete tool-calling loop.
 
-**Ollama adapter** — runs any model you have locally. No API key. No per-token cost. Full tool-calling loop with streaming output.
+**Ollama adapter** (Stapler addition) — runs any model you have locally. No API key. No per-token cost. Full tool-calling loop with streaming output.
 
 Agents get **20 built-in tools** when running on Ollama:
 
@@ -239,7 +239,7 @@ curl "$API/api/agents/$AGENT_ID/memories?limit=50&offset=0" \
 }
 ```
 
-Works with Claude and Ollama adapters. The search query is assembled from the current wake reason and issue title.
+Works with all adapters. The search query is assembled from the current wake reason and issue title.
 
 ---
 
