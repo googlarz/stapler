@@ -525,5 +525,36 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         );
       },
     ),
+    makeTool(
+      "wikiUpsert",
+      "Create or fully replace a named wiki page in your memory. Wiki pages are compiled knowledge documents (Karpathy-style) that survive across runs. Use a stable slug like 'preferences', 'tech-stack', 'project-context'. The content replaces the previous page entirely — read it first with wikiGet if you want to merge.",
+      z.object({
+        slug: z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9_-]*$/, "slug must be lowercase alphanumeric with hyphens/underscores"),
+        content: z.string().trim().min(1).max(4096),
+        tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+      }),
+      async ({ slug, content, tags }) => {
+        const agentId = client.resolveAgentId();
+        return client.requestJson("PUT", `/agents/${encodeURIComponent(agentId)}/memories/wiki/${encodeURIComponent(slug)}`, { body: { content, tags } });
+      },
+    ),
+    makeTool(
+      "wikiGet",
+      "Read a named wiki page from your memory by slug.",
+      z.object({ slug: z.string().trim().min(1).max(64) }),
+      async ({ slug }) => {
+        const agentId = client.resolveAgentId();
+        return client.requestJson("GET", `/agents/${encodeURIComponent(agentId)}/memories/wiki/${encodeURIComponent(slug)}`);
+      },
+    ),
+    makeTool(
+      "wikiList",
+      "List all your named wiki pages (slugs and first 120 chars of content). Use this to see your knowledge base index before reading or updating pages.",
+      z.object({}),
+      async () => {
+        const agentId = client.resolveAgentId();
+        return client.requestJson("GET", `/agents/${encodeURIComponent(agentId)}/memories/wiki`);
+      },
+    ),
   ];
 }

@@ -7,6 +7,7 @@ export interface AgentMemory {
   contentBytes: number;
   tags: string[];
   scope: AgentMemoryScope;
+  wikiSlug?: string | null;
   createdInRunId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -36,4 +37,16 @@ export interface InjectedMemory {
   content: string;
   tags: string[];
   score: number;
+  wikiSlug?: string | null;
+}
+
+/** A named wiki page belonging to an agent (Karpathy-style compiled knowledge). */
+export interface AgentWikiPage {
+  id: string;
+  agentId: string;
+  wikiSlug: string;
+  content: string;
+  tags: string[];
+  createdAt: Date;
+  updatedAt: Date;
 }

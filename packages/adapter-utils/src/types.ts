@@ -112,6 +112,7 @@ export interface InjectedMemory {
   content: string;
   tags: string[];
   score: number;
+  wikiSlug?: string | null;
 }
 
 export interface AdapterInvocationMeta {

@@ -165,10 +165,22 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // dividers that models may read as part of skill content).
   const injectedMemories = ctx.agentMemoriesForInjection;
   if (injectedMemories && injectedMemories.length > 0) {
-    const memoriesSection = [
-      "## Relevant memories",
-      ...injectedMemories.map((m, i) => `${i + 1}. ${m.content}`),
-    ].join("\n");
+    const wikiPages = injectedMemories.filter((m) => m.wikiSlug);
+    const searchMemories = injectedMemories.filter((m) => !m.wikiSlug);
+    const sections: string[] = [];
+    if (wikiPages.length > 0) {
+      sections.push([
+        "## Knowledge base",
+        ...wikiPages.map((m) => `### ${m.wikiSlug}\n${m.content}`),
+      ].join("\n\n"));
+    }
+    if (searchMemories.length > 0) {
+      sections.push([
+        "## Relevant memories",
+        ...searchMemories.map((m, i) => `${i + 1}. ${m.content}`),
+      ].join("\n"));
+    }
+    const memoriesSection = sections.join("\n\n");
     systemPrompt = `${systemPrompt}\n\n${memoriesSection}`;
   }
 

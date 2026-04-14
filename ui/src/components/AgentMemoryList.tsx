@@ -127,9 +127,12 @@ export function AgentMemoryList({ agentId }: Props) {
         </p>
       )}
 
-      {items.length > 0 && (
-        <ul className="space-y-2">
-          {items.map((memory) => (
+      {items.length > 0 && (() => {
+        const wikiItems = items.filter((m) => m.wikiSlug);
+        const regularItems = items.filter((m) => !m.wikiSlug);
+
+        function MemoryRow({ memory }: { memory: AgentMemory | AgentMemorySearchResult }) {
+          return (
             <li
               key={memory.id}
               className="rounded-md border border-border p-3 text-sm space-y-2"
@@ -137,6 +140,11 @@ export function AgentMemoryList({ agentId }: Props) {
             >
               <p className="whitespace-pre-wrap break-words">{memory.content}</p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {memory.wikiSlug && (
+                  <span className="rounded bg-primary/10 text-primary px-1.5 py-0.5 font-mono text-[10px]">
+                    wiki:{memory.wikiSlug}
+                  </span>
+                )}
                 {memory.tags.length > 0 &&
                   memory.tags.map((tag) => (
                     <span
@@ -168,9 +176,36 @@ export function AgentMemoryList({ agentId }: Props) {
                 </Button>
               </div>
             </li>
-          ))}
-        </ul>
-      )}
+          );
+        }
+
+        return (
+          <div className="space-y-4">
+            {wikiItems.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Knowledge base
+                </h3>
+                <ul className="space-y-2">
+                  {wikiItems.map((memory) => <MemoryRow key={memory.id} memory={memory} />)}
+                </ul>
+              </div>
+            )}
+            {regularItems.length > 0 && (
+              <div className="space-y-2">
+                {wikiItems.length > 0 && (
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Memories
+                  </h3>
+                )}
+                <ul className="space-y-2">
+                  {regularItems.map((memory) => <MemoryRow key={memory.id} memory={memory} />)}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

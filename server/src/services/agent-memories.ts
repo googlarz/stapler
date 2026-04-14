@@ -17,7 +17,7 @@
  * is already compatible — their adapter change is the same +3 lines Wave 3 added.
  */
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { agentMemories } from "@paperclipai/db";
 import type {
@@ -109,6 +109,7 @@ function rowToMemory(row: typeof agentMemories.$inferSelect): AgentMemory {
     // scope column is text in the DB; narrow to the public union when
     // we extend scopes later this cast will still be safe.
     scope: row.scope as AgentMemory["scope"],
+    wikiSlug: row.wikiSlug ?? null,
     createdInRunId: row.createdInRunId ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -342,6 +343,56 @@ export function agentMemoryService(db: Db) {
         .where(eq(agentMemories.agentId, agentId));
       return rows[0]?.n ?? 0;
     },
+
+    /**
+     * Create or update a named wiki page for an agent. Upserts by (agentId, wikiSlug).
+     * The content is fully replaced on update — wiki pages are maintained documents,
+     * not append-only notes.
+     */
+    wikiUpsert: async (input: {
+      companyId: string;
+      agentId: string;
+      wikiSlug: string;
+      content: string;
+      tags?: string[];
+      runId?: string | null;
+    }): Promise<AgentMemory> => {
+      const trimmed = input.content.trim();
+      if (trimmed.length === 0) throw new Error("content cannot be empty after trimming");
+      const limits = getMemoryLimits();
+      const contentBytes = Buffer.byteLength(trimmed, "utf8");
+      if (contentBytes > limits.maxContentBytes) throw new MemoryContentTooLargeError(contentBytes, limits.maxContentBytes);
+      const contentHash = hashContent(trimmed);
+      const tags = normalizeTags(input.tags);
+      const slug = input.wikiSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 64);
+      if (!slug) throw new Error("wikiSlug must produce a non-empty slug after normalization");
+
+      const [row] = await db
+        .insert(agentMemories)
+        .values({ companyId: input.companyId, agentId: input.agentId, content: trimmed, contentHash, contentBytes, tags, wikiSlug: slug, createdInRunId: input.runId ?? null })
+        .onConflictDoUpdate({
+          target: [agentMemories.agentId, agentMemories.wikiSlug],
+          targetWhere: sql`${agentMemories.wikiSlug} IS NOT NULL`,
+          set: { content: trimmed, contentHash, contentBytes, tags, updatedAt: sql`now()` },
+        })
+        .returning();
+      return rowToMemory(row);
+    },
+
+    wikiGet: async (agentId: string, slug: string): Promise<AgentMemory | null> => {
+      const row = await db.select().from(agentMemories)
+        .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.wikiSlug, slug)))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+      return row ? rowToMemory(row) : null;
+    },
+
+    wikiList: async (agentId: string): Promise<AgentMemory[]> => {
+      const rows = await db.select().from(agentMemories)
+        .where(and(eq(agentMemories.agentId, agentId), isNotNull(agentMemories.wikiSlug)))
+        .orderBy(asc(agentMemories.wikiSlug));
+      return rows.map(rowToMemory);
+    },
   };
 }
 
@@ -410,11 +461,22 @@ export async function maybeLoadMemoriesForInjection(
   if (!q) return [];
 
   const svc = agentMemoryService(db);
-  const results = await svc.search({ agentId: agent.id, q, limit });
-  return results.map((r) => ({
-    id: r.id,
-    content: r.content,
-    tags: r.tags,
-    score: r.score,
+
+  // Load wiki pages unconditionally — they are compiled knowledge, always relevant.
+  const wikiPages = await svc.wikiList(agent.id);
+  const wikiInjected: InjectedMemory[] = wikiPages.map((p) => ({
+    id: p.id,
+    content: p.content,
+    tags: p.tags,
+    score: 1,
+    wikiSlug: p.wikiSlug ?? undefined,
   }));
+
+  // Similarity search for non-wiki memories only.
+  const searchResults = await svc.search({ agentId: agent.id, q, limit });
+  const searchInjected: InjectedMemory[] = searchResults
+    .filter((r) => !r.wikiSlug)
+    .map((r) => ({ id: r.id, content: r.content, tags: r.tags, score: r.score }));
+
+  return [...wikiInjected, ...searchInjected];
 }

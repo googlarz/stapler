@@ -478,10 +478,25 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const renderedPrompt = shouldUseResumeDeltaPrompt ? "" : renderTemplate(promptTemplate, templateData);
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   const injectedMemories = ctx.agentMemoriesForInjection;
-  const memoriesSection =
-    injectedMemories && injectedMemories.length > 0
-      ? ["## Relevant memories", ...injectedMemories.map((m, i) => `${i + 1}. ${m.content}`)].join("\n")
-      : "";
+  const memoriesSection = (() => {
+    if (!injectedMemories || injectedMemories.length === 0) return "";
+    const wikiPages = injectedMemories.filter((m) => m.wikiSlug);
+    const searchMemories = injectedMemories.filter((m) => !m.wikiSlug);
+    const sections: string[] = [];
+    if (wikiPages.length > 0) {
+      sections.push([
+        "## Knowledge base",
+        ...wikiPages.map((m) => `### ${m.wikiSlug}\n${m.content}`),
+      ].join("\n\n"));
+    }
+    if (searchMemories.length > 0) {
+      sections.push([
+        "## Relevant memories",
+        ...searchMemories.map((m, i) => `${i + 1}. ${m.content}`),
+      ].join("\n"));
+    }
+    return sections.join("\n\n");
+  })();
   const prompt = joinPromptSections([
     promptInstructionsPrefix,
     renderedBootstrapPrompt,

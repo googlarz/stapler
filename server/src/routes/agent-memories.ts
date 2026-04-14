@@ -143,6 +143,80 @@ export function agentMemoryRoutes(db: Db) {
     },
   );
 
+  router.put("/agents/:agentId/memories/wiki/:slug", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const slug = req.params.slug as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    assertAgentIdentity(req, agentId);
+
+    const { content, tags } = req.body as { content?: unknown; tags?: unknown };
+    if (typeof content !== "string" || content.trim().length === 0) {
+      res.status(400).json({ error: "content must be a non-empty string" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    try {
+      const memory = await svc.wikiUpsert({
+        companyId: agent.companyId,
+        agentId,
+        wikiSlug: slug,
+        content,
+        tags: Array.isArray(tags) ? (tags as string[]) : undefined,
+        runId: actor.runId,
+      });
+      res.json(memory);
+    } catch (err) {
+      if (err instanceof MemoryContentTooLargeError) {
+        res.status(413).json({
+          error: "Memory content too large",
+          contentBytes: err.contentBytes,
+          maxContentBytes: err.maxContentBytes,
+        });
+        return;
+      }
+      throw err;
+    }
+  });
+
+  router.get("/agents/:agentId/memories/wiki", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    assertAgentIdentity(req, agentId);
+
+    const items = await svc.wikiList(agentId);
+    res.json({ items });
+  });
+
+  router.get("/agents/:agentId/memories/wiki/:slug", async (req, res) => {
+    const agentId = req.params.agentId as string;
+    const slug = req.params.slug as string;
+    const agent = await loadAgentOrNull(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    assertAgentIdentity(req, agentId);
+
+    const memory = await svc.wikiGet(agentId, slug);
+    if (!memory) {
+      res.status(404).json({ error: "Wiki page not found" });
+      return;
+    }
+    res.json(memory);
+  });
+
   router.delete("/agents/:agentId/memories/:id", async (req, res) => {
     const agentId = req.params.agentId as string;
     const id = req.params.id as string;

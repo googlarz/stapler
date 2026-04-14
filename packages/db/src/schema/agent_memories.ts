@@ -45,6 +45,7 @@ export const agentMemories = pgTable(
     contentBytes: integer("content_bytes").notNull(),
     tags: jsonb("tags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     scope: text("scope").notNull().default("agent"),
+    wikiSlug: text("wiki_slug"),
     createdInRunId: uuid("created_in_run_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -63,5 +64,8 @@ export const agentMemories = pgTable(
       table.agentId,
       table.contentHash,
     ),
+    uniqueAgentWikiSlug: uniqueIndex("agent_memories_agent_wiki_slug_key")
+      .on(table.agentId, table.wikiSlug)
+      .where(sql`${table.wikiSlug} IS NOT NULL`),
   }),
 );
