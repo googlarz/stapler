@@ -17,7 +17,7 @@
  * is already compatible — their adapter change is the same +3 lines Wave 3 added.
  */
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { agentMemories } from "@paperclipai/db";
 import type {
@@ -206,10 +206,15 @@ export function agentMemoryService(db: Db) {
         // Prune oldest if we're over cap. This is a no-op on dedupe
         // inserts (the count didn't change). It's O(1) SELECT count +
         // one DELETE per over-cap row.
+        //
+        // Wiki pages (wiki_slug IS NOT NULL) are excluded from both the
+        // count and the eviction candidates — they are compiled knowledge
+        // meant to survive indefinitely, not episodic notes subject to the
+        // rolling cap.
         const countRows = await tx
           .select({ n: sql<number>`count(*)::int` })
           .from(agentMemories)
-          .where(eq(agentMemories.agentId, input.agentId));
+          .where(and(eq(agentMemories.agentId, input.agentId), isNull(agentMemories.wikiSlug)));
         const total = countRows[0]?.n ?? 0;
         if (total > limits.maxPerAgent) {
           const overflow = total - limits.maxPerAgent;
@@ -226,6 +231,7 @@ export function agentMemoryService(db: Db) {
             .where(
               and(
                 eq(agentMemories.agentId, input.agentId),
+                isNull(agentMemories.wikiSlug),
                 ne(agentMemories.id, memoryRow.id),
               ),
             )
@@ -387,10 +393,11 @@ export function agentMemoryService(db: Db) {
       return row ? rowToMemory(row) : null;
     },
 
-    wikiList: async (agentId: string): Promise<AgentMemory[]> => {
+    wikiList: async (agentId: string, limit = 50): Promise<AgentMemory[]> => {
       const rows = await db.select().from(agentMemories)
         .where(and(eq(agentMemories.agentId, agentId), isNotNull(agentMemories.wikiSlug)))
-        .orderBy(asc(agentMemories.wikiSlug));
+        .orderBy(asc(agentMemories.wikiSlug))
+        .limit(Math.max(1, Math.min(limit, 200)));
       return rows.map(rowToMemory);
     },
   };

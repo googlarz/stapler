@@ -9,6 +9,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+// Note: wiki_slug support for company_memories is deferred — add when
+// companyMemoryService grows wikiUpsert/wikiGet/wikiList methods.
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 
@@ -40,7 +42,6 @@ export const companyMemories = pgTable(
     createdByAgentId: uuid("created_by_agent_id").references(() => agents.id, {
       onDelete: "set null",
     }),
-    wikiSlug: text("wiki_slug"),
     createdInRunId: uuid("created_in_run_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -58,8 +59,5 @@ export const companyMemories = pgTable(
       table.companyId,
       table.contentHash,
     ),
-    uniqueCompanyWikiSlug: uniqueIndex("company_memories_company_wiki_slug_key")
-      .on(table.companyId, table.wikiSlug)
-      .where(sql`${table.wikiSlug} IS NOT NULL`),
   }),
 );

@@ -167,7 +167,7 @@ export function agentMemoryRoutes(db: Db) {
         agentId,
         wikiSlug: slug,
         content,
-        tags: Array.isArray(tags) ? (tags as string[]) : undefined,
+        tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : undefined,
         runId: actor.runId,
       });
       res.json(memory);
