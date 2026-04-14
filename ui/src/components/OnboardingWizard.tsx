@@ -721,7 +721,7 @@ export function OnboardingWizard() {
       });
       setCreatedAgentId(agent.id);
 
-      // Auto-create COO alongside the CEO — operations auditor present in every company by default.
+      // Auto-create COO alongside the CEO — optimization agent present in every company by default.
       // Uses the same adapter so it can run without extra configuration.
       await agentsApi.create(createdCompanyId, {
         name: "COO",

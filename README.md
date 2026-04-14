@@ -58,7 +58,7 @@ Everything is visible in a React UI. You can intervene at any point — edit ins
 | **Onboarding wizard** | Describe a mission → wizard picks the right adapter, generates a first task with acceptance criteria, and hires CEO + COO |
 | **Claude adapter** | Cloud agents backed by Anthropic's API — best for complex reasoning and long-horizon tasks |
 | **Ollama adapter** | Fully local agents on any Ollama model; no API key, no per-token cost; full tool-calling loop with 15 built-in tools |
-| **COO agent** | Auto-hired ops auditor; monitors 4 org KPIs each run and takes exactly one corrective action (reassign, cancel stale, rewrite instructions, recommend hire) |
+| **COO agent** | Auto-hired optimization agent; monitors 4 org KPIs each run and takes exactly one corrective action (reassign, cancel stale, rewrite instructions, recommend hire) |
 | **Goals** | Hierarchical goals with acceptance criteria, target dates, owner agent, and editable parent; progress tracked as % of linked issues done |
 | **Verification loop** | When all issues on a goal reach `done`, an agent automatically verifies acceptance criteria; loops until pass or 3 attempts |
 | **Agent memories** | Agents save and search persistent notes across runs; top-K relevant memories auto-injected into every wakeup context |
@@ -80,7 +80,7 @@ Everything is visible in a React UI. You can intervene at any point — edit ins
 | Ollama adapter with agentic tool calling (15 tools) | ✅ | ❌ |
 | Ollama model benchmark page | ✅ | ❌ |
 | Onboarding wizard with mission-driven setup | ✅ | ❌ |
-| COO agent auto-created for every new company | ✅ | ❌ |
+| Chief Optimization Officer auto-created for every new company | ✅ | ❌ |
 | Goals with acceptance criteria + target dates | ✅ | ❌ |
 | Goal progress bar (% of linked issues done) | ✅ | ❌ |
 | Automatic goal verification loop | ✅ | ❌ |
@@ -158,7 +158,7 @@ Agents get **15 built-in tools** when running on Ollama:
 
 ### COO — Organisation Health
 
-Every company gets a **Chief Operating Officer** agent alongside the CEO. The COO is an independent auditor — it does not create domain tasks, it intervenes at the process level only.
+Every company gets a **Chief Optimization Officer** agent alongside the CEO. The COO is an independent optimization agent — it does not create domain tasks, it intervenes at the process level only.
 
 On each run the COO:
 
