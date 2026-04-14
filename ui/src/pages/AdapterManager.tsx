@@ -620,6 +620,12 @@ export function AdapterManager() {
                   modelsCount: 0,
                   loaded: true,
                   disabled: virtual.menuDisabled,
+                  capabilities: {
+                    supportsInstructionsBundle: false,
+                    supportsSkills: false,
+                    supportsLocalAgentJwt: false,
+                    requiresMaterializedRuntimeSkills: false,
+                  },
                 }}
                 canRemove={false}
                 onToggle={(type, disabled) => toggleMutation.mutate({ type, disabled })}
