@@ -48,6 +48,14 @@ const DNS_LOOKUP_TIMEOUT_MS = 5_000;
 
 /** Only these protocols are allowed for plugin HTTP requests. */
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
+
+/**
+ * When true, the private-IP SSRF guard is disabled for plugin fetch requests.
+ * Intended for self-hosted / homelab deployments where plugin endpoints
+ * (e.g. Honcho) resolve to RFC-1918 addresses.
+ * Set PAPERCLIP_PLUGIN_ALLOW_PRIVATE_IPS=true in the server environment.
+ */
+const PLUGIN_ALLOW_PRIVATE_IPS = process.env.PAPERCLIP_PLUGIN_ALLOW_PRIVATE_IPS === "true";
 const TELEMETRY_EVENT_NAME_REGEX = /^[a-z0-9][a-z0-9_-]*$/;
 
 /**
@@ -147,7 +155,11 @@ async function validateAndResolveFetchUrl(urlString: string): Promise<ValidatedF
     // Filter to only non-private IPs instead of rejecting the entire request
     // when some IPs are private. This handles multi-homed hosts that resolve
     // to both private and public addresses.
-    const safeResults = results.filter((entry) => !isPrivateIP(entry.address));
+    // When PLUGIN_ALLOW_PRIVATE_IPS is set (self-hosted deployments), skip
+    // the private-IP filter entirely and use all resolved addresses.
+    const safeResults = PLUGIN_ALLOW_PRIVATE_IPS
+      ? results
+      : results.filter((entry) => !isPrivateIP(entry.address));
     if (safeResults.length === 0) {
       throw new Error(
         `All resolved IPs for ${originalHostname} are in private/reserved ranges`,
