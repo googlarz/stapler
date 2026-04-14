@@ -66,6 +66,26 @@ export async function maybeLoadMemoriesForInjection(
       tags: page.tags,
       score: 1,
       wikiSlug: page.wikiSlug ?? undefined,
+      source: "agent",
+    });
+    wikiBudgetLeft -= page.contentBytes;
+  }
+
+  // ── Company wiki pages (always injected, same byte budget pool) ──────────
+  const companySvc = companyMemoryService(db);
+  const allCompanyWikiPages = await companySvc.wikiList(agent.companyId);
+  const companyWikiByRecency = [...allCompanyWikiPages].sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+  );
+  for (const page of companyWikiByRecency) {
+    if (page.contentBytes > wikiBudgetLeft) continue;
+    wikiInjected.push({
+      id: page.id,
+      content: page.content,
+      tags: page.tags,
+      score: 1,
+      wikiSlug: page.wikiSlug ?? undefined,
+      source: "company",
     });
     wikiBudgetLeft -= page.contentBytes;
   }
@@ -128,21 +148,25 @@ export async function maybeLoadMemoriesForInjection(
     content: r.content,
     tags: r.tags,
     score: r.score,
+    source: "agent" as const,
   }));
 
-  // ── Track 3: Company memories (shared team knowledge) ────────────────────
-  const companySvc = companyMemoryService(db);
-  const companySearchResults = await companySvc.search({
+  // ── Track 3: Company episodic memories (shared team knowledge) ───────────
+  // companySvc already instantiated above for wiki pages.
+  const companyEpisodicResults = await companySvc.search({
     companyId: agent.companyId,
     q,
     limit,
   });
-  const companyInjected: InjectedMemory[] = companySearchResults.map((r) => ({
-    id: r.id,
-    content: r.content,
-    tags: r.tags,
-    score: r.score,
-  }));
+  const companyEpisodicInjected: InjectedMemory[] = companyEpisodicResults
+    .filter((r) => !r.wikiSlug) // wiki pages already injected above
+    .map((r) => ({
+      id: r.id,
+      content: r.content,
+      tags: r.tags,
+      score: r.score,
+      source: "company" as const,
+    }));
 
-  return [...wikiInjected, ...agentSearchInjected, ...companyInjected];
+  return [...wikiInjected, ...agentSearchInjected, ...companyEpisodicInjected];
 }

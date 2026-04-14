@@ -106,6 +106,11 @@ export interface AdapterSessionCodec {
 /**
  * A memory entry injected into an agent's execution context at run-start.
  * Carries only the fields an adapter needs to render the memories prompt section.
+ *
+ * `source` lets adapters render separate sections:
+ *   - agent wiki pages  → `## Knowledge base`
+ *   - agent episodic    → `## Relevant memories`
+ *   - company memories  → `## Company knowledge`
  */
 export interface InjectedMemory {
   id: string;
@@ -113,6 +118,8 @@ export interface InjectedMemory {
   tags: string[];
   score: number;
   wikiSlug?: string | null;
+  /** "agent" = this agent's own memory; "company" = shared company knowledge. */
+  source?: "agent" | "company";
 }
 
 export interface AdapterInvocationMeta {

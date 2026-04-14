@@ -9,8 +9,6 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-// Note: wiki_slug support for company_memories is deferred — add when
-// companyMemoryService grows wikiUpsert/wikiGet/wikiList methods.
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 
@@ -22,6 +20,11 @@ import { agents } from "./agents.js";
  * Dedupe is by `content_hash` (sha256 of the trimmed content). The unique
  * index on (company_id, content_hash) lets the save path use
  * `ON CONFLICT DO NOTHING` so concurrent agents never see spurious conflicts.
+ *
+ * `wiki_slug` (nullable) marks a row as a named wiki page — compiled knowledge
+ * that all agents see at every wakeup. Partial unique index on
+ * (company_id, wiki_slug) WHERE wiki_slug IS NOT NULL enables upsert-by-slug
+ * semantics without affecting deduplication of regular episodic memories.
  *
  * `created_by_agent_id` is a nullable FK so we know which agent authored
  * the memory. `created_in_run_id` is a loose reference to `heartbeat_runs.id`
@@ -39,6 +42,7 @@ export const companyMemories = pgTable(
     contentHash: text("content_hash").notNull(),
     contentBytes: integer("content_bytes").notNull(),
     tags: jsonb("tags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    wikiSlug: text("wiki_slug"),
     createdByAgentId: uuid("created_by_agent_id").references(() => agents.id, {
       onDelete: "set null",
     }),
@@ -59,5 +63,8 @@ export const companyMemories = pgTable(
       table.companyId,
       table.contentHash,
     ),
+    uniqueCompanyWikiSlug: uniqueIndex("company_memories_company_wiki_slug_key")
+      .on(table.companyId, table.wikiSlug)
+      .where(sql`${table.wikiSlug} IS NOT NULL`),
   }),
 );

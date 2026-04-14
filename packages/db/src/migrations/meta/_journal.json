@@ -450,6 +450,7 @@
       "tag": "0063_scheduled_for",
       "breakpoints": true
     },
-    { "idx": 64, "version": "7", "when": 1776278400000, "tag": "0064_wiki_slugs", "breakpoints": true }
+    { "idx": 64, "version": "7", "when": 1776278400000, "tag": "0064_wiki_slugs", "breakpoints": true },
+    { "idx": 65, "version": "7", "when": 1776364800000, "tag": "0065_company_wiki_slug", "breakpoints": true }
   ]
 }

@@ -56,6 +56,11 @@ export function AgentMemoryList({ agentId }: Props) {
       }),
   });
 
+  const statsQuery = useQuery({
+    queryKey: ["agents", agentId, "memories", "stats"],
+    queryFn: () => agentMemoriesApi.stats(agentId),
+  });
+
   const removeMutation = useMutation({
     mutationFn: (memoryId: string) => agentMemoriesApi.remove(agentId, memoryId),
     onSuccess: () => {
@@ -63,10 +68,48 @@ export function AgentMemoryList({ agentId }: Props) {
     },
   });
 
+  const wikiRemoveMutation = useMutation({
+    mutationFn: (slug: string) => agentMemoriesApi.wikiRemoveBySlug(agentId, slug),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents", agentId, "memories"] });
+    },
+  });
+
   const items = memoriesQuery.data?.items ?? [];
+  const stats = statsQuery.data;
 
   return (
     <div className="space-y-4 max-w-3xl">
+      {/* Stats bar */}
+      {stats && (
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground rounded-md border border-border bg-muted/30 px-3 py-2">
+          <span>
+            <span className="font-medium text-foreground">{stats.episodic.count}</span>
+            {" / "}
+            <span>{stats.limits.maxPerAgent}</span>
+            {" episodic"}
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            <span className="font-medium text-foreground">{stats.wiki.count}</span>
+            {" wiki pages"}
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            {(stats.total.bytes / 1024).toFixed(1)}
+            {" KB stored"}
+          </span>
+          {stats.episodic.count > stats.limits.maxPerAgent * 0.8 && (
+            <>
+              <span className="text-border">·</span>
+              <span className="text-amber-600 font-medium">
+                Approaching episodic cap — consider consolidating into wiki pages
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Input
@@ -132,6 +175,23 @@ export function AgentMemoryList({ agentId }: Props) {
         const regularItems = items.filter((m) => !m.wikiSlug);
 
         function MemoryRow({ memory }: { memory: AgentMemory | AgentMemorySearchResult }) {
+          const isWiki = !!memory.wikiSlug;
+          const isPending = isWiki
+            ? wikiRemoveMutation.isPending
+            : removeMutation.isPending;
+
+          function handleDelete() {
+            const msg = isWiki
+              ? `Delete wiki page "${memory.wikiSlug}"? This cannot be undone.`
+              : "Delete this memory? This cannot be undone.";
+            if (!window.confirm(msg)) return;
+            if (isWiki && memory.wikiSlug) {
+              wikiRemoveMutation.mutate(memory.wikiSlug);
+            } else {
+              removeMutation.mutate(memory.id);
+            }
+          }
+
           return (
             <li
               key={memory.id}
@@ -163,14 +223,10 @@ export function AgentMemoryList({ agentId }: Props) {
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  onClick={() => {
-                    if (window.confirm("Delete this memory? This cannot be undone.")) {
-                      removeMutation.mutate(memory.id);
-                    }
-                  }}
-                  title="Delete memory"
+                  onClick={handleDelete}
+                  title={isWiki ? "Delete wiki page" : "Delete memory"}
                   className="ml-auto"
-                  disabled={removeMutation.isPending}
+                  disabled={isPending}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

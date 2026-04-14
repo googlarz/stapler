@@ -165,23 +165,31 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // dividers that models may read as part of skill content).
   const injectedMemories = ctx.agentMemoriesForInjection;
   if (injectedMemories && injectedMemories.length > 0) {
-    const wikiPages = injectedMemories.filter((m) => m.wikiSlug);
-    const searchMemories = injectedMemories.filter((m) => !m.wikiSlug);
+    const agentWiki = injectedMemories.filter((m) => m.wikiSlug && m.source !== "company");
+    const companyWiki = injectedMemories.filter((m) => m.wikiSlug && m.source === "company");
+    const agentEpisodic = injectedMemories.filter((m) => !m.wikiSlug && m.source !== "company");
+    const companyEpisodic = injectedMemories.filter((m) => !m.wikiSlug && m.source === "company");
     const sections: string[] = [];
-    if (wikiPages.length > 0) {
+    if (agentWiki.length > 0) {
       sections.push([
         "## Knowledge base",
-        ...wikiPages.map((m) => `### ${m.wikiSlug}\n${m.content}`),
+        ...agentWiki.map((m) => `### ${m.wikiSlug}\n${m.content}`),
       ].join("\n\n"));
     }
-    if (searchMemories.length > 0) {
+    if (companyWiki.length > 0 || companyEpisodic.length > 0) {
+      const companyItems = [
+        ...companyWiki.map((m) => `### ${m.wikiSlug}\n${m.content}`),
+        ...companyEpisodic.map((m, i) => `${i + 1}. ${m.content}`),
+      ];
+      sections.push(["## Company knowledge", ...companyItems].join("\n\n"));
+    }
+    if (agentEpisodic.length > 0) {
       sections.push([
         "## Relevant memories",
-        ...searchMemories.map((m, i) => `${i + 1}. ${m.content}`),
+        ...agentEpisodic.map((m, i) => `${i + 1}. ${m.content}`),
       ].join("\n"));
     }
-    const memoriesSection = sections.join("\n\n");
-    systemPrompt = `${systemPrompt}\n\n${memoriesSection}`;
+    systemPrompt = `${systemPrompt}\n\n${sections.join("\n\n")}`;
   }
 
   // Inject company skills into the system prompt.

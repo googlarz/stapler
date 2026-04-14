@@ -36,6 +36,13 @@ function buildQuery(params: ListAgentMemoriesParams): string {
   return qs ? `?${qs}` : "";
 }
 
+export interface AgentMemoryStats {
+  episodic: { count: number; bytes: number };
+  wiki: { count: number; bytes: number };
+  total: { count: number; bytes: number };
+  limits: { maxPerAgent: number; maxContentBytes: number; searchThreshold: number };
+}
+
 export const agentMemoriesApi = {
   list: (agentId: string, params: ListAgentMemoriesParams = {}) =>
     api.get<AgentMemoryQueryResponse>(
@@ -53,5 +60,13 @@ export const agentMemoriesApi = {
   remove: (agentId: string, id: string) =>
     api.delete<AgentMemory>(
       `/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(id)}`,
+    ),
+  wikiRemoveBySlug: (agentId: string, slug: string) =>
+    api.delete<AgentMemory>(
+      `/agents/${encodeURIComponent(agentId)}/memories/wiki/${encodeURIComponent(slug)}`,
+    ),
+  stats: (agentId: string) =>
+    api.get<AgentMemoryStats>(
+      `/agents/${encodeURIComponent(agentId)}/memories/stats`,
     ),
 };

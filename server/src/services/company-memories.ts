@@ -13,7 +13,7 @@
  * (default 4096 bytes). Callers receive `MemoryContentTooLargeError` when exceeded.
  */
 import { createHash } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 /** pg_trgm similarity threshold for company memory search (mirrors agent memory default). */
 const DEFAULT_SEARCH_THRESHOLD = 0.1;
@@ -218,6 +218,69 @@ export function companyMemoryService(db: Db) {
       db
         .delete(companyMemories)
         .where(and(eq(companyMemories.id, id), eq(companyMemories.companyId, companyId)))
+        .returning()
+        .then((rows) => rows[0] ?? null),
+
+    /**
+     * Create or fully replace a named company wiki page. Upserts by
+     * (companyId, wikiSlug). Content is fully replaced on update —
+     * wiki pages are maintained documents, not append-only notes.
+     */
+    wikiUpsert: async (input: {
+      companyId: string;
+      content: string;
+      wikiSlug: string;
+      tags?: string[];
+      createdByAgentId?: string;
+      createdInRunId?: string;
+    }): Promise<CompanyMemory> => {
+      const trimmed = input.content.trim();
+      if (trimmed.length === 0) throw new Error("content cannot be empty after trimming");
+      const maxContentBytes = readPositiveInt("PAPERCLIP_MEMORY_MAX_CONTENT_BYTES", DEFAULT_MAX_CONTENT_BYTES);
+      const contentBytes = Buffer.byteLength(trimmed, "utf8");
+      if (contentBytes > maxContentBytes) throw new MemoryContentTooLargeError(contentBytes, maxContentBytes);
+      const contentHash = hashContent(trimmed);
+      const tags = normalizeTags(input.tags);
+      const slug = input.wikiSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 64);
+      if (!slug) throw new Error("wikiSlug must produce a non-empty slug after normalization");
+
+      const [row] = await db
+        .insert(companyMemories)
+        .values({
+          companyId: input.companyId,
+          content: trimmed,
+          contentHash,
+          contentBytes,
+          tags,
+          wikiSlug: slug,
+          createdByAgentId: input.createdByAgentId ?? null,
+          createdInRunId: input.createdInRunId ?? null,
+        })
+        .onConflictDoUpdate({
+          target: [companyMemories.companyId, companyMemories.wikiSlug],
+          targetWhere: sql`${companyMemories.wikiSlug} IS NOT NULL`,
+          set: { content: trimmed, contentHash, contentBytes, tags, updatedAt: sql`now()` },
+        })
+        .returning();
+      return row;
+    },
+
+    wikiGet: async (companyId: string, slug: string): Promise<CompanyMemory | null> =>
+      db.select().from(companyMemories)
+        .where(and(eq(companyMemories.companyId, companyId), eq(companyMemories.wikiSlug, slug)))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+
+    /** List all wiki pages for a company, alphabetical by slug. Safety cap 500. */
+    wikiList: async (companyId: string): Promise<CompanyMemory[]> =>
+      db.select().from(companyMemories)
+        .where(and(eq(companyMemories.companyId, companyId), isNotNull(companyMemories.wikiSlug)))
+        .orderBy(asc(companyMemories.wikiSlug))
+        .limit(500),
+
+    wikiRemove: async (companyId: string, slug: string): Promise<CompanyMemory | null> =>
+      db.delete(companyMemories)
+        .where(and(eq(companyMemories.companyId, companyId), eq(companyMemories.wikiSlug, slug)))
         .returning()
         .then((rows) => rows[0] ?? null),
   };

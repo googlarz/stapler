@@ -31,6 +31,9 @@ export interface AgentMemorySaveResult {
  * A memory entry injected into an agent's execution context at run-start.
  * Lighter than the full AgentMemory — only the fields an adapter needs to
  * build the memories section of the system/user prompt.
+ *
+ * `source` distinguishes the agent's own memories from company-wide shared
+ * knowledge so adapters can render them in separate prompt sections.
  */
 export interface InjectedMemory {
   id: string;
@@ -38,6 +41,8 @@ export interface InjectedMemory {
   tags: string[];
   score: number;
   wikiSlug?: string | null;
+  /** "agent" = this agent's own memory; "company" = shared company knowledge. */
+  source?: "agent" | "company";
 }
 
 /** A named wiki page belonging to an agent (Karpathy-style compiled knowledge). */

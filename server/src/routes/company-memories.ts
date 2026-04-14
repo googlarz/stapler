@@ -7,10 +7,15 @@ import { assertCompanyAccess, getActorInfo } from "./authz.js";
  * Company memory routes. All routes are scoped to `/companies/:companyId/memories`
  * and enforce company-level authorization — any agent or board user with access
  * to the company may read and write shared memories.
+ *
+ * Route ordering: specific literal segments (/wiki, /search) come before
+ * parameterised segments (/:id) so Express does not shadow them.
  */
 export function companyMemoryRoutes(db: Db) {
   const router = Router();
   const svc = companyMemoryService(db);
+
+  // ── List ─────────────────────────────────────────────────────────────────
 
   router.get("/companies/:companyId/memories", async (req, res) => {
     const companyId = req.params.companyId as string;
@@ -22,10 +27,7 @@ export function companyMemoryRoutes(db: Db) {
 
     let tags: string[] | undefined;
     if (rawTags !== undefined) {
-      tags = rawTags
-        .split(",")
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0);
+      tags = rawTags.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
     }
 
     let limit = 50;
@@ -51,6 +53,134 @@ export function companyMemoryRoutes(db: Db) {
     const items = await svc.list({ companyId, tags, limit, offset });
     res.json({ items });
   });
+
+  // ── Search ───────────────────────────────────────────────────────────────
+
+  router.get("/companies/:companyId/memories/search", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const q = (req.query.q as string | undefined)?.trim();
+    if (!q) {
+      res.status(400).json({ error: "q is required" });
+      return;
+    }
+
+    const rawLimit = req.query.limit as string | undefined;
+    let limit = 10;
+    if (rawLimit !== undefined) {
+      const parsed = Number(rawLimit);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+        res.status(400).json({ error: "Invalid query" });
+        return;
+      }
+      limit = parsed;
+    }
+
+    const rawTags = req.query.tags as string | undefined;
+    const tags = rawTags
+      ? rawTags.split(",").map((t) => t.trim()).filter((t) => t.length > 0)
+      : undefined;
+
+    const items = await svc.search({ companyId, q, tags, limit });
+    res.json({ items, mode: "search" });
+  });
+
+  // ── Wiki pages ───────────────────────────────────────────────────────────
+  // All /wiki routes MUST appear before /:id.
+
+  router.put("/companies/:companyId/memories/wiki/:slug", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const slug = req.params.slug as string;
+    assertCompanyAccess(req, companyId);
+
+    const { content, tags } = req.body as { content?: unknown; tags?: unknown };
+    if (typeof content !== "string" || content.trim().length === 0) {
+      res.status(400).json({ error: "content must be a non-empty string" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    try {
+      const memory = await svc.wikiUpsert({
+        companyId,
+        wikiSlug: slug,
+        content,
+        tags: Array.isArray(tags)
+          ? tags.filter((t): t is string => typeof t === "string")
+          : undefined,
+        createdByAgentId: actor.agentId ?? undefined,
+        createdInRunId: actor.runId ?? undefined,
+      });
+
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId ?? undefined,
+        runId: actor.runId ?? undefined,
+        action: "memory.wiki_upserted",
+        entityType: "company_memory",
+        entityId: memory.id,
+        details: { wikiSlug: memory.wikiSlug, contentBytes: memory.contentBytes },
+      });
+
+      res.json(memory);
+    } catch (err) {
+      if (err instanceof MemoryContentTooLargeError) {
+        res.status(413).json({ error: "Content too large" });
+        return;
+      }
+      throw err;
+    }
+  });
+
+  router.get("/companies/:companyId/memories/wiki", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const items = await svc.wikiList(companyId);
+    res.json({ items });
+  });
+
+  router.get("/companies/:companyId/memories/wiki/:slug", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const slug = req.params.slug as string;
+    assertCompanyAccess(req, companyId);
+    const memory = await svc.wikiGet(companyId, slug);
+    if (!memory) {
+      res.status(404).json({ error: "Wiki page not found" });
+      return;
+    }
+    res.json(memory);
+  });
+
+  router.delete("/companies/:companyId/memories/wiki/:slug", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const slug = req.params.slug as string;
+    assertCompanyAccess(req, companyId);
+
+    const removed = await svc.wikiRemove(companyId, slug);
+    if (!removed) {
+      res.status(404).json({ error: "Wiki page not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId ?? undefined,
+      action: "memory.wiki_deleted",
+      entityType: "company_memory",
+      entityId: removed.id,
+      details: { wikiSlug: removed.wikiSlug },
+    });
+
+    res.json(removed);
+  });
+
+  // ── Create / delete episodic memories ────────────────────────────────────
 
   router.post("/companies/:companyId/memories", async (req, res) => {
     const companyId = req.params.companyId as string;
@@ -89,9 +219,7 @@ export function companyMemoryRoutes(db: Db) {
         action: "memory.saved",
         entityType: "company_memory",
         entityId: memory.id,
-        details: {
-          tags: memory.tags,
-        },
+        details: { tags: memory.tags },
       });
 
       res.status(201).json(memory);

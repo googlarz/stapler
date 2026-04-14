@@ -579,5 +579,63 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
         return client.requestJson("GET", `/agents/${encodeURIComponent(agentId)}/memories/stats`);
       },
     ),
+    // ── Company memory tools ───────────────────────────────────────────────
+    makeTool(
+      "companyMemorySearch",
+      "Keyword search the company's shared memory store via pg_trgm similarity. Returns team-wide knowledge ranked by relevance. Use for finding shared conventions, decisions, or vendor info that any agent may have saved.",
+      z.object({
+        q: z.string().trim().min(1).max(512),
+        limit: z.number().int().positive().max(50).optional(),
+        tags: z.array(z.string().trim().min(1).max(64)).max(8).optional(),
+      }),
+      async ({ q, limit, tags }) => {
+        const companyId = client.resolveCompanyId();
+        const params = new URLSearchParams();
+        params.set("q", q);
+        if (limit !== undefined) params.set("limit", String(limit));
+        if (tags && tags.length > 0) params.set("tags", tags.join(","));
+        return client.requestJson("GET", `/companies/${encodeURIComponent(companyId)}/memories/search?${params.toString()}`);
+      },
+    ),
+    makeTool(
+      "companyWikiUpsert",
+      "Create or fully replace a named wiki page in the company knowledge base. Company wiki pages are injected into ALL agents at every wakeup — use for team-wide conventions, style guides, and architectural decisions. Content replaces the previous page entirely.",
+      z.object({
+        slug: z.string().trim().min(1).max(64).regex(/^[a-z0-9][a-z0-9_-]*$/, "slug must be lowercase alphanumeric with hyphens/underscores"),
+        content: z.string().trim().min(1).max(4096),
+        tags: z.array(z.string().trim().min(1).max(64)).max(16).optional(),
+      }),
+      async ({ slug, content, tags }) => {
+        const companyId = client.resolveCompanyId();
+        return client.requestJson("PUT", `/companies/${encodeURIComponent(companyId)}/memories/wiki/${encodeURIComponent(slug)}`, { body: { content, tags } });
+      },
+    ),
+    makeTool(
+      "companyWikiGet",
+      "Read a named company wiki page by slug.",
+      z.object({ slug: z.string().trim().min(1).max(64) }),
+      async ({ slug }) => {
+        const companyId = client.resolveCompanyId();
+        return client.requestJson("GET", `/companies/${encodeURIComponent(companyId)}/memories/wiki/${encodeURIComponent(slug)}`);
+      },
+    ),
+    makeTool(
+      "companyWikiList",
+      "List all company wiki pages (slugs + content). Use to see the team's shared knowledge base before reading or contributing.",
+      z.object({}),
+      async () => {
+        const companyId = client.resolveCompanyId();
+        return client.requestJson("GET", `/companies/${encodeURIComponent(companyId)}/memories/wiki`);
+      },
+    ),
+    makeTool(
+      "companyWikiDelete",
+      "Delete a company wiki page by slug. Use when a team-wide knowledge page is outdated or superseded.",
+      z.object({ slug: z.string().trim().min(1).max(64) }),
+      async ({ slug }) => {
+        const companyId = client.resolveCompanyId();
+        return client.requestJson("DELETE", `/companies/${encodeURIComponent(companyId)}/memories/wiki/${encodeURIComponent(slug)}`);
+      },
+    ),
   ];
 }
