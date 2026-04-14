@@ -1475,10 +1475,14 @@ export function issueRoutes(
     }
 
     const actor = getActorInfo(req);
+    const { scheduledFor: scheduledForRaw, ...createBody } = req.body;
     const executionPolicy = normalizeIssueExecutionPolicy(req.body.executionPolicy);
     const issue = await svc.create(companyId, {
-      ...req.body,
+      ...createBody,
       executionPolicy,
+      ...(scheduledForRaw !== undefined
+        ? { scheduledFor: scheduledForRaw ? new Date(scheduledForRaw) : null }
+        : {}),
       createdByAgentId: actor.agentId,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
     });
@@ -1533,6 +1537,7 @@ export function issueRoutes(
       reopen: reopenRequested,
       interrupt: interruptRequested,
       hiddenAt: hiddenAtRaw,
+      scheduledFor: scheduledForRaw,
       ...updateFields
     } = req.body;
     let interruptedRunId: string | null = null;
@@ -1576,6 +1581,9 @@ export function issueRoutes(
 
     if (hiddenAtRaw !== undefined) {
       updateFields.hiddenAt = hiddenAtRaw ? new Date(hiddenAtRaw) : null;
+    }
+    if (scheduledForRaw !== undefined) {
+      updateFields.scheduledFor = scheduledForRaw ? new Date(scheduledForRaw) : null;
     }
     if (commentBody && reopenRequested === true && isClosed && updateFields.status === undefined) {
       updateFields.status = "todo";
