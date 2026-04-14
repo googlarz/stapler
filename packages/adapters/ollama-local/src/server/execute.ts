@@ -160,6 +160,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : undefined;
   let systemPrompt = asString(config.system, DEFAULT_SYSTEM_PROMPT);
 
+  // Inject top-K memories BEFORE skills so memories sit next to the base
+  // persona prompt rather than inside the skills block (which uses ---
+  // dividers that models may read as part of skill content).
+  const injectedMemories = ctx.agentMemoriesForInjection;
+  if (injectedMemories && injectedMemories.length > 0) {
+    const memoriesSection = [
+      "## Relevant memories",
+      ...injectedMemories.map((m, i) => `${i + 1}. ${m.content}`),
+    ].join("\n");
+    systemPrompt = `${systemPrompt}\n\n${memoriesSection}`;
+  }
+
   // Inject company skills into the system prompt.
   const skillEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
   const desiredSkillNames = new Set(resolveOllamaDesiredSkillNames(config, skillEntries));
@@ -174,16 +186,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     if (skillMarkdowns.length > 0) {
       systemPrompt = `${systemPrompt}\n\n${skillMarkdowns.join("\n\n---\n\n")}`;
     }
-  }
-
-  // Inject top-K memories when the heartbeat layer has pre-loaded them.
-  const injectedMemories = ctx.agentMemoriesForInjection;
-  if (injectedMemories && injectedMemories.length > 0) {
-    const memoriesSection = [
-      "## Relevant memories",
-      ...injectedMemories.map((m, i) => `${i + 1}. ${m.content}`),
-    ].join("\n");
-    systemPrompt = `${systemPrompt}\n\n${memoriesSection}`;
   }
 
   // Resolve the model name against what Ollama actually has installed.

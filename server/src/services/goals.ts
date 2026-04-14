@@ -71,11 +71,20 @@ export function goalService(db: Db) {
         .then((rows) => rows[0] ?? null),
 
     remove: (id: string) =>
-      db
-        .delete(goals)
-        .where(eq(goals.id, id))
-        .returning()
-        .then((rows) => rows[0] ?? null),
+      db.transaction(async (tx) => {
+        // Null out child goal parentId references first — the FK has no
+        // ON DELETE CASCADE/SET NULL, so a bare DELETE throws a 23503
+        // constraint error when children exist.
+        await tx
+          .update(goals)
+          .set({ parentId: null, updatedAt: new Date() })
+          .where(eq(goals.parentId, id));
+        return tx
+          .delete(goals)
+          .where(eq(goals.id, id))
+          .returning()
+          .then((rows) => rows[0] ?? null);
+      }),
 
     /**
      * Progress summary for a goal, computed from linked issues. Scoped to

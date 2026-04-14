@@ -84,8 +84,21 @@ function ParentGoalPicker({
 }) {
   const [open, setOpen] = useState(false);
   const current = goals.find((g) => g.id === currentParentId);
-  // Exclude self and descendants to avoid cycles (simple 1-level guard)
-  const candidates = goals.filter((g) => g.id !== currentGoalId);
+
+  // Exclude self and all descendants to prevent cycles.
+  // BFS from currentGoalId so grandchildren are also excluded.
+  const descendants = new Set<string>([currentGoalId]);
+  const queue = [currentGoalId];
+  while (queue.length > 0) {
+    const pid = queue.shift()!;
+    for (const g of goals) {
+      if (g.parentId === pid && !descendants.has(g.id)) {
+        descendants.add(g.id);
+        queue.push(g.id);
+      }
+    }
+  }
+  const candidates = goals.filter((g) => !descendants.has(g.id));
 
   return (
     <div className="flex items-center gap-1 min-w-0">
