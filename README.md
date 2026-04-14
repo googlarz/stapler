@@ -6,15 +6,18 @@
   <p>Hire agents, set goals, let the org run itself.</p>
   <br/>
   <a href="https://github.com/googlarz/stapler/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"/></a>
+  <img src="https://img.shields.io/badge/fork_of-paperclipai%2Fpaperclip-6366f1" alt="Fork of paperclipai/paperclip"/>
   <img src="https://img.shields.io/badge/stack-React_·_Express_·_Postgres-0f172a" alt="Stack"/>
   <img src="https://img.shields.io/badge/agents-Claude_·_Ollama-6366f1" alt="Adapters"/>
 </div>
 
 ---
 
-Stapler is a **multi-agent orchestration platform** you run on your own machine. You describe a mission, the wizard spins up a company and hires a CEO and COO. From there, agents create issues for each other, pursue goals, and self-correct — with or without you in the loop.
+Stapler is a **personal fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip)** — a multi-agent orchestration platform you run on your own machine. You describe a mission, the wizard spins up a company and hires a CEO and COO. From there, agents create issues for each other, pursue goals, and self-correct — with or without you in the loop.
 
 Agents run on **Claude** (cloud) or **Ollama** (fully local, free). Mix and match within the same org.
+
+> Kept in sync with upstream via rebase. See [Syncing with upstream](#syncing-with-upstream).
 
 ---
 
@@ -64,6 +67,28 @@ Everything is visible in a React UI. You can intervene at any point — edit ins
 | **Ollama benchmark** | Run a standard prompt across selected models, measure tokens-per-second, and see which is fastest before picking a default |
 | **Run cost** | Completed Claude runs show token cost in USD directly on the run detail page |
 | **Default model** | Set a company-wide default Ollama model used by Propose Tasks and agents without an explicit model override |
+
+---
+
+## What Stapler adds over upstream Paperclip
+
+| Feature | Stapler | Paperclip |
+|---------|:-------:|:---------:|
+| Per-agent memory store (save, search, list, delete) | ✅ | ❌ |
+| Memory auto-injection at run-start | ✅ | ❌ |
+| Company-wide shared memory store | ✅ | ❌ |
+| Ollama adapter with agentic tool calling (15 tools) | ✅ | ❌ |
+| Ollama model benchmark page | ✅ | ❌ |
+| Onboarding wizard with mission-driven setup | ✅ | ❌ |
+| COO agent auto-created for every new company | ✅ | ❌ |
+| Goals with acceptance criteria + target dates | ✅ | ❌ |
+| Goal progress bar (% of linked issues done) | ✅ | ❌ |
+| Automatic goal verification loop | ✅ | ❌ |
+| Editable goal parent, description, delete | ✅ | ❌ |
+| Default model setting per company | ✅ | ❌ |
+| Propose Tasks — AI-generated task suggestions per agent | ✅ | ❌ |
+| Propose Tasks bulk-create (select multiple → create all) | ✅ | ❌ |
+| Run cost display on completed runs | ✅ | ❌ |
 
 ---
 
