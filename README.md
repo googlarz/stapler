@@ -57,7 +57,7 @@ Everything is visible in a React UI. You can intervene at any point — edit ins
 |---------|-------------|
 | **Onboarding wizard** | Describe a mission → wizard picks the right adapter, generates a first task with acceptance criteria, and hires CEO + COO |
 | **Claude adapter** | Cloud agents backed by Anthropic's API — best for complex reasoning and long-horizon tasks |
-| **Ollama adapter** | Fully local agents on any Ollama model; no API key, no per-token cost; full tool-calling loop with 15 built-in tools |
+| **Ollama adapter** | Fully local agents on any Ollama model; no API key, no per-token cost; full tool-calling loop with 20 built-in tools |
 | **COO agent** | Auto-hired optimization agent; monitors 4 org KPIs each run and takes exactly one corrective action (reassign, cancel stale, rewrite instructions, recommend hire) |
 | **Goals** | Hierarchical goals with acceptance criteria, target dates, owner agent, and editable parent; progress tracked as % of linked issues done |
 | **Verification loop** | When all issues on a goal reach `done`, an agent automatically verifies acceptance criteria; loops until pass or 3 attempts |
@@ -66,6 +66,7 @@ Everything is visible in a React UI. You can intervene at any point — edit ins
 | **Propose Tasks** | Generates 5 prioritised task suggestions for an agent using its goals, issues, and memories; bulk-create selected ones in one click |
 | **Ollama benchmark** | Run a standard prompt across selected models, measure tokens-per-second, and see which is fastest before picking a default |
 | **Run cost** | Completed Claude runs show token cost in USD directly on the run detail page |
+| **Outputs** | Living versioned documents agents collectively write and improve — a book, a strategy, a report; any agent proposes, CEO approves, then agents edit a shared draft and release numbered versions (v1, v2, …) |
 | **Default model** | Set a company-wide default Ollama model used by Propose Tasks and agents without an explicit model override |
 
 ---
@@ -77,7 +78,7 @@ Everything is visible in a React UI. You can intervene at any point — edit ins
 | Per-agent memory store (save, search, list, delete) | ✅ | ❌ |
 | Memory auto-injection at run-start | ✅ | ❌ |
 | Company-wide shared memory store | ✅ | ❌ |
-| Ollama adapter with agentic tool calling (15 tools) | ✅ | ❌ |
+| Ollama adapter with agentic tool calling (20 tools) | ✅ | ❌ |
 | Ollama model benchmark page | ✅ | ❌ |
 | Onboarding wizard with mission-driven setup | ✅ | ❌ |
 | Chief Optimization Officer auto-created for every new company | ✅ | ❌ |
@@ -89,6 +90,7 @@ Everything is visible in a React UI. You can intervene at any point — edit ins
 | Propose Tasks — AI-generated task suggestions per agent | ✅ | ❌ |
 | Propose Tasks bulk-create (select multiple → create all) | ✅ | ❌ |
 | Run cost display on completed runs | ✅ | ❌ |
+| Outputs — living versioned company documents | ✅ | ❌ |
 
 ---
 
@@ -134,7 +136,7 @@ Each agent is an AI model instance with a role, a set of instructions, and acces
 
 **Ollama adapter** — runs any model you have locally. No API key. No per-token cost. Full tool-calling loop with streaming output.
 
-Agents get **15 built-in tools** when running on Ollama:
+Agents get **20 built-in tools** when running on Ollama:
 
 | Tool | What it does |
 |------|-------------|
@@ -153,6 +155,11 @@ Agents get **15 built-in tools** when running on Ollama:
 | `paperclip_list_goals` | List company goals |
 | `paperclip_create_goal` | Create a new goal |
 | `paperclip_update_goal` | Update goal fields |
+| `paperclip_list_outputs` | List company outputs with status and version info |
+| `paperclip_get_output` | Get an output including current draft and full version history |
+| `paperclip_propose_output` | Propose a new output (triggers CEO approval issue) |
+| `paperclip_update_output_draft` | Overwrite the shared draft of an output |
+| `paperclip_release_output_version` | Snapshot the current draft as a new immutable version |
 
 ---
 
@@ -278,6 +285,44 @@ Uses the company's default Ollama model (configurable in Settings).
 
 ---
 
+### Outputs
+
+Outputs are living documents agents collectively write, improve, and version over time. Think: a book in English, a book in German, a go-to-market strategy, a weekly report.
+
+**Lifecycle:**
+
+1. Any agent proposes an output → CEO receives an approval issue
+2. CEO approves → output becomes `active`
+3. Agents freely edit the shared draft (full overwrite — read first with `paperclip_get_output` if you want to extend rather than replace)
+4. Any agent releases a version → draft is snapshotted as **v1**, **v2**, **v3**, … (immutable)
+5. Draft keeps evolving; version history is preserved forever
+
+Outputs are never "done". A v16 English book exists as a stable snapshot while agents are already working on v17.
+
+```bash
+# Propose a new output
+curl -X POST "$API/api/companies/$COMPANY_ID/outputs" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Book — English", "description": "Full-length book for English-speaking readers"}'
+
+# Update the shared draft
+curl -X PATCH "$API/api/outputs/$OUTPUT_ID/draft" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "# Chapter 1\n\nOnce upon a time..."}'
+
+# Release a new version
+curl -X POST "$API/api/outputs/$OUTPUT_ID/versions" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"releaseNotes": "Added chapters 4-6"}'
+```
+
+The UI (`/outputs`) shows all company outputs with status badges and version numbers. The detail page has a **Draft** tab (textarea editor with save/discard) and a **Versions** tab (immutable snapshots in reverse chronological order).
+
+---
+
 ### Run Cost
 
 Every completed Claude run shows its **USD cost** — input + output tokens × current model pricing — directly on the run detail page. Track per-agent and per-task spend without leaving the UI.
@@ -342,6 +387,7 @@ The server exposes a REST API at port 3000. All endpoints require an `Authorizat
 | Goals | `GET /api/companies/:id/goals` `POST /api/companies/:id/goals` `PATCH /api/goals/:id` `DELETE /api/goals/:id` |
 | Agent memories | `GET/POST /api/agents/:id/memories` `DELETE /api/agents/:id/memories/:memId` |
 | Company memories | `GET/POST /api/companies/:id/memories` |
+| Outputs | `GET/POST /api/companies/:id/outputs` `GET/PATCH/DELETE /api/outputs/:id` `PATCH /api/outputs/:id/draft` `POST /api/outputs/:id/approve` `POST /api/outputs/:id/versions` |
 | Runs | `GET /api/agents/:id/runs` `POST /api/agents/:id/runs` |
 | Propose tasks | `POST /api/agents/:id/propose-tasks` |
 
