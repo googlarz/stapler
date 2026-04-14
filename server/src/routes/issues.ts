@@ -47,7 +47,7 @@ import {
   workProductService,
 } from "../services/index.js";
 import { logger } from "../middleware/logger.js";
-import { forbidden, HttpError, unauthorized } from "../errors.js";
+import { forbidden, HttpError, unauthorized, unprocessable } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import {
@@ -1534,6 +1534,7 @@ export function issueRoutes(
         : null;
     const {
       comment: commentBody,
+      doneExceptionReason,
       reopen: reopenRequested,
       interrupt: interruptRequested,
       hiddenAt: hiddenAtRaw,
@@ -1588,6 +1589,16 @@ export function issueRoutes(
     if (commentBody && reopenRequested === true && isClosed && updateFields.status === undefined) {
       updateFields.status = "todo";
     }
+    // Parent done gate: cannot mark done while direct children are still open.
+    if (updateFields.status === "done" && existing.status !== "done") {
+      const openDirectChildren = await svc.listOpenDirectChildren(existing.companyId, existing.id);
+      if (openDirectChildren.length > 0 && !doneExceptionReason) {
+        throw unprocessable("Cannot mark parent issue done while direct child issues are still open", {
+          openDirectChildren,
+        });
+      }
+    }
+
     // Platform guardrail: only creator/delegator can set status to "done" (board users exempt).
     // Skip when an execution policy is active — the policy intercepts "done" and routes
     // through its own stages, so the agent never truly sets the final status.
@@ -1826,6 +1837,7 @@ export function issueRoutes(
       details: {
         ...updateFields,
         identifier: issue.identifier,
+        ...(doneExceptionReason ? { doneExceptionReason } : {}),
         ...(commentBody ? { source: "comment" } : {}),
         ...(reopened ? { reopened: true, reopenedFrom: reopenFromStatus } : {}),
         ...(interruptedRunId ? { interruptedRunId } : {}),
