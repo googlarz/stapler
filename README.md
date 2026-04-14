@@ -163,13 +163,31 @@ Ollama is excellent for privacy-sensitive, high-volume, or latency-tolerant work
 | 20-tool agentic loop with streaming | Tool-calling is less reliable than Claude — expect occasional malformed arg JSON |
 | Picking the fastest model via the benchmark page | Per-model quality varies wildly; benchmark results in tokens/sec don't capture reasoning quality |
 
-**Important: Ollama can't do embeddings for semantic search (in our setup).** Generative models like `gemma4:26b` are not embedding models. Stapler's semantic memory search ([Memory system](#memory-system)) needs a dedicated embedding model that produces stable 1536-dim vectors. Options:
+**Generative vs. embedding models.** A common gotcha: generative models like `gemma4:26b`, `llama3:70b`, or `mistral:7b` **can't produce usable embeddings**. Ollama's `/api/embed` endpoint will return hidden-state vectors for them, but the vector space is not optimised for semantic similarity and the results are poor. For semantic memory search you need a model that was *trained as an embedder*. Three supported paths:
 
-1. **Use OpenAI `text-embedding-3-small`** (current default) — set `OPENAI_API_KEY`. Excellent multilingual quality (handles German compound words / declensions well), ~$0.02 per million tokens (negligible at normal memory volumes).
-2. **Use a proper Ollama embedding model** — pull `nomic-embed-text` (768-dim, English-first) or `mxbai-embed-large` (1024-dim, decent multilingual). This requires changing the `EMBEDDING_DIMS` constant in `server/src/services/embeddings.ts` and re-embedding existing rows. Quality is below OpenAI for non-English content.
-3. **Skip semantic search entirely** — leave `OPENAI_API_KEY` unset and the system falls back to pg_trgm keyword search, which is free and always available (but misses synonyms and inflected forms).
+| Provider | Model | Dims | When it wins |
+|----------|-------|:----:|--------------|
+| **OpenAI** (default) | `text-embedding-3-small` | 1536 | Best multilingual quality; ~$0.02 / 1M tokens — a rounding error at typical memory volumes. Cloud only. |
+| **Ollama** (local) | `qwen3-embedding:8b` | 4096 | Fully offline, zero per-token cost, strong multilingual (100+ languages), MTEB-competitive. Needs ~8 GB free RAM. |
+| **Ollama** (small local) | `nomic-embed-text` (768) / `mxbai-embed-large` (1024) | 768 / 1024 | Fast, small footprint; quality below OpenAI for non-English content. |
+| **none** | — | — | System falls back to pg_trgm keyword search — always available, no extra setup, but misses synonyms and inflected forms. |
 
-Keyword search works everywhere, offline, with no extra setup. Semantic search is an opt-in upgrade — worth it for German / multilingual content, optional for English-only work.
+Switch providers via a single env var:
+
+```bash
+# Cloud (default)
+STAPLER_EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=sk-…
+
+# Local, recommended for multilingual work
+STAPLER_EMBEDDING_PROVIDER=ollama
+STAPLER_OLLAMA_EMBEDDING_MODEL=qwen3-embedding:8b
+# ollama pull qwen3-embedding:8b   # first-time setup
+```
+
+**Don't switch providers mid-deployment without re-embedding.** Vectors from OpenAI 1536-dim and Qwen3 4096-dim are not just different sizes — they live in different vector spaces and are not comparable. If you change providers with data already in the memory store, the search layer will detect the dimension mismatch and fall back to pg_trgm (you'll see a `[memory] Dimension drift …` warn in the logs). Re-embed everything or pick one provider and stick with it.
+
+**Language quality.** For user-facing generative output in non-English languages (German, Italian, Polish), frontier cloud models (Claude, GPT-4) still beat local Ollama models at equivalent compute. For *embeddings specifically*, `qwen3-embedding:8b` is a very competitive local option — Odysseia's German content is a reasonable use case. Mix-and-match is fully supported: generative agents can run on Claude while embeddings run on local Ollama.
 
 **Language quality.** For non-English writing (German, Italian, Polish), frontier cloud models (Claude, GPT-4) typically produce better prose than local Ollama models at equivalent compute. If a specific agent is generating user-facing copy in a non-English language, consider putting it on Claude while keeping background / scaffolding agents on Ollama. Mixing adapters inside one company is fully supported.
 
@@ -196,24 +214,29 @@ Inside each store, memories come in two flavours — think Karpathy's "episodic 
 ### Two search modes (hybrid)
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  OPENAI_API_KEY set?                                 │
-│                                                      │
-│  ┌─── yes ──▶  Semantic search                       │
-│  │            embed query with text-embedding-3-small│
-│  │            app-side cosine similarity over top-K  │
-│  │            German-aware, handles synonyms         │
-│  │            threshold: STAPLER_EMBEDDING_THRESHOLD │
-│  │                                                   │
-│  │   if no embedded rows match → falls through to ↓  │
-│  │                                                   │
-│  └─── no ───▶  Keyword search (pg_trgm)              │
-│               always available, no external calls   │
-│               threshold: STAPLER_MEMORY_SEARCH_…     │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  STAPLER_EMBEDDING_PROVIDER                                  │
+│                                                              │
+│   ┌── "openai" (default) ──▶ text-embedding-3-small (1536-d) │
+│   │                          requires OPENAI_API_KEY         │
+│   │                                                          │
+│   ├── "ollama" ──────────▶  qwen3-embedding:8b (4096-d)      │
+│   │                          runs locally, zero cost         │
+│   │                          STAPLER_OLLAMA_HOST             │
+│   │                          STAPLER_OLLAMA_EMBEDDING_MODEL  │
+│   │                                                          │
+│   └── not configured / unreachable                           │
+│           │                                                  │
+│           ▼                                                  │
+│     pg_trgm keyword search (always on, no external calls)    │
+│     threshold: STAPLER_MEMORY_SEARCH_THRESHOLD               │
+│                                                              │
+│  Semantic path also falls through to pg_trgm when no         │
+│  embedded rows match (e.g. all rows predate the embed step). │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-Semantic search shines on morphologically rich languages (German compound words, declensions) where trigrams miss *Königliche Residenz ↔ Münchner Schloss*. Keyword search is the reliable default.
+Semantic search shines on morphologically rich languages (German compound words, declensions) where trigrams miss *Königliche Residenz ↔ Münchner Schloss*. Both OpenAI and Qwen3 handle this well — pick based on whether you want cloud or local. Keyword search is the reliable always-available default.
 
 ### Auto-tagging
 
@@ -410,7 +433,10 @@ Only a few are required. Everything else has a sane default.
 | `BETTER_AUTH_SECRET` | ✅ | Session signing secret — `openssl rand -hex 32`. |
 | `PORT` | | API port (default `3100`). |
 | `SERVE_UI` | | `true` to serve static UI from the API (prod default). |
-| `OPENAI_API_KEY` | | Enables **semantic memory search** + auto-tagging. Fall back to pg_trgm when absent. |
+| `STAPLER_EMBEDDING_PROVIDER` | | `openai` (default) or `ollama`. Selects the semantic-search backend. |
+| `OPENAI_API_KEY` | | Required when provider=`openai`. Enables semantic memory search + auto-tagging. |
+| `STAPLER_OLLAMA_HOST` | | Ollama base URL when provider=`ollama`. Default `http://localhost:11434`. |
+| `STAPLER_OLLAMA_EMBEDDING_MODEL` | | Ollama embedding model. Default `qwen3-embedding:8b` (4096-dim, multilingual). |
 | `STAPLER_MEMORY_MAX_PER_AGENT` | | Episodic memory cap per agent (default `500`). |
 | `STAPLER_MEMORY_MAX_CONTENT_BYTES` | | Max size of one memory (default `4096`). |
 | `STAPLER_MEMORY_SEARCH_THRESHOLD` | | pg_trgm similarity floor (default `0.1`). |

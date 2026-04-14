@@ -1,28 +1,52 @@
 /**
  * Semantic embedding service.
  *
- * Uses OpenAI text-embedding-3-small (1536 dims) to convert text into float32
- * vectors suitable for cosine similarity search. Entirely optional — when
- * OPENAI_API_KEY is not set, all functions gracefully return null / 0.
+ * Two providers, selected via STAPLER_EMBEDDING_PROVIDER:
  *
- * Designed for small-corpus use (Odysseia: ≤5K memories per company). App-side
- * cosine similarity over the full table is sub-millisecond at this scale;
- * no vector index is needed.
+ *   - "openai"  (default) — text-embedding-3-small, 1536 dims.
+ *                           Requires OPENAI_API_KEY. Best multilingual
+ *                           quality, ~$0.02/1M tokens.
  *
- * When pgvector becomes available in embedded-postgres, the embedding column
- * (real[]) can be migrated to vector(1536) and the similarity() call moved
- * to PostgreSQL for even better performance.
+ *   - "ollama"             — runs a dedicated embedding model on a local
+ *                           Ollama server (typically qwen3-embedding:8b,
+ *                           4096 dims native). Fully offline, zero cost,
+ *                           strong multilingual performance. Needs a
+ *                           running Ollama with the model pulled.
+ *
+ * When no provider is configured (no API key, no reachable Ollama),
+ * all functions gracefully return null / 0 — the caller falls back to
+ * pg_trgm keyword search.
+ *
+ * Designed for small-corpus use. App-side cosine similarity over the full
+ * table is sub-millisecond at typical Stapler scale. No vector index needed;
+ * when pgvector becomes available in embedded-postgres the `real[]` column
+ * can migrate to `vector(N)` + HNSW without code changes.
+ *
+ * Switching providers mid-deployment: stored vectors from provider A are in
+ * a completely different vector space from provider B and are incomparable.
+ * Either re-embed every row, or pick one provider and stick with it.
  */
 
+type EmbeddingProvider = "openai" | "ollama";
+
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_DIMS = 1536;
+const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
+const OPENAI_EMBEDDING_DIMS = 1536;
+
+const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
+const DEFAULT_OLLAMA_EMBEDDING_MODEL = "qwen3-embedding:8b";
+
+function getProvider(): EmbeddingProvider {
+  const raw = process.env.STAPLER_EMBEDDING_PROVIDER?.trim().toLowerCase();
+  if (raw === "ollama") return "ollama";
+  return "openai"; // default
+}
 
 /**
  * Cosine similarity threshold below which a candidate is excluded from
- * semantic search results. text-embedding-3-small produces values in
- * [−1, 1]; 0.25 catches semantically related content without too many
- * false positives in German-language corpora.
+ * semantic search results. Value depends on the model — text-embedding-3-small
+ * clusters tighter than qwen3-embedding. Defaults tuned for German-rich
+ * content in both cases.
  * Override with STAPLER_EMBEDDING_THRESHOLD env var.
  */
 export function getEmbeddingThreshold(): number {
@@ -36,32 +60,18 @@ export function getEmbeddingThreshold(): number {
 
 interface OpenAIEmbeddingResponse {
   object: "list";
-  data: Array<{
-    object: "embedding";
-    embedding: number[];
-    index: number;
-  }>;
+  data: Array<{ object: "embedding"; embedding: number[]; index: number }>;
   model: string;
   usage: { prompt_tokens: number; total_tokens: number };
 }
 
 /**
- * Get a 1536-dim embedding vector for the given text from OpenAI.
- *
- * Returns null when:
- * - OPENAI_API_KEY is not configured (graceful degradation → pg_trgm)
- * - The API call fails for any reason (network error, rate limit, etc.)
- * - The response shape is unexpected
- *
- * Never throws — all errors are logged as warnings and swallowed so the
- * caller can fall back to keyword search.
+ * Get an embedding from OpenAI's text-embedding-3-small (1536 dims).
+ * Returns null on missing API key, network failure, or malformed response.
  */
-export async function getEmbedding(text: string): Promise<number[] | null> {
+async function getOpenAIEmbedding(text: string): Promise<number[] | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
-
-  const trimmed = text.trim();
-  if (!trimmed) return null;
 
   try {
     const response = await fetch(OPENAI_EMBEDDINGS_URL, {
@@ -71,8 +81,8 @@ export async function getEmbedding(text: string): Promise<number[] | null> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: EMBEDDING_MODEL,
-        input: trimmed,
+        model: OPENAI_EMBEDDING_MODEL,
+        input: text,
         encoding_format: "float",
       }),
     });
@@ -88,18 +98,96 @@ export async function getEmbedding(text: string): Promise<number[] | null> {
     const data = (await response.json()) as OpenAIEmbeddingResponse;
     const embedding = data?.data?.[0]?.embedding;
 
-    if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIMS) {
+    if (!Array.isArray(embedding) || embedding.length !== OPENAI_EMBEDDING_DIMS) {
       console.warn(
-        `[embeddings] Unexpected embedding shape: got ${Array.isArray(embedding) ? embedding.length : typeof embedding} dims, expected ${EMBEDDING_DIMS}`,
+        `[embeddings] Unexpected OpenAI embedding shape: got ${Array.isArray(embedding) ? embedding.length : typeof embedding} dims, expected ${OPENAI_EMBEDDING_DIMS}`,
       );
       return null;
     }
 
     return embedding;
   } catch (err) {
-    console.warn("[embeddings] Failed to get embedding:", err instanceof Error ? err.message : err);
+    console.warn("[embeddings] OpenAI call failed:", err instanceof Error ? err.message : err);
     return null;
   }
+}
+
+interface OllamaEmbedResponse {
+  model: string;
+  // `/api/embed` (newer, Ollama 0.2+) — `embeddings` is an array of vectors.
+  embeddings?: number[][];
+  // `/api/embeddings` (legacy) — `embedding` is a single vector.
+  embedding?: number[];
+}
+
+/**
+ * Get an embedding from a local Ollama server (e.g. qwen3-embedding:8b, 4096 dims).
+ *
+ * Tries the newer `/api/embed` endpoint first (Ollama 0.2+). Returns null on
+ * unreachable Ollama, model not pulled, or malformed response — caller falls
+ * back to pg_trgm.
+ *
+ * Pull the model before first use:
+ *   ollama pull qwen3-embedding:8b
+ */
+async function getOllamaEmbedding(text: string): Promise<number[] | null> {
+  const host = (process.env.STAPLER_OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST).replace(/\/+$/, "");
+  const model = process.env.STAPLER_OLLAMA_EMBEDDING_MODEL ?? DEFAULT_OLLAMA_EMBEDDING_MODEL;
+
+  try {
+    const response = await fetch(`${host}/api/embed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, input: text }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      console.warn(
+        `[embeddings] Ollama ${response.status} ${response.statusText} (model=${model}): ${body.slice(0, 200)}`,
+      );
+      return null;
+    }
+
+    const data = (await response.json()) as OllamaEmbedResponse;
+    // `/api/embed` returns { embeddings: [[...]] }; legacy returns { embedding: [...] }.
+    const embedding = Array.isArray(data?.embeddings?.[0])
+      ? data.embeddings[0]
+      : Array.isArray(data?.embedding)
+        ? data.embedding
+        : null;
+
+    if (!embedding || embedding.length === 0) {
+      console.warn(`[embeddings] Ollama returned empty embedding (model=${model})`);
+      return null;
+    }
+
+    return embedding;
+  } catch (err) {
+    console.warn(
+      `[embeddings] Ollama call failed (host=${host}, model=${model}):`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+/**
+ * Get an embedding vector for the given text from the configured provider.
+ *
+ * Returns null when:
+ * - No provider is configured / reachable (graceful → pg_trgm fallback)
+ * - The provider call fails (network, rate limit, missing model, etc.)
+ * - The response shape is unexpected
+ *
+ * Never throws — all errors become warnings so search always has a fallback.
+ */
+export async function getEmbedding(text: string): Promise<number[] | null> {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const provider = getProvider();
+  return provider === "ollama" ? getOllamaEmbedding(trimmed) : getOpenAIEmbedding(trimmed);
 }
 
 /**
@@ -123,8 +211,9 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 
 /**
  * Minimum cosine similarity required to adopt a neighbour's tags during
- * auto-tagging. 0.65 corresponds roughly to "same topic" with
- * text-embedding-3-small. Override via STAPLER_AUTO_TAG_THRESHOLD.
+ * auto-tagging. 0.65 suits text-embedding-3-small; qwen3-embedding clusters
+ * slightly differently — if you see too many or too few auto-tag hits, tune
+ * via STAPLER_AUTO_TAG_THRESHOLD.
  */
 export function getAutoTagThreshold(): number {
   const raw = process.env.STAPLER_AUTO_TAG_THRESHOLD;
