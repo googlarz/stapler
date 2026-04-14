@@ -168,5 +168,17 @@ export function companyMemoryService(db: Db) {
         .limit(limit)
         .offset(offset);
     },
+
+    /**
+     * Delete a company memory by id, scoped to companyId for safety.
+     * Returns the deleted row, or null if it didn't exist or belonged to
+     * a different company.
+     */
+    remove: async (id: string, companyId: string): Promise<CompanyMemory | null> =>
+      db
+        .delete(companyMemories)
+        .where(and(eq(companyMemories.id, id), eq(companyMemories.companyId, companyId)))
+        .returning()
+        .then((rows) => rows[0] ?? null),
   };
 }

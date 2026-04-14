@@ -7,6 +7,8 @@ export const queryKeys = {
     document: (companyId: string, documentId: string) => ["companies", companyId, "documents", documentId] as const,
     documentRevisions: (companyId: string, documentId: string) =>
       ["companies", companyId, "documents", documentId, "revisions"] as const,
+    memories: (companyId: string, tags: string[] | null) =>
+      ["companies", companyId, "memories", tags && tags.length > 0 ? tags.join(",") : "__no-tags__"] as const,
   },
   companySkills: {
     list: (companyId: string) => ["company-skills", companyId] as const,

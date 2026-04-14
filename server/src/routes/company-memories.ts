@@ -104,5 +104,30 @@ export function companyMemoryRoutes(db: Db) {
     }
   });
 
+  router.delete("/companies/:companyId/memories/:id", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const id = req.params.id as string;
+    assertCompanyAccess(req, companyId);
+
+    const deleted = await svc.remove(id, companyId);
+    if (!deleted) {
+      res.status(404).json({ error: "Memory not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId ?? undefined,
+      action: "memory.deleted",
+      entityType: "company_memory",
+      entityId: deleted.id,
+    });
+
+    res.json(deleted);
+  });
+
   return router;
 }

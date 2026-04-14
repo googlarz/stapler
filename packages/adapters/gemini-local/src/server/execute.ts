@@ -309,9 +309,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   const paperclipEnvNote = renderPaperclipEnvNote(env);
   const apiAccessNote = renderApiAccessNote(env);
+  const injectedMemories = ctx.agentMemoriesForInjection;
+  const memoriesSection =
+    injectedMemories && injectedMemories.length > 0
+      ? ["## Relevant memories", ...injectedMemories.map((m, i) => `${i + 1}. ${m.content}`)].join("\n")
+      : "";
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,
+    memoriesSection,
     wakePrompt,
     sessionHandoffNote,
     paperclipEnvNote,
@@ -322,6 +328,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     promptChars: prompt.length,
     instructionsChars: instructionsPrefix.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
+    memoriesSectionChars: memoriesSection.length,
     wakePromptChars: wakePrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
     runtimeNoteChars: paperclipEnvNote.length + apiAccessNote.length,
