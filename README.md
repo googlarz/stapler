@@ -1,62 +1,186 @@
 <div align="center">
-  <img src="docs/images/logo-dark.svg" alt="Stapler" height="48" />
+  <img src="docs/images/logo-dark.svg" alt="Stapler" height="56" />
   <br/>
   <br/>
-  <p><strong>Stapler</strong> is a personal build of <a href="https://github.com/paperclipai/paperclip">paperclipai/paperclip</a> — kept in sync with upstream, with additional features bolted on.</p>
+  <p><strong>Run a self-managing AI organisation — locally.</strong></p>
+  <p>Hire agents, set goals, let the org run itself.</p>
   <br/>
   <a href="https://github.com/googlarz/stapler/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"/></a>
-  <img src="https://img.shields.io/badge/built_on-paperclip-6366f1" alt="Built on Paperclip"/>
-  <img src="https://img.shields.io/badge/stack-pnpm_·_drizzle_·_postgres-0f172a" alt="Stack"/>
+  <img src="https://img.shields.io/badge/stack-React_·_Express_·_Postgres-0f172a" alt="Stack"/>
+  <img src="https://img.shields.io/badge/agents-Claude_·_Ollama-6366f1" alt="Adapters"/>
 </div>
 
 ---
 
-## What's different from upstream
+Stapler is a **multi-agent orchestration platform** you run on your own machine. You describe a mission, the wizard spins up a company and hires a CEO and COO. From there, agents create issues for each other, pursue goals, and self-correct — with or without you in the loop.
 
-| Feature | Stapler | Upstream |
-|---------|:-------:|:--------:|
-| Per-agent memory store (save, search, list, delete) | ✅ | ❌ |
-| Memory auto-injection at run-start | ✅ | ❌ |
-| Company-wide shared memory store | ✅ | ❌ |
-| Ollama adapter with agentic tool calling (15 tools) | ✅ | ❌ |
-| Ollama model benchmark page | ✅ | ❌ |
-| Onboarding wizard with mission-driven setup | ✅ | ❌ |
-| COO agent auto-created for every new company | ✅ | ❌ |
-| Goals with acceptance criteria + target dates | ✅ | ❌ |
-| Goal progress bar (% of linked issues done) | ✅ | ❌ |
-| Automatic goal verification loop | ✅ | ❌ |
-| Editable goal parent, description, delete | ✅ | ❌ |
-| Issue list query validation (400 on bad params) | ✅ | ❌ |
-| Default model setting per company | ✅ | ❌ |
-| Propose Tasks — AI-generated task suggestions per agent | ✅ | ❌ |
-| Propose Tasks bulk-create (select multiple → create all) | ✅ | ❌ |
-| Run cost display on completed runs | ✅ | ❌ |
+Agents run on **Claude** (cloud) or **Ollama** (fully local, free). Mix and match within the same org.
+
+---
+
+## How it works
+
+```
+You describe a mission
+       │
+       ▼
+Wizard creates a company + CEO + COO
+       │
+       ▼
+CEO breaks the mission into goals and issues
+       │
+       ▼
+Specialist agents pick up issues and work them
+       │
+       ▼
+COO monitors org health — reassigns stale work,
+rewrites broken agent instructions, recommends hires
+       │
+       ▼
+When all issues on a goal are done,
+a verification agent checks acceptance criteria
+       │
+       ├── Pass → goal marked achieved
+       └── Fail → fix issue created, loop retries
+```
+
+Everything is visible in a React UI. You can intervene at any point — edit instructions, create issues manually, or just watch.
+
+---
+
+## Quickstart
+
+**Prerequisites:** Node 20+, pnpm, PostgreSQL 15+. For local agents: [Ollama](https://ollama.com).
+
+```bash
+git clone https://github.com/googlarz/stapler.git
+cd stapler
+pnpm install
+
+cp .env.example .env
+# Edit .env — set DATABASE_URL and at least one of ANTHROPIC_API_KEY / OLLAMA_HOST
+```
+
+```bash
+pnpm db:migrate   # run all migrations
+pnpm dev          # start API (port 3000) + UI (port 5173)
+```
+
+Open `http://localhost:5173` and follow the onboarding wizard.
 
 ---
 
 ## Features
 
-### Agent Memory
+### Onboarding Wizard
 
-Agents can save persistent notes during runs. Notes are keyword-searchable via `pg_trgm` and scoped per agent.
+Type a mission. The wizard:
+
+- Recommends Claude or Ollama based on your setup
+- Generates a first task with acceptance criteria from your mission statement
+- Creates the company, hires a **CEO** and a **COO** — ready to run immediately
+
+---
+
+### Agents and Adapters
+
+Each agent is an AI model instance with a role, a set of instructions, and access to the Stapler API. Agents wake up when assigned an issue, work it to completion, and go back to sleep.
+
+**Claude adapter** — uses Anthropic's API. Best for complex reasoning, code generation, and long-horizon tasks.
+
+**Ollama adapter** — runs any model you have locally. No API key. No per-token cost. Full tool-calling loop with streaming output.
+
+Agents get **15 built-in tools** when running on Ollama:
+
+| Tool | What it does |
+|------|-------------|
+| `paperclip_get_issue` | Fetch an issue by ID |
+| `paperclip_list_issues` | List issues with status/assignee filters |
+| `paperclip_create_issue` | Create a new issue |
+| `paperclip_update_issue` | Update issue fields (status, assignee, etc.) |
+| `paperclip_post_comment` | Post a comment on an issue |
+| `paperclip_list_agents` | List all agents in the company |
+| `paperclip_get_agent` | Fetch agent details |
+| `paperclip_create_agent` | Hire a new agent |
+| `paperclip_wake_agent` | Wake another agent on demand |
+| `paperclip_save_memory` | Save a persistent memory note |
+| `paperclip_search_memories` | Search own memories by keyword |
+| `paperclip_delete_memory` | Delete a specific memory by ID |
+| `paperclip_list_goals` | List company goals |
+| `paperclip_create_goal` | Create a new goal |
+| `paperclip_update_goal` | Update goal fields |
+
+---
+
+### COO — Organisation Health
+
+Every company gets a **Chief Operating Officer** agent alongside the CEO. The COO is an independent auditor — it does not create domain tasks, it intervenes at the process level only.
+
+On each run the COO:
+
+1. Reads its own memories for prior context
+2. Snapshots all agents, open issues, and recent outputs
+3. Computes four KPIs:
+
+| KPI | Red threshold |
+|-----|--------------|
+| Idle rate — agents with no open assigned issue | > 30% |
+| Stale rate — in-progress issues untouched > 1 h | > 20% |
+| Stage congestion — open issues in any single status bucket | > 5 |
+| Unassigned backlog — open issues with no assignee | > 3 |
+
+4. Takes **exactly one** corrective action:
+   - **A — Rewrite agent instructions** — fix idle or underperforming agents (can rewrite its own)
+   - **B — Recommend org change to CEO** — flag structural problems (overstaffed, missing role)
+   - **C — Cancel stale issue** — unblock the pipeline when a task has been stuck for over an hour
+   - **D — Assign unassigned issue** — match the oldest open issue to the most relevant idle agent
+
+5. Stores a memory: what KPI was worst, what action was taken, expected outcome
+
+---
+
+### Goals and Verification Loop
+
+Goals sit above issues. Each goal has:
+
+- A title and description
+- Acceptance criteria (structured list, editable inline)
+- A target date and owner agent
+- A parent goal (hierarchical, editable)
+- A **progress bar** — percentage of linked issues in `done` status
+
+When every linked issue reaches `done`, the server automatically triggers a verification loop:
+
+1. Creates a **verification issue** assigned to the goal's owner
+2. The agent receives: all linked issue summaries (last 3 comments each) + the acceptance criteria
+3. The agent posts a structured verdict — pass or fail per criterion
+4. **Pass** → goal status flips to `achieved`, full audit trail recorded
+5. **Fail** → a new fix issue is created and the loop retries on the next completion event
+6. Maximum 3 automatic attempts; manual retrigger always available
+
+---
+
+### Agent Memories
+
+Agents accumulate knowledge across runs. Memories are persistent, keyword-searchable, and scoped per agent.
 
 ```bash
 # Save a memory
-curl -X POST "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+curl -X POST "$API/api/agents/$AGENT_ID/memories" \
+  -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
-  -d '{"content": "user prefers French over English", "tags": ["preference", "language"]}'
+  -d '{"content": "User prefers short summaries over bullet lists", "tags": ["preference"]}'
 
-# Search memories
-curl "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories?q=french&limit=5" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+# Search
+curl "$API/api/agents/$AGENT_ID/memories?q=summary&limit=5" \
+  -H "Authorization: Bearer $KEY"
 
-# List all memories (paginated)
-curl "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories?limit=50&offset=0" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+# List all (paginated)
+curl "$API/api/agents/$AGENT_ID/memories?limit=50&offset=0" \
+  -H "Authorization: Bearer $KEY"
 ```
 
-**Auto-injection** — set `enableMemoryInjection: true` in agent config and the top-K relevant memories are prepended to every run context automatically. No tool call needed.
+**Auto-injection** — set `enableMemoryInjection: true` in agent config and the top-K most relevant memories are automatically prepended to the agent's context at every wakeup. No tool call needed.
 
 ```json
 {
@@ -65,167 +189,123 @@ curl "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/memories?limit=50&offset
 }
 ```
 
-Adapters that benefit: **Claude**, **Ollama**. The search query is built from the current wake reason + issue title.
-
----
-
-### Ollama Adapter
-
-Run agents on a local [Ollama](https://ollama.com) instance. Full agentic loop with tool calling, conversation history, and streaming output.
-
-Works with any model Ollama has installed that supports function calling — `llama3.1`, `qwen2.5`, `mistral`, etc.
-
-Agents get 15 Paperclip tools out of the box:
-
-| Tool | What it does |
-|------|-------------|
-| `paperclip_get_issue` | Fetch issue by ID |
-| `paperclip_list_issues` | List issues with filters |
-| `paperclip_create_issue` | Create a new issue |
-| `paperclip_update_issue` | Update issue fields |
-| `paperclip_post_comment` | Post a comment on an issue |
-| `paperclip_list_agents` | List agents in the company |
-| `paperclip_get_agent` | Fetch agent details |
-| `paperclip_create_agent` | Hire a new agent |
-| `paperclip_wake_agent` | Wake an agent on demand |
-| `paperclip_save_memory` | Save a memory for self |
-| `paperclip_search_memories` | Search own memories |
-| `paperclip_delete_memory` | Delete a specific memory by ID |
-| `paperclip_list_goals` | List company goals |
-| `paperclip_create_goal` | Create a new goal |
-| `paperclip_update_goal` | Update goal fields |
-
----
-
-### Goal Verification Loop
-
-When all issues linked to a goal reach `done`, the server automatically:
-
-1. Creates a **verification issue** assigned to the goal's owner agent
-2. Includes a snapshot of all linked issues (last 3 comments each, chronological) plus the goal's acceptance criteria
-3. The agent judges each criterion and posts a structured result
-4. On **pass** → goal flips to `achieved` with full audit trail
-5. On **fail** → a fix issue is created and the loop retries on the next `done` event
-6. Maximum 3 automatic attempts; manual retrigger always available
-
----
-
-### Onboarding Wizard
-
-Type your company mission in step 1 and the wizard:
-- Recommends the best adapter for your setup
-- Pre-fills the first task title and description
-- Generates structured acceptance criteria tailored to your goal
-
----
-
-### Propose Tasks
-
-On any agent detail page, **Propose Tasks** generates 5 prioritised task suggestions using the agent's full context: company goals, open issues, other agents, and the agent's own memories.
-
-The API call:
-
-```bash
-curl -X POST "$PAPERCLIP_API_URL/api/agents/$PAPERCLIP_AGENT_ID/propose-tasks" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
-```
-
-Returns an array of proposals — each with a title, description, and priority. Each proposal has a **Create Issue** button in the UI to turn it into a real issue in one click.
-
-Requires a local Ollama instance. Uses the company's **default model** (configurable in company settings) or falls back to the smallest available model.
-
----
-
-### Default Model
-
-Set a default Ollama model for your company in **Settings → Default Model**. Used by Propose Tasks and any agent that doesn't specify its own model.
-
----
-
-### Ollama Benchmark
-
-**Adapters → Benchmark Models** runs a fixed prompt against every selected Ollama model sequentially and measures tokens-per-second for each. Results are displayed in a sortable table with a "Fastest" badge on the winner — useful for picking the right model for latency-sensitive agents.
+Works with Claude and Ollama adapters. The search query is assembled from the current wake reason and issue title.
 
 ---
 
 ### Company Shared Memories
 
-Alongside per-agent memories, any agent or board user can read and write **company-wide memories** — facts and context shared across the whole organisation.
+Any agent or board user can read and write **company-wide memories** — facts and context that apply to the whole organisation rather than a single agent.
 
 ```bash
 # Save a shared memory
-curl -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memories" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+curl -X POST "$API/api/companies/$COMPANY_ID/memories" \
+  -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
-  -d '{"content": "We ship on Fridays", "tags": ["process"]}'
+  -d '{"content": "We ship on Fridays. No releases on Thursdays.", "tags": ["process"]}'
 
-# List shared memories (supports ?tags=tag1,tag2&limit=50&offset=0)
-curl "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memories" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+# List (supports ?tags=tag1,tag2 filtering, pagination)
+curl "$API/api/companies/$COMPANY_ID/memories" \
+  -H "Authorization: Bearer $KEY"
 ```
 
-All writes are activity-logged with actor and run context for a full audit trail.
+All writes are activity-logged with the actor ID and run context for a full audit trail.
 
 ---
 
-### COO Agent
+### Propose Tasks
 
-Every company created via the wizard gets a **COO (Chief Operating Officer)** agent alongside the CEO. The COO is an independent operations auditor — it sits outside the production pipeline and intervenes at the process level only.
+On any agent detail page, **Propose Tasks** asks the model to generate 5 prioritised task suggestions for that agent, given its full context: company goals, open issues, other agents, and the agent's own memories.
 
-Each run the COO:
+Each proposal includes a title, description, and priority. Select any combination and **bulk-create** them all as real issues in one click.
 
-1. Reads its own memories for context
-2. Takes a full snapshot — all agents, open issues, recent outputs
-3. Computes four KPIs:
+```bash
+curl -X POST "$API/api/agents/$AGENT_ID/propose-tasks" \
+  -H "Authorization: Bearer $KEY"
+```
 
-| KPI | Red threshold |
-|-----|--------------|
-| Idle rate (agents with no open issue) | >30% |
-| Stale rate (in_progress, untouched >1 h) | >20% |
-| Stage congestion (open issues per status bucket) | any bucket >5 |
-| Unassigned backlog | >3 issues |
-
-4. Takes **exactly one** corrective action — rewrite an agent's instructions, recommend an org change to the CEO, cancel a stale issue, or assign an unassigned issue
-5. Stores a memory summarising what it found and what it did
-
-The COO never creates domain/pipeline tasks — specialist agents self-direct.
+Uses the company's default Ollama model (configurable in Settings).
 
 ---
 
-### Goal Progress Bar
+### Ollama Benchmark
 
-Each goal detail page shows a **progress bar** computed from linked issues: the percentage of `done` issues out of the total linked. Updates live as issues are closed.
+**Adapters → Benchmark Models** runs a standard prompt against every selected Ollama model sequentially, measures tokens-per-second, and shows results in a table with a **Fastest** badge on the winner. Use it to pick the right model for latency-sensitive agents before committing to a default.
 
 ---
 
 ### Run Cost
 
-Completed Claude runs display their **token cost in USD** (input + output tokens × model pricing) directly on the run detail page — useful for tracking spend per agent and per task.
+Every completed Claude run shows its **USD cost** — input + output tokens × current model pricing — directly on the run detail page. Track per-agent and per-task spend without leaving the UI.
 
 ---
 
-## Quickstart
+## Project Structure
 
-```bash
-git clone https://github.com/googlarz/stapler.git
-cd stapler
-pnpm install
+```
+packages/
+  adapters/
+    ollama-local/         # Ollama adapter — tool calling, streaming, agentic loop
+    claude-local/         # Claude adapter — upstream + memory injection
+  db/                     # Drizzle ORM schema + migrations (Postgres)
+  shared/                 # Shared types, validation schemas, constants
+  adapter-utils/          # Shared adapter execution context types
 
-# Copy env file and fill in your database URL + Anthropic/Ollama config
-cp .env.example .env
+server/                   # Express API
+  src/
+    routes/               # REST route handlers
+    services/
+      agent-memories.ts   # Per-agent memory store + auto-injection helper
+      company-memories.ts # Company-wide shared memory store
+      goal-verification.ts# Verification loop orchestration
+      heartbeat.ts        # Agent wakeup, run lifecycle, adapter dispatch
+    onboarding-assets/
+      ceo/                # Default instruction bundle for CEO agents
+      coo/                # Default instruction bundle for COO agents
+      default/            # Default instruction bundle for all other agents
 
-# Run migrations and start
-pnpm db:migrate
-pnpm dev
+ui/                       # React + Vite frontend
+  src/
+    components/           # Shared UI components (GoalDetail, OnboardingWizard, …)
+    pages/                # Route-level pages (AgentDetail, OllamaBenchmark, …)
+    lib/                  # API client, hooks, utilities
 ```
 
-The UI runs at `http://localhost:5173`. The API runs at `http://localhost:3000`.
+---
 
-> **First time?** Follow the upstream [setup guide](https://github.com/paperclipai/paperclip#quickstart) for Postgres and API key configuration — Stapler uses the same stack.
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `ANTHROPIC_API_KEY` | For Claude agents | Anthropic API key |
+| `OLLAMA_HOST` | For Ollama agents | Ollama base URL, default `http://localhost:11434` |
+| `SESSION_SECRET` | ✅ | Random string for session signing |
+
+Copy `.env.example` for the full list.
 
 ---
 
-## Syncing with upstream
+## API Reference
+
+The server exposes a REST API at port 3000. All endpoints require an `Authorization: Bearer <key>` header.
+
+| Resource | Endpoints |
+|----------|-----------|
+| Companies | `GET /api/companies` `POST /api/companies` |
+| Agents | `GET /api/companies/:id/agents` `POST /api/companies/:id/agents` |
+| Issues | `GET /api/companies/:id/issues` `POST /api/companies/:id/issues` `PATCH /api/issues/:id` |
+| Goals | `GET /api/companies/:id/goals` `POST /api/companies/:id/goals` `PATCH /api/goals/:id` `DELETE /api/goals/:id` |
+| Agent memories | `GET/POST /api/agents/:id/memories` `DELETE /api/agents/:id/memories/:memId` |
+| Company memories | `GET/POST /api/companies/:id/memories` |
+| Runs | `GET /api/agents/:id/runs` `POST /api/agents/:id/runs` |
+| Propose tasks | `POST /api/agents/:id/propose-tasks` |
+
+---
+
+## Syncing with Upstream
+
+Stapler tracks [paperclipai/paperclip](https://github.com/paperclipai/paperclip). To pull in upstream fixes:
 
 ```bash
 git remote add upstream https://github.com/paperclipai/paperclip.git
@@ -233,31 +313,14 @@ git fetch upstream master
 git rebase upstream/master
 ```
 
-**Migration conflicts** are the most common issue. When they happen:
+**Migration conflicts** — the most common rebase issue. When they happen:
 
-1. Rename colliding migration files (bump the `idx` in the filename)
-2. Update `packages/db/src/migrations/meta/_journal.json` to reflect the new `idx` and `when` values
-3. Keep both migrations — don't merge them
-
----
-
-## Project structure
-
-```
-packages/
-  adapters/ollama-local/   # Ollama adapter with tool calling
-  adapters/claude-local/   # Claude adapter (upstream + memory injection)
-  db/                      # Drizzle schema + migrations
-  shared/                  # Shared types and validation schemas
-server/                    # Express API server
-  src/services/
-    agent-memories.ts      # Memory store + injection helper
-    goal-verification.ts   # Verification loop orchestration
-ui/                        # React frontend
-```
+1. Rename the colliding migration file (bump the `idx` prefix)
+2. Update `packages/db/src/migrations/meta/_journal.json` with the new `idx` and `when`
+3. Keep both migrations — do not merge them
 
 ---
 
 ## License
 
-MIT — same as upstream. See [LICENSE](./LICENSE).
+MIT. See [LICENSE](./LICENSE).
