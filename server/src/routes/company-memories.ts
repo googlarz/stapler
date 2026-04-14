@@ -244,6 +244,10 @@ export function companyMemoryRoutes(db: Db) {
         res.status(400).json({ error: "Invalid body: expiresAt is not a valid datetime" });
         return;
       }
+      if (d <= new Date()) {
+        res.status(400).json({ error: "Invalid body: expiresAt must be in the future" });
+        return;
+      }
       parsedExpiresAt = d;
     }
 
