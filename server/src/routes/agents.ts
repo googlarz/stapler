@@ -2156,11 +2156,11 @@ export function agentRoutes(db: Db) {
       return;
     }
     assertCompanyAccess(req, agent.companyId);
-
-    if (req.actor.type === "agent" && req.actor.agentId !== id) {
-      res.status(403).json({ error: "Agent can only invoke itself" });
-      return;
-    }
+    // Same-company agents may wake peer agents — this is the meta-agent
+    // primitive. assertCompanyAccess above already bounds the caller to
+    // agent.companyId; the self-only restriction is removed intentionally.
+    // requestedByActorId below records which agent initiated the wake so
+    // the activity log and run context always show the true caller.
 
     const run = await heartbeat.wakeup(id, {
       source: req.body.source,

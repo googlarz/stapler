@@ -590,6 +590,38 @@ export function createToolDefinitions(client: PaperclipApiClient): ToolDefinitio
       },
     ),
     makeTool(
+      "agentWake",
+      "Wake another agent in your company to perform a task. The target agent receives your reason as its wake context — write it as a clear task instruction. Use payload for structured data the agent will need (e.g. issueId, references). Returns the queued run or a skipped status if the agent is already running. Both agents must be in the same company.",
+      z.object({
+        targetAgentId: z.string().uuid("targetAgentId must be a valid agent UUID"),
+        reason: z
+          .string()
+          .trim()
+          .min(1, "reason is required — it becomes the agent's wake context")
+          .max(1000),
+        payloadJson: z
+          .string()
+          .optional()
+          .describe("Optional JSON object to pass to the agent as structured context"),
+        idempotencyKey: z
+          .string()
+          .min(1)
+          .max(255)
+          .optional()
+          .describe("Optional key to deduplicate concurrent wake requests"),
+      }),
+      async ({ targetAgentId, reason, payloadJson, idempotencyKey }) =>
+        client.requestJson("POST", `/agents/${encodeURIComponent(targetAgentId)}/wakeup`, {
+          body: {
+            source: "automation",
+            triggerDetail: "callback",
+            reason,
+            payload: parseOptionalJson(payloadJson),
+            idempotencyKey: idempotencyKey ?? null,
+          },
+        }),
+    ),
+    makeTool(
       "agentPeerSearch",
       "Search another agent's episodic memories by ID. Both agents must belong to the same company. Useful for cross-agent knowledge sharing — e.g. the Bavaria agent reading notes saved by the Berlin agent. Includes wiki pages (unlike memorySearch). Uses semantic search when available.",
       z.object({
