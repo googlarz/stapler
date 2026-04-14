@@ -36,6 +36,7 @@ function makeIssue(id: string, parentId: string | null = null): Issue {
     hiddenAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    scheduledFor: null,
     labels: [],
     labelIds: [],
     myLastTouchAt: null,

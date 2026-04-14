@@ -113,6 +113,7 @@ describe("issueDetailBreadcrumb", () => {
       isUnreadForMe: false,
       createdAt: new Date(),
       updatedAt: new Date(),
+      scheduledFor: null,
       ...overrides,
     };
   }

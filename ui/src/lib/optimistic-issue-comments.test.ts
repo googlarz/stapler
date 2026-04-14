@@ -459,6 +459,7 @@ describe("optimistic issue comments", () => {
         },
         createdAt: new Date("2026-03-28T14:00:00.000Z"),
         updatedAt: new Date("2026-03-28T14:00:00.000Z"),
+        scheduledFor: null,
       },
       {
         status: "in_review",
@@ -534,6 +535,7 @@ describe("optimistic issue comments", () => {
         blocks: [],
         createdAt: new Date("2026-03-28T14:00:00.000Z"),
         updatedAt: new Date("2026-03-28T14:00:00.000Z"),
+        scheduledFor: null,
       },
       {
         id: "issue-2",
@@ -575,6 +577,7 @@ describe("optimistic issue comments", () => {
         blocks: [],
         createdAt: new Date("2026-03-28T14:00:00.000Z"),
         updatedAt: new Date("2026-03-28T14:00:00.000Z"),
+        scheduledFor: null,
       },
     ];
 
