@@ -2802,6 +2802,15 @@ export function heartbeatService(db: Db) {
     return null;
   }
 
+  function didAutomaticRecoveryFail(
+    latestRun: Pick<typeof heartbeatRuns.$inferSelect, "status" | "contextSnapshot"> | null,
+    retryReason: string,
+  ): boolean {
+    if (!latestRun) return false;
+    const context = parseObject(latestRun.contextSnapshot);
+    return latestRun.status === "failed" && readNonEmptyString(context.retryReason) === retryReason;
+  }
+
   async function getLatestIssueRun(companyId: string, issueId: string) {
     return db
       .select({
@@ -3037,7 +3046,12 @@ export function heartbeatService(db: Db) {
         continue;
       }
 
-      if (latestRetryReason === "issue_continuation_needed") {
+      if (!latestRun && !issue.checkoutRunId && !issue.executionRunId) {
+        result.skipped += 1;
+        continue;
+      }
+
+      if (didAutomaticRecoveryFail(latestRun, "issue_continuation_needed")) {
         const failureSummary = summarizeRunFailureForIssueComment(latestRun);
         const updated = await escalateStrandedAssignedIssue({
           issue,
