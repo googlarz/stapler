@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import createDOMPurify from "dompurify";
-import { JSDOM } from "jsdom";
+import type { JSDOM as JSDOMType } from "jsdom";
 import type { Db } from "@stapler/db";
 import { createAssetImageMetadataSchema } from "@stapler/shared";
 import type { StorageService } from "../storage/types.js";
@@ -18,9 +18,49 @@ const ALLOWED_COMPANY_LOGO_CONTENT_TYPES = new Set([
   SVG_CONTENT_TYPE,
 ]);
 
-function sanitizeSvgBuffer(input: Buffer): Buffer | null {
+/**
+ * Regex-only SVG scrub used when jsdom isn't available. Strips `<script>`
+ * / `<foreignObject>` blocks, any `on*=` event handlers, external `href`
+ * and `xlink:href` targets, and any `url(...)` references (which can load
+ * remote resources). Not as thorough as the DOMPurify path, but good
+ * enough to keep the obvious XSS vectors out.
+ */
+function sanitizeSvgBufferFallback(raw: string): Buffer | null {
+  let out = raw;
+  // Remove <script> and <foreignObject> blocks including content.
+  out = out.replace(/<(script|foreignObject)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
+  // Remove self-closing / empty script/foreignObject tags.
+  out = out.replace(/<(script|foreignObject)\b[^>]*\/?>/gi, "");
+  // Strip on* event-handler attributes.
+  out = out.replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  // Strip external href / xlink:href (allow fragment-only).
+  out = out.replace(
+    /\s+(xlink:href|href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+    (_m, _attr, dq, sq, uq) => {
+      const value = (dq ?? sq ?? uq ?? "").trim();
+      return value.startsWith("#") ? _m : "";
+    },
+  );
+  // Strip any url(...) references.
+  out = out.replace(/url\s*\([^)]*\)/gi, "");
+  out = out.trim();
+  if (!out || !/^<svg[\s>]/i.test(out)) return null;
+  return Buffer.from(out, "utf8");
+}
+
+async function sanitizeSvgBuffer(input: Buffer): Promise<Buffer | null> {
   const raw = input.toString("utf8").trim();
   if (!raw) return null;
+
+  // Load jsdom lazily so the route module can be imported even in
+  // environments where jsdom is unavailable — fall back to a regex-based
+  // scrub that strips the most dangerous constructs.
+  let JSDOM: typeof JSDOMType;
+  try {
+    ({ JSDOM } = await import("jsdom"));
+  } catch {
+    return sanitizeSvgBufferFallback(raw);
+  }
 
   const baseDom = new JSDOM("");
   const domPurify = createDOMPurify(
@@ -40,7 +80,7 @@ function sanitizeSvgBuffer(input: Buffer): Buffer | null {
     }
   });
 
-  let parsedDom: JSDOM | null = null;
+  let parsedDom: JSDOMType | null = null;
   try {
     const sanitized = domPurify.sanitize(raw, {
       USE_PROFILES: { svg: true, svgFilters: true, html: false },
@@ -145,7 +185,7 @@ export function assetRoutes(db: Db, storage: StorageService) {
     }
     let fileBody = file.buffer;
     if (contentType === SVG_CONTENT_TYPE) {
-      const sanitized = sanitizeSvgBuffer(file.buffer);
+      const sanitized = await sanitizeSvgBuffer(file.buffer);
       if (!sanitized || sanitized.length <= 0) {
         res.status(422).json({ error: "SVG could not be sanitized" });
         return;
@@ -242,7 +282,7 @@ export function assetRoutes(db: Db, storage: StorageService) {
 
     let fileBody = file.buffer;
     if (contentType === SVG_CONTENT_TYPE) {
-      const sanitized = sanitizeSvgBuffer(file.buffer);
+      const sanitized = await sanitizeSvgBuffer(file.buffer);
       if (!sanitized || sanitized.length <= 0) {
         res.status(422).json({ error: "SVG could not be sanitized" });
         return;

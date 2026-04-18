@@ -250,7 +250,7 @@ describe("server adapter registry", () => {
       "Authorization: Bearer $STAPLER_API_KEY",
     );
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toContain(
-      "X-Paperclip-Run-Id: $STAPLER_RUN_ID",
+      "X-Stapler-Run-Id: $STAPLER_RUN_ID",
     );
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toContain("Existing prompt");
   });

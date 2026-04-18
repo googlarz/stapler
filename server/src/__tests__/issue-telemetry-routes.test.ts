@@ -8,6 +8,7 @@ const mockIssueService = vi.hoisted(() => ({
   getById: vi.fn(),
   getWakeableParentAfterChildCompletion: vi.fn(),
   listWakeableBlockedDependents: vi.fn(),
+  listOpenDirectChildren: vi.fn(async () => []),
   update: vi.fn(),
 }));
 
@@ -40,6 +41,7 @@ vi.mock("../services/index.js", () => ({
   heartbeatService: () => ({
     wakeup: vi.fn(async () => undefined),
     reportRunActivity: vi.fn(async () => undefined),
+    cancelQueuedRunsForIssue: vi.fn(async () => ({ cancelled: 0 })),
   }),
   instanceSettingsService: () => ({}),
   issueApprovalService: () => ({}),

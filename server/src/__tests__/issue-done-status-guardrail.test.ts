@@ -8,6 +8,7 @@ const mockIssueService = vi.hoisted(() => ({
   getById: vi.fn(),
   getWakeableParentAfterChildCompletion: vi.fn(),
   listWakeableBlockedDependents: vi.fn(),
+  listOpenDirectChildren: vi.fn(async () => []),
   update: vi.fn(),
   addComment: vi.fn(),
   findMentionedAgents: vi.fn(),
@@ -24,6 +25,7 @@ const mockHeartbeatService = vi.hoisted(() => ({
   getRun: vi.fn(async () => null),
   getActiveRunForAgent: vi.fn(async () => null),
   cancelRun: vi.fn(async () => null),
+  cancelQueuedRunsForIssue: vi.fn(async () => ({ cancelled: 0 })),
 }));
 
 const mockAgentService = vi.hoisted(() => ({

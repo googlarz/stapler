@@ -46,6 +46,7 @@ function registerServiceMocks() {
     budgetService: () => mockBudgetService,
     companyPortabilityService: () => mockCompanyPortabilityService,
     companyService: () => mockCompanyService,
+    documentService: () => ({}),
     feedbackService: () => mockFeedbackService,
     logActivity: mockLogActivity,
   }));

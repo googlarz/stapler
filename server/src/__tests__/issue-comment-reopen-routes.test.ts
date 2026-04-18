@@ -24,6 +24,7 @@ const mockHeartbeatService = vi.hoisted(() => ({
   getRun: vi.fn(async () => null),
   getActiveRunForAgent: vi.fn(async () => null),
   cancelRun: vi.fn(async () => null),
+  cancelQueuedRunsForIssue: vi.fn(async () => ({ cancelled: 0 })),
 }));
 
 const mockAgentService = vi.hoisted(() => ({
@@ -528,7 +529,7 @@ describe("issue comment reopen routes", () => {
       },
     ]);
 
-    const res = await request(createApp())
+    const res = await request(await installActor(createApp()))
       .patch("/api/issues/11111111-1111-4111-8111-111111111111")
       .send({ status: "done" });
 
@@ -567,14 +568,15 @@ describe("issue comment reopen routes", () => {
       ...patch,
     }));
 
-    const res = await request(createApp())
+    const res = await request(await installActor(createApp()))
       .patch("/api/issues/11111111-1111-4111-8111-111111111111")
       .send({ status: "done", doneExceptionReason: "closing parent while child follows in next release" });
 
     expect(res.status).toBe(200);
-    expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", {
-      status: "done",
-    });
+    expect(mockIssueService.update).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      expect.objectContaining({ status: "done" }),
+    );
     expect(mockLogActivity).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({

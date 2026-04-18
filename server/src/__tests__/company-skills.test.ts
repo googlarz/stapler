@@ -158,7 +158,7 @@ describe("project workspace skill discovery", () => {
         "metadata:",
         "  sources:",
         "    - kind: github-dir",
-        "      repo: paperclipai/paperclip",
+        "      repo: googlarz/stapler",
         "      path: skills/paperclip",
         "---",
         "",

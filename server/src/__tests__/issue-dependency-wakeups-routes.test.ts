@@ -13,6 +13,7 @@ const mockIssueService = vi.hoisted(() => ({
   getRelationSummaries: vi.fn(),
   update: vi.fn(),
   listWakeableBlockedDependents: vi.fn(),
+  listOpenDirectChildren: vi.fn(async () => []),
   getWakeableParentAfterChildCompletion: vi.fn(),
   findMentionedAgents: vi.fn(async () => []),
 }));
@@ -39,6 +40,7 @@ vi.mock("../services/index.js", () => ({
   heartbeatService: () => ({
     wakeup: mockWakeup,
     reportRunActivity: vi.fn(async () => undefined),
+    cancelQueuedRunsForIssue: vi.fn(async () => ({ cancelled: 0 })),
   }),
   instanceSettingsService: () => ({
     get: vi.fn(),
