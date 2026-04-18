@@ -1,10 +1,10 @@
 /**
- * Paperclip tool definitions and execution for the Ollama adapter.
+ * Stapler tool definitions and execution for the Ollama adapter.
  *
  * Ollama models that support function-calling (llama3.1, qwen2.5, mistral, etc.)
  * receive these tools at run-start. The adapter executes each tool call against
- * the Paperclip API and feeds the results back to the model — giving ollama agents
- * the same ability to act on Paperclip that Claude Code agents have via bash.
+ * the Stapler API and feeds the results back to the model — giving ollama agents
+ * the same ability to act on Stapler that Claude Code agents have via bash.
  */
 
 // ---------------------------------------------------------------------------
@@ -17,7 +17,7 @@ export interface OllamaToolFunction {
   parameters: {
     type: "object";
     required?: string[];
-    properties: Record<string, { type: string; description?: string; enum?: string[] }>;
+    properties: Record<string, { type: string; description?: string; enum?: string[]; items?: { type: string } }>;
   };
 }
 
@@ -33,7 +33,7 @@ export interface OllamaToolCall {
   };
 }
 
-export interface PaperclipApiContext {
+export interface StaplerApiContext {
   apiUrl: string;
   companyId: string;
   agentId: string;
@@ -48,7 +48,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_get_issue",
+      name: "stapler_get_issue",
       description:
         "Fetch the full details of a Paperclip issue, including its description, status, priority, and recent comments.",
       parameters: {
@@ -63,7 +63,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_list_issues",
+      name: "stapler_list_issues",
       description: "List open issues in this company. Use to understand what work exists.",
       parameters: {
         type: "object",
@@ -81,7 +81,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_create_issue",
+      name: "stapler_create_issue",
       description:
         "Create a new issue in Paperclip. Use this to kick off work, create sub-tasks, or track decisions.",
       parameters: {
@@ -106,7 +106,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_update_issue",
+      name: "stapler_update_issue",
       description:
         "Update an existing issue's status, title, or description. Use to mark work done, block, or reassign.",
       parameters: {
@@ -133,7 +133,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_post_comment",
+      name: "stapler_post_comment",
       description:
         "Post a comment on an issue. Use to report progress, decisions, or findings directly on the issue thread.",
       parameters: {
@@ -149,7 +149,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_list_agents",
+      name: "stapler_list_agents",
       description:
         "List all AI agents in this company — their names, roles, and adapter types. Use to understand who is already staffed.",
       parameters: {
@@ -161,7 +161,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_get_agent",
+      name: "stapler_get_agent",
       description:
         "Fetch details about a specific agent — their name, role, status, current config, and assigned issues. " +
         "Use to inspect an agent before delegating work or waking them.",
@@ -177,11 +177,11 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_create_agent",
+      name: "stapler_create_agent",
       description:
         "Hire a new AI agent for the company. Creates the agent with instructions and an adapter. " +
         "Use this when you need to staff a new role: engineer, designer, QA, researcher, etc. " +
-        "After creation, use paperclip_wake_agent to give it its first task.",
+        "After creation, use stapler_wake_agent to give it its first task.",
       parameters: {
         type: "object",
         required: ["name", "role"],
@@ -216,7 +216,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_wake_agent",
+      name: "stapler_wake_agent",
       description:
         "Wake an agent and give it a task to work on. The agent will run immediately with the given reason. " +
         "Use this after hiring an agent or to delegate an urgent task. " +
@@ -241,7 +241,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_save_memory",
+      name: "stapler_save_memory",
       description:
         "Save a memory for yourself. Use to record decisions, learnings, context, or facts you want " +
         "to remember in future runs. Memories are automatically injected at run-start when relevant.",
@@ -254,8 +254,13 @@ export const STAPLER_TOOLS: OllamaTool[] = [
             description: "The memory content to save (plain text or markdown)",
           },
           tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "Tags to categorise the memory, e.g. [\"decision\", \"architecture\"]",
+          },
+          expiresAt: {
             type: "string",
-            description: "Comma-separated tags to categorise the memory, e.g. 'decision,architecture'",
+            description: "ISO 8601 datetime after which the memory expires, e.g. \"2026-12-31T00:00:00Z\". Omit for a permanent memory.",
           },
         },
       },
@@ -264,7 +269,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_search_memories",
+      name: "stapler_search_memories",
       description:
         "Search your memories for relevant context. Use when you need to recall past decisions, " +
         "learnings, or facts before starting work.",
@@ -281,7 +286,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_list_goals",
+      name: "stapler_list_goals",
       description: "List company goals. Use to understand strategic objectives and whether work is aligned.",
       parameters: {
         type: "object",
@@ -294,7 +299,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_delete_memory",
+      name: "stapler_delete_memory",
       description:
         "Delete one of your own memories by ID. Use when a memory is outdated, incorrect, or no longer relevant.",
       parameters: {
@@ -309,7 +314,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_create_goal",
+      name: "stapler_create_goal",
       description:
         "Create a new company goal with a title, description, and acceptance criteria. Use to define strategic objectives for the team.",
       parameters: {
@@ -326,7 +331,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_update_goal",
+      name: "stapler_update_goal",
       description:
         "Update an existing goal's status, description, or acceptance criteria by ID.",
       parameters: {
@@ -349,7 +354,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_list_company_memories",
+      name: "stapler_list_company_memories",
       description:
         "List all shared company memories — notes that any agent in this company can read and write. " +
         "Use to recall shared context, decisions, or facts that apply across agents.",
@@ -368,7 +373,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_list_outputs",
+      name: "stapler_list_outputs",
       description:
         "List all company outputs — living documents that agents collaboratively produce and version " +
         "(e.g. a book in English, a product spec, a research report). " +
@@ -383,7 +388,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_get_output",
+      name: "stapler_get_output",
       description:
         "Get a company output by ID, including the current draft content and full version history. " +
         "Use before editing the draft or releasing a new version.",
@@ -399,7 +404,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_propose_output",
+      name: "stapler_propose_output",
       description:
         "Propose a new company output that needs CEO approval before agents can start working on it. " +
         "Examples: 'Book — English', 'Go-to-Market Strategy', 'Architecture Decision Record'. " +
@@ -417,10 +422,10 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_update_output_draft",
+      name: "stapler_update_output_draft",
       description:
         "Overwrite the current working draft of an output. All agents share the same draft — " +
-        "you are replacing whatever is there. Read the current draft first with paperclip_get_output " +
+        "you are replacing whatever is there. Read the current draft first with stapler_get_output " +
         "if you want to extend rather than overwrite.",
       parameters: {
         type: "object",
@@ -435,7 +440,7 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
-      name: "paperclip_release_output_version",
+      name: "stapler_release_output_version",
       description:
         "Snapshot the current draft as a new immutable version (v1, v2, …). " +
         "The draft continues to evolve after the release — nothing is locked. " +
@@ -484,17 +489,23 @@ async function paperclipFetch(
   }
 }
 
-export async function executePaperclipTool(
+export async function executeStaplerTool(
   call: OllamaToolCall,
-  ctx: PaperclipApiContext,
+  ctx: StaplerApiContext,
 ): Promise<unknown> {
   const { apiUrl, companyId, agentId, authToken } = ctx;
   const base = apiUrl.replace(/\/$/, "");
   const args = call.function.arguments ?? {};
-  const name = call.function.name;
+  // Backward-compatibility alias: pre-rename agents still hold persisted
+  // instruction bundles that tell the model to call paperclip_* tools.
+  // Normalize the prefix so those calls dispatch to the same handlers as
+  // the new stapler_* names. Remove after a migration rewrites bundles.
+  const name = call.function.name.startsWith("paperclip_")
+    ? "stapler_" + call.function.name.slice("paperclip_".length)
+    : call.function.name;
 
   switch (name) {
-    case "paperclip_get_issue": {
+    case "stapler_get_issue": {
       const id = String(args.issueId ?? "");
       if (!id) return { error: "issueId is required" };
       return paperclipFetch(`${base}/api/issues/${encodeURIComponent(id)}`, {
@@ -503,7 +514,7 @@ export async function executePaperclipTool(
       });
     }
 
-    case "paperclip_list_issues": {
+    case "stapler_list_issues": {
       const limit = typeof args.limit === "number" ? args.limit : 20;
       const status = typeof args.status === "string" ? args.status : null;
       const qs = new URLSearchParams({ limit: String(limit) });
@@ -514,7 +525,7 @@ export async function executePaperclipTool(
       });
     }
 
-    case "paperclip_create_issue": {
+    case "stapler_create_issue": {
       const body: Record<string, unknown> = {
         title: String(args.title ?? ""),
         description: typeof args.description === "string" ? args.description : undefined,
@@ -530,7 +541,7 @@ export async function executePaperclipTool(
       });
     }
 
-    case "paperclip_update_issue": {
+    case "stapler_update_issue": {
       const id = String(args.issueId ?? "");
       if (!id) return { error: "issueId is required" };
       const updates: Record<string, unknown> = {};
@@ -546,7 +557,7 @@ export async function executePaperclipTool(
       });
     }
 
-    case "paperclip_post_comment": {
+    case "stapler_post_comment": {
       const id = String(args.issueId ?? "");
       if (!id) return { error: "issueId is required" };
       const body = typeof args.body === "string" ? args.body : "";
@@ -558,14 +569,14 @@ export async function executePaperclipTool(
       });
     }
 
-    case "paperclip_list_agents": {
+    case "stapler_list_agents": {
       return paperclipFetch(`${base}/api/companies/${encodeURIComponent(companyId)}/agents`, {
         method: "GET",
         authToken,
       });
     }
 
-    case "paperclip_get_agent": {
+    case "stapler_get_agent": {
       // Resolve "me" / "self" to the agent's own ID so models can
       // self-identify without needing to know their UUID.
       const rawId = String(args.agentId ?? "").trim();
@@ -577,7 +588,7 @@ export async function executePaperclipTool(
       });
     }
 
-    case "paperclip_create_agent": {
+    case "stapler_create_agent": {
       const adapterType = typeof args.adapterType === "string" ? args.adapterType : "ollama_local";
       const model = typeof args.model === "string" && args.model.trim() ? args.model.trim() : undefined;
       const config: Record<string, unknown> = {};
@@ -609,7 +620,7 @@ export async function executePaperclipTool(
       return result;
     }
 
-    case "paperclip_wake_agent": {
+    case "stapler_wake_agent": {
       const id = String(args.agentId ?? "");
       if (!id) return { error: "agentId is required" };
       const reason = typeof args.reason === "string" ? args.reason.trim() : "";
@@ -628,22 +639,27 @@ export async function executePaperclipTool(
       });
     }
 
-    case "paperclip_save_memory": {
+    case "stapler_save_memory": {
       const content = typeof args.content === "string" ? args.content.trim() : "";
       if (!content) return { error: "content is required" };
-      const tagsRaw = typeof args.tags === "string" ? args.tags : "";
-      const tags = tagsRaw
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
+      // Accept array (schema-compliant) or legacy comma-string (graceful fallback).
+      const tags: string[] = Array.isArray(args.tags)
+        ? (args.tags as unknown[]).map(String).map((t) => t.trim()).filter(Boolean)
+        : typeof args.tags === "string" && args.tags.trim()
+          ? args.tags.split(",").map((t) => t.trim()).filter(Boolean)
+          : [];
+      const memBody: Record<string, unknown> = { content, tags };
+      if (typeof args.expiresAt === "string" && args.expiresAt.trim()) {
+        memBody.expiresAt = args.expiresAt.trim();
+      }
       return paperclipFetch(`${base}/api/agents/${encodeURIComponent(agentId)}/memories`, {
         method: "POST",
-        body: JSON.stringify({ content, tags }),
+        body: JSON.stringify(memBody),
         authToken,
       });
     }
 
-    case "paperclip_search_memories": {
+    case "stapler_search_memories": {
       const q = typeof args.query === "string" ? args.query.trim() : "";
       if (!q) return { error: "query is required" };
       const limit = typeof args.limit === "number" ? args.limit : 10;
@@ -654,7 +670,7 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_list_goals": {
+    case "stapler_list_goals": {
       const limit = typeof args.limit === "number" ? args.limit : 20;
       return paperclipFetch(
         `${base}/api/companies/${encodeURIComponent(companyId)}/goals?limit=${limit}`,
@@ -662,7 +678,7 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_delete_memory": {
+    case "stapler_delete_memory": {
       const id = String(args.memoryId ?? "").trim();
       if (!id) return { error: "memoryId is required" };
       return paperclipFetch(
@@ -671,7 +687,7 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_create_goal": {
+    case "stapler_create_goal": {
       const title = String(args.title ?? "").trim();
       if (!title) return { error: "title is required" };
       const body: Record<string, unknown> = { title };
@@ -687,7 +703,7 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_update_goal": {
+    case "stapler_update_goal": {
       const id = String(args.goalId ?? "").trim();
       if (!id) return { error: "goalId is required" };
       const updates: Record<string, unknown> = {};
@@ -701,7 +717,7 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_list_company_memories": {
+    case "stapler_list_company_memories": {
       const limit = typeof args.limit === "number" ? Math.min(Math.max(1, args.limit), 200) : 50;
       return paperclipFetch(
         `${base}/api/companies/${encodeURIComponent(companyId)}/memories?limit=${limit}`,
@@ -709,13 +725,13 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_list_outputs":
+    case "stapler_list_outputs":
       return paperclipFetch(
         `${base}/api/companies/${encodeURIComponent(companyId)}/outputs`,
         { method: "GET", authToken },
       );
 
-    case "paperclip_get_output": {
+    case "stapler_get_output": {
       const id = String(args.outputId ?? "").trim();
       if (!id) return { error: "outputId is required" };
       return paperclipFetch(
@@ -724,7 +740,7 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_propose_output": {
+    case "stapler_propose_output": {
       const title = String(args.title ?? "").trim();
       if (!title) return { error: "title is required" };
       const body: Record<string, unknown> = { title };
@@ -737,7 +753,7 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_update_output_draft": {
+    case "stapler_update_output_draft": {
       const id = String(args.outputId ?? "").trim();
       if (!id) return { error: "outputId is required" };
       const content = typeof args.content === "string" ? args.content : "";
@@ -747,7 +763,7 @@ export async function executePaperclipTool(
       );
     }
 
-    case "paperclip_release_output_version": {
+    case "stapler_release_output_version": {
       const id = String(args.outputId ?? "").trim();
       if (!id) return { error: "outputId is required" };
       const body: Record<string, unknown> = {};
@@ -761,7 +777,7 @@ export async function executePaperclipTool(
     }
 
     default:
-      return { error: `Unknown Paperclip tool: ${name}` };
+      return { error: `Unknown Stapler tool: ${name}` };
   }
 }
 
@@ -773,10 +789,10 @@ export async function executePaperclipTool(
  * Build the API context from the execution environment.
  * Falls back to process.env for the API URL (server-side, always set).
  */
-export function buildPaperclipApiContext(
+export function buildStaplerApiContext(
   agent: { id: string; companyId: string },
   authToken?: string,
-): PaperclipApiContext {
+): StaplerApiContext {
   const runtimeHost = resolveHostForUrl(
     process.env.STAPLER_LISTEN_HOST ?? process.env.HOST ?? "localhost",
   );

@@ -27,6 +27,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { Button } from "@/components/ui/button";
 import { PluginSlotOutlet } from "@/plugins/slots";
+import { ServerControl } from "./ServerControl";
 
 export function Sidebar() {
   const { openNewIssue } = useDialog();
@@ -120,6 +121,8 @@ export function Sidebar() {
           <SidebarNavItem to="/activity" label="Activity" icon={History} />
           <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
         </SidebarSection>
+
+        <ServerControl />
 
         <PluginSlotOutlet
           slotTypes={["sidebarPanel"]}

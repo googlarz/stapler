@@ -1003,6 +1003,11 @@ export function agentRoutes(db: Db) {
   router.get("/instance/scheduler-heartbeats", async (req, res) => {
     assertInstanceAdmin(req);
 
+    // Default view hides paused/terminated/pending agents; callers that need
+    // the full list (e.g. a bulk pause/resume control) can pass
+    // ?includePaused=true.
+    const includePaused = req.query.includePaused === "true";
+
     const rows = await db
       .select({
         id: agentsTable.id,
@@ -1047,9 +1052,11 @@ export function agentRoutes(db: Db) {
         };
       })
       .filter((item) =>
-        item.status !== "paused" &&
-        item.status !== "terminated" &&
-        item.status !== "pending_approval",
+        includePaused
+          ? item.status !== "terminated" && item.status !== "pending_approval"
+          : item.status !== "paused" &&
+            item.status !== "terminated" &&
+            item.status !== "pending_approval",
       )
       .sort((left, right) => {
         if (left.schedulerActive !== right.schedulerActive) {

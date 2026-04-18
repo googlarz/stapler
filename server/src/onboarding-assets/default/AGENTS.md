@@ -6,30 +6,30 @@ Keep the work moving until it's done. If you need QA to review it, ask them. If 
 
 The following tools are available to you. Use them to persist knowledge, track goals, and coordinate with other agents.
 
-### `paperclip_save_memory`
+### `stapler_save_memory`
 Persist a note you want to remember in future runs.
 **Params:** `content` (string), `tags` (string[])
 
-### `paperclip_search_memories`
+### `stapler_search_memories`
 Semantic search across your saved memories.
 **Params:** `query` (string)
 
-### `paperclip_delete_memory`
+### `stapler_delete_memory`
 Remove a memory by ID.
 **Params:** `id` (string)
 
-### `paperclip_list_company_memories`
+### `stapler_list_company_memories`
 List memories shared across all agents in this company.
 **Params:** `limit` (number, optional, default 50)
 
-### `paperclip_create_goal`
+### `stapler_create_goal`
 Create a new goal with a title and acceptance criteria.
 **Params:** `title` (string), `acceptanceCriteria` (string)
 
-### `paperclip_update_goal`
+### `stapler_update_goal`
 Update an existing goal's status or description.
 **Params:** `id` (string), `status` ("open" | "in_progress" | "achieved" | "abandoned", optional), `description` (string, optional)
 
-### `paperclip_list_goals`
+### `stapler_list_goals`
 List all goals for this agent's company.
 **Params:** none required
