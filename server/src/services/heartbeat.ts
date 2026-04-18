@@ -4691,7 +4691,7 @@ export function heartbeatService(db: Db) {
       .where(and(eq(heartbeatRuns.agentId, agentId), inArray(heartbeatRuns.status, ["queued", "running"])));
 
     for (const run of runs) {
-      await setRunStatus(run.id, "cancelled", {
+      const cancelled = await setRunStatus(run.id, "cancelled", {
         finishedAt: new Date(),
         error: reason,
         errorCode: "cancelled",
@@ -4701,6 +4701,15 @@ export function heartbeatService(db: Db) {
         finishedAt: new Date(),
         error: reason,
       });
+
+      if (cancelled) {
+        await appendRunEvent(cancelled, 1, {
+          eventType: "lifecycle",
+          stream: "system",
+          level: "warn",
+          message: "run cancelled",
+        });
+      }
 
       const running = runningProcesses.get(run.id);
       if (running) {

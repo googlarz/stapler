@@ -999,6 +999,7 @@ describeEmbeddedPostgres("issueService blockers and dependency wake readiness", 
     await db.delete(executionWorkspaces);
     await db.delete(projectWorkspaces);
     await db.delete(projects);
+    await db.delete(heartbeatRuns);
     await db.delete(agents);
     await db.delete(instanceSettings);
     await db.delete(companies);
