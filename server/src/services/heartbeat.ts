@@ -2173,12 +2173,12 @@ export function heartbeatService(db: Db) {
       await tx
         .update(issues)
         .set({
-          executionRunId: queuedRun.id,
-          executionAgentNameKey: normalizeAgentNameKey(agent.name),
-          executionLockedAt: now,
+          executionRunId: null,
+          executionAgentNameKey: null,
+          executionLockedAt: null,
           updatedAt: now,
         })
-        .where(eq(issues.id, issue.id));
+        .where(and(eq(issues.id, issue.id), eq(issues.executionRunId, run.id)));
 
       await tx
         .update(heartbeatRuns)
@@ -2346,9 +2346,9 @@ export function heartbeatService(db: Db) {
         await tx
           .update(issues)
           .set({
-            executionRunId: retryRun.id,
-            executionAgentNameKey: normalizeAgentNameKey(agent.name),
-            executionLockedAt: now,
+            executionRunId: null,
+            executionAgentNameKey: null,
+            executionLockedAt: null,
             updatedAt: now,
           })
           .where(and(eq(issues.id, issueId), eq(issues.companyId, run.companyId), eq(issues.executionRunId, run.id)));
@@ -4362,12 +4362,12 @@ export function heartbeatService(db: Db) {
         await tx
           .update(issues)
           .set({
-            executionRunId: newRun.id,
-            executionAgentNameKey: normalizeAgentNameKey(deferredAgent.name),
-            executionLockedAt: now,
+            executionRunId: null,
+            executionAgentNameKey: null,
+            executionLockedAt: null,
             updatedAt: now,
           })
-          .where(eq(issues.id, issue.id));
+          .where(and(eq(issues.id, issue.id), eq(issues.executionRunId, run.id)));
 
         return newRun;
       }
@@ -4519,6 +4519,7 @@ export function heartbeatService(db: Db) {
           .select({
             id: issues.id,
             companyId: issues.companyId,
+            assigneeAgentId: issues.assigneeAgentId,
             executionRunId: issues.executionRunId,
             executionAgentNameKey: issues.executionAgentNameKey,
           })
@@ -4568,39 +4569,28 @@ export function heartbeatService(db: Db) {
         }
 
         if (!activeExecutionRun) {
-          const legacyRun = await tx
-            .select()
-            .from(heartbeatRuns)
-            .where(
-              and(
-                eq(heartbeatRuns.companyId, issue.companyId),
-                inArray(heartbeatRuns.status, ["queued", "running"]),
-                sql`${heartbeatRuns.contextSnapshot} ->> 'issueId' = ${issue.id}`,
-              ),
-            )
-            .orderBy(
-              sql`case when ${heartbeatRuns.status} = 'running' then 0 else 1 end`,
-              asc(heartbeatRuns.createdAt),
-            )
-            .limit(1)
-            .then((rows) => rows[0] ?? null);
+          const legacyRun = issue.assigneeAgentId
+            ? await tx
+              .select()
+              .from(heartbeatRuns)
+              .where(
+                and(
+                  eq(heartbeatRuns.companyId, issue.companyId),
+                  eq(heartbeatRuns.agentId, issue.assigneeAgentId),
+                  inArray(heartbeatRuns.status, ["queued", "running"]),
+                  sql`${heartbeatRuns.contextSnapshot} ->> 'issueId' = ${issue.id}`,
+                ),
+              )
+              .orderBy(
+                sql`case when ${heartbeatRuns.status} = 'running' then 0 else 1 end`,
+                asc(heartbeatRuns.createdAt),
+              )
+              .limit(1)
+              .then((rows) => rows[0] ?? null)
+            : null;
 
           if (legacyRun) {
             activeExecutionRun = legacyRun;
-            const legacyAgent = await tx
-              .select({ name: agents.name })
-              .from(agents)
-              .where(eq(agents.id, legacyRun.agentId))
-              .then((rows) => rows[0] ?? null);
-            await tx
-              .update(issues)
-              .set({
-                executionRunId: legacyRun.id,
-                executionAgentNameKey: normalizeAgentNameKey(legacyAgent?.name),
-                executionLockedAt: new Date(),
-                updatedAt: new Date(),
-              })
-              .where(eq(issues.id, issue.id));
           }
         }
 

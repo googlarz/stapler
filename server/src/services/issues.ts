@@ -766,7 +766,8 @@ export function issueService(db: Db) {
       .then((rows) => rows[0] ?? null);
     if (!row) return null;
     const [enriched] = await withIssueLabels(db, [row]);
-    return enriched;
+    const [reconciled] = await reconcileExecutionStateForIssues(db, [enriched]);
+    return reconciled;
   }
 
   async function getIssueByIdentifier(identifier: string) {
@@ -777,7 +778,8 @@ export function issueService(db: Db) {
       .then((rows) => rows[0] ?? null);
     if (!row) return null;
     const [enriched] = await withIssueLabels(db, [row]);
-    return enriched;
+    const [reconciled] = await reconcileExecutionStateForIssues(db, [enriched]);
+    return reconciled;
   }
 
   function redactIssueComment<T extends { body: string }>(comment: T, censorUsernameInLogs: boolean): T {
@@ -1234,8 +1236,9 @@ export function issueService(db: Db) {
         );
       const rows = limit === undefined ? await baseQuery : await baseQuery.limit(limit);
       const withLabels = await withIssueLabels(db, rows);
-      const runMap = await activeRunMapForIssues(db, withLabels);
-      const withRuns = withActiveRuns(withLabels, runMap);
+      const reconciled = await reconcileExecutionStateForIssues(db, withLabels);
+      const runMap = await activeRunMapForIssues(db, reconciled);
+      const withRuns = withActiveRuns(reconciled, runMap);
       if (withRuns.length === 0) {
         return withRuns;
       }
@@ -2013,11 +2016,24 @@ export function issueService(db: Db) {
           sql`select id from issues where id = ${id} for update`,
         );
         const preCheckRow = await tx
-          .select({ executionRunId: issues.executionRunId })
+          .select({ checkoutRunId: issues.checkoutRunId, executionRunId: issues.executionRunId })
           .from(issues)
           .where(eq(issues.id, id))
           .then((rows) => rows[0] ?? null);
         if (!preCheckRow?.executionRunId) return;
+        if (!preCheckRow.checkoutRunId) {
+          await tx
+            .update(issues)
+            .set({ executionRunId: null, executionAgentNameKey: null, executionLockedAt: null, updatedAt: now })
+            .where(
+              and(
+                eq(issues.id, id),
+                isNull(issues.checkoutRunId),
+                eq(issues.executionRunId, preCheckRow.executionRunId),
+              ),
+            );
+          return;
+        }
         const lockRun = await tx
           .select({ id: heartbeatRuns.id, status: heartbeatRuns.status })
           .from(heartbeatRuns)
