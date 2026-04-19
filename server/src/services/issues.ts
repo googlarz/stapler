@@ -160,6 +160,10 @@ function isAssignedPendingExecutionParticipantCheckout(input: {
 
 const TERMINAL_HEARTBEAT_RUN_STATUSES = new Set(["succeeded", "failed", "cancelled", "timed_out"]);
 
+function nullableEq<T>(column: any, value: T | null) {
+  return value == null ? isNull(column) : eq(column, value);
+}
+
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
@@ -571,7 +575,13 @@ async function reconcileExecutionStateForIssues(
   const staleWithoutCheckoutIds: string[] = [];
   const staleRunIssueIds: string[] = [];
   const staleRunIds: string[] = [];
-  const backfilledExecutionStateByIssueId = new Map<string, { executionRunId: string; executionAgentNameKey: string | null }>();
+  const backfilledExecutionStateByIssueId = new Map<string, {
+    executionRunId: string;
+    executionAgentNameKey: string | null;
+    originalCheckoutRunId: string | null;
+    originalExecutionRunId: string | null;
+    originalExecutionAgentNameKey: string | null;
+  }>();
 
   const normalizedRows = issueRows.map((row) => {
     if (!row.executionRunId && !row.checkoutRunId) {
@@ -587,6 +597,9 @@ async function reconcileExecutionStateForIssues(
         backfilledExecutionStateByIssueId.set(row.id, {
           executionRunId: row.executionRunId,
           executionAgentNameKey,
+          originalCheckoutRunId: row.checkoutRunId,
+          originalExecutionRunId: row.executionRunId,
+          originalExecutionAgentNameKey: row.executionAgentNameKey,
         });
       }
       return {
@@ -603,6 +616,9 @@ async function reconcileExecutionStateForIssues(
         backfilledExecutionStateByIssueId.set(row.id, {
           executionRunId: row.checkoutRunId,
           executionAgentNameKey,
+          originalCheckoutRunId: row.checkoutRunId,
+          originalExecutionRunId: row.executionRunId,
+          originalExecutionAgentNameKey: row.executionAgentNameKey,
         });
       }
       return {
@@ -666,7 +682,12 @@ async function reconcileExecutionStateForIssues(
           executionAgentNameKey: executionState.executionAgentNameKey,
           updatedAt: now,
         })
-        .where(and(eq(issues.id, issueId), eq(issues.checkoutRunId, executionState.executionRunId)));
+        .where(and(
+          eq(issues.id, issueId),
+          nullableEq(issues.checkoutRunId, executionState.originalCheckoutRunId),
+          nullableEq(issues.executionRunId, executionState.originalExecutionRunId),
+          nullableEq(issues.executionAgentNameKey, executionState.originalExecutionAgentNameKey),
+        ));
     }
   }
 
