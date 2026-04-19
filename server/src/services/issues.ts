@@ -519,6 +519,170 @@ async function withIssueLabels(dbOrTx: any, rows: IssueRow[]): Promise<IssueWith
 
 const ACTIVE_RUN_STATUSES = ["queued", "running"];
 
+function runOwnsIssueExecution(
+  row: Pick<IssueWithLabels, "id" | "status" | "assigneeAgentId" | "checkoutRunId">,
+  run: { status: string; agentId: string; issueId: string | null } | null,
+) {
+  return (
+    row.status === "in_progress"
+    && row.checkoutRunId != null
+    && run != null
+    && ACTIVE_RUN_STATUSES.includes(run.status)
+    && run.agentId === row.assigneeAgentId
+    && run.issueId === row.id
+  );
+}
+
+async function reconcileExecutionStateForIssues(
+  dbOrTx: any,
+  issueRows: IssueWithLabels[],
+): Promise<IssueWithLabels[]> {
+  if (issueRows.length === 0) {
+    return issueRows;
+  }
+
+  const rowsWithExecutionState = issueRows.filter((row) => row.executionRunId != null || row.checkoutRunId != null);
+  if (rowsWithExecutionState.length === 0) {
+    return issueRows;
+  }
+
+  const runIds = [...new Set(
+    rowsWithExecutionState
+      .flatMap((row) => [row.executionRunId, row.checkoutRunId])
+      .filter((id): id is string => id != null),
+  )];
+  const runRows: Array<{ id: string; status: string; agentId: string; agentName: string | null; issueId: string | null }> = runIds.length === 0
+    ? []
+    : await dbOrTx
+      .select({
+        id: heartbeatRuns.id,
+        status: heartbeatRuns.status,
+        agentId: heartbeatRuns.agentId,
+        agentName: agents.name,
+        issueId: sql<string | null>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`,
+      })
+      .from(heartbeatRuns)
+      .leftJoin(agents, eq(agents.id, heartbeatRuns.agentId))
+      .where(inArray(heartbeatRuns.id, runIds));
+  const runMap = new Map<string, { id: string; status: string; agentId: string; agentName: string | null; issueId: string | null }>(
+    runRows.map((row: { id: string; status: string; agentId: string; agentName: string | null; issueId: string | null }) => [row.id, row]),
+  );
+
+  const staleWithoutCheckoutIds: string[] = [];
+  const staleRunIssueIds: string[] = [];
+  const staleRunIds: string[] = [];
+  const backfilledExecutionStateByIssueId = new Map<string, { executionRunId: string; executionAgentNameKey: string | null }>();
+
+  const normalizedRows = issueRows.map((row) => {
+    if (!row.executionRunId && !row.checkoutRunId) {
+      return row;
+    }
+
+    const activeCheckoutRun = row.checkoutRunId ? runMap.get(row.checkoutRunId) : null;
+    const activeExecutionRun = row.executionRunId ? runMap.get(row.executionRunId) : null;
+    const hasMatchingActiveExecution = runOwnsIssueExecution(row, activeExecutionRun ?? null);
+    if (hasMatchingActiveExecution && row.executionRunId && activeExecutionRun) {
+      const executionAgentNameKey = row.executionAgentNameKey ?? normalizeAgentNameKey(activeExecutionRun.agentName);
+      if (row.executionAgentNameKey !== executionAgentNameKey) {
+        backfilledExecutionStateByIssueId.set(row.id, {
+          executionRunId: row.executionRunId,
+          executionAgentNameKey,
+        });
+      }
+      return {
+        ...row,
+        executionRunId: row.executionRunId,
+        executionAgentNameKey,
+      };
+    }
+
+    const hasMatchingActiveCheckout = runOwnsIssueExecution(row, activeCheckoutRun ?? null);
+    if (hasMatchingActiveCheckout && row.checkoutRunId && activeCheckoutRun) {
+      const executionAgentNameKey = row.executionAgentNameKey ?? normalizeAgentNameKey(activeCheckoutRun.agentName);
+      if (row.executionRunId !== row.checkoutRunId || row.executionAgentNameKey !== executionAgentNameKey) {
+        backfilledExecutionStateByIssueId.set(row.id, {
+          executionRunId: row.checkoutRunId,
+          executionAgentNameKey,
+        });
+      }
+      return {
+        ...row,
+        executionRunId: row.checkoutRunId,
+        executionAgentNameKey,
+      };
+    }
+
+    if (row.checkoutRunId == null || !row.executionRunId) {
+      staleWithoutCheckoutIds.push(row.id);
+    } else {
+      staleRunIssueIds.push(row.id);
+      staleRunIds.push(row.executionRunId);
+    }
+
+    return {
+      ...row,
+      executionRunId: null,
+      executionAgentNameKey: null,
+      executionLockedAt: null,
+    };
+  });
+
+  const now = new Date();
+
+  if (staleWithoutCheckoutIds.length > 0) {
+    await dbOrTx
+      .update(issues)
+      .set({
+        executionRunId: null,
+        executionAgentNameKey: null,
+        executionLockedAt: null,
+        updatedAt: now,
+      })
+      .where(and(inArray(issues.id, staleWithoutCheckoutIds), isNull(issues.checkoutRunId)));
+  }
+
+  if (staleRunIssueIds.length > 0) {
+    await dbOrTx
+      .update(issues)
+      .set({
+        executionRunId: null,
+        executionAgentNameKey: null,
+        executionLockedAt: null,
+        updatedAt: now,
+      })
+      .where(and(
+        inArray(issues.id, staleRunIssueIds),
+        inArray(issues.executionRunId, [...new Set(staleRunIds)]),
+      ));
+  }
+
+  if (backfilledExecutionStateByIssueId.size > 0) {
+    const now = new Date();
+    for (const [issueId, executionState] of backfilledExecutionStateByIssueId.entries()) {
+      await dbOrTx
+        .update(issues)
+        .set({
+          executionRunId: executionState.executionRunId,
+          executionAgentNameKey: executionState.executionAgentNameKey,
+          updatedAt: now,
+        })
+        .where(and(eq(issues.id, issueId), eq(issues.checkoutRunId, executionState.executionRunId)));
+    }
+  }
+
+  return normalizedRows.map((row) => {
+    const executionState = backfilledExecutionStateByIssueId.get(row.id);
+    if (!executionState) {
+      return row;
+    }
+    return {
+      ...row,
+      executionRunId: executionState.executionRunId,
+      executionAgentNameKey: executionState.executionAgentNameKey,
+    };
+  });
+}
+
 async function activeRunMapForIssues(
   dbOrTx: any,
   issueRows: IssueWithLabels[],

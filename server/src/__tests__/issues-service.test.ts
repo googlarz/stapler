@@ -381,6 +381,480 @@ describeEmbeddedPostgres("issueService.list participantAgentId", () => {
     await expect(svc.getById("not-a-uuid")).resolves.toBeNull();
   });
 
+  it("reconciles stale execution metadata consistently across detail and list reads", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const staleRunId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: "PAP",
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Release Engineer",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: staleRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "running",
+      wakeupRequestId: randomUUID(),
+      contextSnapshot: { issueId },
+      startedAt: new Date("2026-04-19T17:00:00.000Z"),
+      updatedAt: new Date("2026-04-19T17:00:00.000Z"),
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      issueNumber: 1065,
+      identifier: "PAP-1065",
+      title: "Stale execution metadata",
+      status: "blocked",
+      priority: "medium",
+      assigneeAgentId: agentId,
+      checkoutRunId: null,
+      executionRunId: staleRunId,
+      executionAgentNameKey: "release-engineer",
+      createdByUserId: "user-1",
+    });
+
+    const detail = await svc.getById("PAP-1065");
+    const [listed] = await svc.list(companyId, { identifier: "PAP-1065" });
+    const persisted = await db
+      .select({
+        checkoutRunId: issues.checkoutRunId,
+        executionRunId: issues.executionRunId,
+        executionAgentNameKey: issues.executionAgentNameKey,
+      })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+
+    expect(detail).toEqual(expect.objectContaining({
+      id: issueId,
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+    }));
+    expect(listed).toEqual(expect.objectContaining({
+      id: issueId,
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+    }));
+    expect(persisted).toEqual({
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+    });
+  });
+
+  it("surfaces a coherent active execution owner on the checked-out issue only", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const activeIssueId = randomUUID();
+    const siblingIssueId = randomUUID();
+    const checkoutRunId = randomUUID();
+    const unrelatedRunId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: "PAP",
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Release Engineer",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: checkoutRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "running",
+      wakeupRequestId: randomUUID(),
+      contextSnapshot: { issueId: activeIssueId },
+      startedAt: new Date("2026-04-19T17:00:00.000Z"),
+      updatedAt: new Date("2026-04-19T17:00:00.000Z"),
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: unrelatedRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "running",
+      wakeupRequestId: randomUUID(),
+      contextSnapshot: { issueId: randomUUID() },
+      startedAt: new Date("2026-04-19T17:01:00.000Z"),
+      updatedAt: new Date("2026-04-19T17:01:00.000Z"),
+    });
+
+    await db.insert(issues).values([
+      {
+        id: activeIssueId,
+        companyId,
+        issueNumber: 1066,
+        identifier: "PAP-1066",
+        title: "Active execution ownership",
+        status: "todo",
+        priority: "medium",
+        assigneeAgentId: agentId,
+        createdByUserId: "user-1",
+      },
+      {
+        id: siblingIssueId,
+        companyId,
+        issueNumber: 1067,
+        identifier: "PAP-1067",
+        title: "Blocked sibling",
+        status: "blocked",
+        priority: "medium",
+        assigneeAgentId: agentId,
+        executionRunId: unrelatedRunId,
+        executionAgentNameKey: "release engineer",
+        createdByUserId: "user-1",
+      },
+    ]);
+
+    await svc.checkout(activeIssueId, agentId, ["todo"], checkoutRunId);
+
+    const detail = await svc.getById("PAP-1066");
+    const listed = await svc.list(companyId, {});
+    const activeListed = listed.find((issue) => issue.id === activeIssueId);
+    const siblingListed = listed.find((issue) => issue.id === siblingIssueId);
+
+    expect(detail).toEqual(expect.objectContaining({
+      id: activeIssueId,
+      checkoutRunId,
+      executionRunId: checkoutRunId,
+      executionAgentNameKey: "release engineer",
+    }));
+    expect(activeListed).toEqual(expect.objectContaining({
+      id: activeIssueId,
+      checkoutRunId,
+      executionRunId: checkoutRunId,
+      executionAgentNameKey: "release engineer",
+    }));
+    expect(siblingListed).toEqual(expect.objectContaining({
+      id: siblingIssueId,
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+    }));
+  });
+
+  it("backfills a live execution tuple from checkoutRunId when execution fields are missing", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const checkoutRunId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: "PAP",
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Staff Engineer",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: checkoutRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "running",
+      wakeupRequestId: randomUUID(),
+      contextSnapshot: { issueId },
+      startedAt: new Date("2026-04-19T17:00:00.000Z"),
+      updatedAt: new Date("2026-04-19T17:00:00.000Z"),
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      issueNumber: 1068,
+      identifier: "PAP-1068",
+      title: "Missing execution tuple",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: agentId,
+      checkoutRunId,
+      executionRunId: null,
+      executionAgentNameKey: null,
+      createdByUserId: "user-1",
+    });
+
+    const detail = await svc.getById("PAP-1068");
+    const [listed] = await svc.list(companyId, { identifier: "PAP-1068" });
+    const persisted = await db
+      .select({
+        checkoutRunId: issues.checkoutRunId,
+        executionRunId: issues.executionRunId,
+        executionAgentNameKey: issues.executionAgentNameKey,
+      })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+
+    expect(detail).toEqual(expect.objectContaining({
+      id: issueId,
+      checkoutRunId,
+      executionRunId: checkoutRunId,
+      executionAgentNameKey: "staff engineer",
+    }));
+    expect(listed).toEqual(expect.objectContaining({
+      id: issueId,
+      checkoutRunId,
+      executionRunId: checkoutRunId,
+      executionAgentNameKey: "staff engineer",
+    }));
+    expect(persisted).toEqual({
+      checkoutRunId,
+      executionRunId: checkoutRunId,
+      executionAgentNameKey: "staff engineer",
+    });
+  });
+
+  it("replaces a live wrong-issue execution reference with the checked-out issue run", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const checkoutRunId = randomUUID();
+    const wrongIssueRunId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: "PAP",
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Release Engineer",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(heartbeatRuns).values([
+      {
+        id: checkoutRunId,
+        companyId,
+        agentId,
+        invocationSource: "assignment",
+        triggerDetail: "system",
+        status: "running",
+        wakeupRequestId: randomUUID(),
+        contextSnapshot: { issueId },
+        startedAt: new Date("2026-04-19T17:00:00.000Z"),
+        updatedAt: new Date("2026-04-19T17:00:00.000Z"),
+      },
+      {
+        id: wrongIssueRunId,
+        companyId,
+        agentId,
+        invocationSource: "assignment",
+        triggerDetail: "system",
+        status: "running",
+        wakeupRequestId: randomUUID(),
+        contextSnapshot: { issueId: randomUUID() },
+        startedAt: new Date("2026-04-19T17:01:00.000Z"),
+        updatedAt: new Date("2026-04-19T17:01:00.000Z"),
+      },
+    ]);
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      issueNumber: 1069,
+      identifier: "PAP-1069",
+      title: "Wrong issue execution pointer",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: agentId,
+      checkoutRunId,
+      executionRunId: wrongIssueRunId,
+      executionAgentNameKey: null,
+      createdByUserId: "user-1",
+    });
+
+    const detail = await svc.getById("PAP-1069");
+    const [listed] = await svc.list(companyId, { identifier: "PAP-1069" });
+    const persisted = await db
+      .select({
+        checkoutRunId: issues.checkoutRunId,
+        executionRunId: issues.executionRunId,
+        executionAgentNameKey: issues.executionAgentNameKey,
+      })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+
+    expect(detail).toEqual(expect.objectContaining({
+      id: issueId,
+      checkoutRunId,
+      executionRunId: checkoutRunId,
+      executionAgentNameKey: "release engineer",
+    }));
+    expect(listed).toEqual(expect.objectContaining({
+      id: issueId,
+      checkoutRunId,
+      executionRunId: checkoutRunId,
+      executionAgentNameKey: "release engineer",
+    }));
+    expect(persisted).toEqual({
+      checkoutRunId,
+      executionRunId: checkoutRunId,
+      executionAgentNameKey: "release engineer",
+    });
+  });
+
+  it("preserves a live retry run when it still belongs to the checked-out issue", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const checkoutRunId = randomUUID();
+    const retryRunId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: "PAP",
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Release Engineer",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(heartbeatRuns).values([
+      {
+        id: checkoutRunId,
+        companyId,
+        agentId,
+        invocationSource: "assignment",
+        triggerDetail: "system",
+        status: "failed",
+        wakeupRequestId: randomUUID(),
+        contextSnapshot: { issueId },
+        startedAt: new Date("2026-04-19T17:00:00.000Z"),
+        updatedAt: new Date("2026-04-19T17:00:00.000Z"),
+      },
+      {
+        id: retryRunId,
+        companyId,
+        agentId,
+        invocationSource: "issue.continuation_recovery",
+        triggerDetail: "system",
+        status: "running",
+        wakeupRequestId: randomUUID(),
+        retryOfRunId: checkoutRunId,
+        contextSnapshot: { issueId, retryReason: "issue_continuation_needed" },
+        startedAt: new Date("2026-04-19T17:01:00.000Z"),
+        updatedAt: new Date("2026-04-19T17:01:00.000Z"),
+      },
+    ]);
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      issueNumber: 1070,
+      identifier: "PAP-1070",
+      title: "Continuation retry keeps execution ownership",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: agentId,
+      checkoutRunId,
+      executionRunId: retryRunId,
+      executionAgentNameKey: null,
+      createdByUserId: "user-1",
+    });
+
+    const detail = await svc.getById("PAP-1070");
+    const [listed] = await svc.list(companyId, { identifier: "PAP-1070" });
+    const persisted = await db
+      .select({
+        checkoutRunId: issues.checkoutRunId,
+        executionRunId: issues.executionRunId,
+        executionAgentNameKey: issues.executionAgentNameKey,
+      })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+
+    expect(detail).toEqual(expect.objectContaining({
+      id: issueId,
+      checkoutRunId,
+      executionRunId: retryRunId,
+      executionAgentNameKey: "release engineer",
+    }));
+    expect(listed).toEqual(expect.objectContaining({
+      id: issueId,
+      checkoutRunId,
+      executionRunId: retryRunId,
+      executionAgentNameKey: "release engineer",
+    }));
+    expect(persisted).toEqual({
+      checkoutRunId,
+      executionRunId: retryRunId,
+      executionAgentNameKey: "release engineer",
+    });
+  });
+
   it("filters issues by execution workspace id", async () => {
     const companyId = randomUUID();
     const projectId = randomUUID();

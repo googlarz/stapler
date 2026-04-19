@@ -248,6 +248,297 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     return { companyId, agentId, runId, wakeupRequestId, issueId };
   }
 
+  async function seedStrandedIssueFixture(input: {
+    status: "todo" | "in_progress";
+    runStatus: "failed" | "timed_out" | "cancelled" | "succeeded";
+    retryReason?: "assignment_recovery" | "issue_continuation_needed" | null;
+    assignToUser?: boolean;
+  }) {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const runId = randomUUID();
+    const wakeupRequestId = randomUUID();
+    const issueId = randomUUID();
+    const now = new Date("2026-03-19T00:00:00.000Z");
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "CodexCoder",
+      role: "engineer",
+      status: "idle",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(agentWakeupRequests).values({
+      id: wakeupRequestId,
+      companyId,
+      agentId,
+      source: "assignment",
+      triggerDetail: "system",
+      reason: input.retryReason === "assignment_recovery" ? "issue_assignment_recovery" : "issue_assigned",
+      payload: { issueId },
+      status: input.runStatus === "cancelled" ? "cancelled" : "failed",
+      runId,
+      claimedAt: now,
+      finishedAt: new Date("2026-03-19T00:05:00.000Z"),
+      error: input.runStatus === "succeeded" ? null : "run failed before issue advanced",
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: input.runStatus,
+      wakeupRequestId,
+      contextSnapshot: {
+        issueId,
+        taskId: issueId,
+        wakeReason: input.retryReason === "assignment_recovery"
+          ? "issue_assignment_recovery"
+          : input.retryReason ?? "issue_assigned",
+        ...(input.retryReason ? { retryReason: input.retryReason } : {}),
+      },
+      startedAt: now,
+      finishedAt: new Date("2026-03-19T00:05:00.000Z"),
+      updatedAt: new Date("2026-03-19T00:05:00.000Z"),
+      errorCode: input.runStatus === "succeeded" ? null : "process_lost",
+      error: input.runStatus === "succeeded" ? null : "run failed before issue advanced",
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Recover stranded assigned work",
+      status: input.status,
+      priority: "medium",
+      assigneeAgentId: input.assignToUser ? null : agentId,
+      assigneeUserId: input.assignToUser ? "user-1" : null,
+      checkoutRunId: input.status === "in_progress" ? runId : null,
+      executionRunId: null,
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+      startedAt: input.status === "in_progress" ? now : null,
+    });
+
+    return { companyId, agentId, runId, wakeupRequestId, issueId };
+  }
+
+  it("does not stamp execution metadata from another agent's queued mention wake when checkout is absent", async () => {
+    const companyId = randomUUID();
+    const assigneeAgentId = randomUUID();
+    const wakingAgentId = randomUUID();
+    const issueId = randomUUID();
+    const staleRunId = randomUUID();
+    const staleWakeupRequestId = randomUUID();
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values([
+      {
+        id: assigneeAgentId,
+        companyId,
+        name: "Release Engineer",
+        role: "engineer",
+        status: "idle",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+      {
+        id: wakingAgentId,
+        companyId,
+        name: "Staff Engineer",
+        role: "engineer",
+        status: "idle",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+    ]);
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Mention wake should not mint ownership",
+      status: "blocked",
+      priority: "medium",
+      assigneeAgentId,
+      checkoutRunId: null,
+      executionRunId: null,
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+    });
+
+    await db.insert(agentWakeupRequests).values({
+      id: staleWakeupRequestId,
+      companyId,
+      agentId: wakingAgentId,
+      source: "on_demand",
+      triggerDetail: "manual",
+      reason: "issue_comment_mentioned",
+      payload: { issueId },
+      status: "queued",
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: staleRunId,
+      companyId,
+      agentId: wakingAgentId,
+      invocationSource: "on_demand",
+      triggerDetail: "manual",
+      status: "queued",
+      wakeupRequestId: staleWakeupRequestId,
+      contextSnapshot: {
+        issueId,
+        wakeReason: "issue_comment_mentioned",
+      },
+      updatedAt: new Date("2026-04-19T17:00:00.000Z"),
+    });
+
+    const heartbeat = heartbeatService(db);
+    await heartbeat.wakeup(wakingAgentId, {
+      source: "on_demand",
+      triggerDetail: "manual",
+      reason: "issue_comment_mentioned",
+      contextSnapshot: {
+        issueId,
+        wakeReason: "issue_comment_mentioned",
+      },
+    });
+
+    const issue = await db
+      .select({
+        checkoutRunId: issues.checkoutRunId,
+        executionRunId: issues.executionRunId,
+        executionAgentNameKey: issues.executionAgentNameKey,
+      })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+
+    expect(issue).toEqual({
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+    });
+  });
+
+  it("does not stamp execution metadata from the assignee's own queued mention wake when checkout is absent", async () => {
+    const companyId = randomUUID();
+    const assigneeAgentId = randomUUID();
+    const issueId = randomUUID();
+    const staleRunId = randomUUID();
+    const staleWakeupRequestId = randomUUID();
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: assigneeAgentId,
+      companyId,
+      name: "Release Engineer",
+      role: "engineer",
+      status: "idle",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Same-assignee mention wake should not mint ownership",
+      status: "blocked",
+      priority: "medium",
+      assigneeAgentId,
+      checkoutRunId: null,
+      executionRunId: null,
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+    });
+
+    await db.insert(agentWakeupRequests).values({
+      id: staleWakeupRequestId,
+      companyId,
+      agentId: assigneeAgentId,
+      source: "on_demand",
+      triggerDetail: "manual",
+      reason: "issue_comment_mentioned",
+      payload: { issueId },
+      status: "queued",
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: staleRunId,
+      companyId,
+      agentId: assigneeAgentId,
+      invocationSource: "on_demand",
+      triggerDetail: "manual",
+      status: "queued",
+      wakeupRequestId: staleWakeupRequestId,
+      contextSnapshot: {
+        issueId,
+        wakeReason: "issue_comment_mentioned",
+      },
+      updatedAt: new Date("2026-04-19T17:05:00.000Z"),
+    });
+
+    const heartbeat = heartbeatService(db);
+    await heartbeat.wakeup(assigneeAgentId, {
+      source: "on_demand",
+      triggerDetail: "manual",
+      reason: "issue_comment_mentioned",
+      contextSnapshot: {
+        issueId,
+        wakeReason: "issue_comment_mentioned",
+      },
+    });
+
+    const issue = await db
+      .select({
+        checkoutRunId: issues.checkoutRunId,
+        executionRunId: issues.executionRunId,
+        executionAgentNameKey: issues.executionAgentNameKey,
+      })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+
+    expect(issue).toEqual({
+      checkoutRunId: null,
+      executionRunId: null,
+      executionAgentNameKey: null,
+    });
+  });
+
   it("keeps a local run active when the recorded pid is still alive", async () => {
     const child = spawnAliveProcess();
     childProcesses.add(child);
