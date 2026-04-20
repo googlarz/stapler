@@ -1813,6 +1813,10 @@ export function issueRoutes(
     }
     await routinesSvc.syncRunStatusForIssue(issue.id);
 
+    const blockerEscalationIssue = blockerEscalationPlan
+      ? await ensureRequiredRoleEscalationForBlockedIssue(actor, issue, blockerEscalationPlan)
+      : null;
+
     // Cancel orphaned queued/running runs when issue is reassigned or closed (#3168).
     // Best-effort: failure is logged but does not block the issue update.
     const wasReassigned =

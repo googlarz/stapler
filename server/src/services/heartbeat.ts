@@ -73,6 +73,7 @@ import {
   type SessionCompactionPolicy,
 } from "@stapler/adapter-utils";
 import { maybeLoadMemoriesForInjection } from "./memory-injection.js";
+import { logActivity } from "./activity-log.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -2790,6 +2791,17 @@ export function heartbeatService(db: Db) {
     }
   }
 
+  const ACTIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running"] as const;
+
+  function summarizeRunFailureForIssueComment(
+    run: Pick<typeof heartbeatRuns.$inferSelect, "error" | "errorCode"> | null,
+  ): string | null {
+    if (!run) return null;
+    if (run.error) return ` Last error: ${run.error.slice(0, 200)}.`;
+    if (run.errorCode) return ` Last error code: ${run.errorCode}.`;
+    return null;
+  }
+
   async function getLatestIssueRun(companyId: string, issueId: string) {
     return db
       .select({
@@ -4172,7 +4184,7 @@ export function heartbeatService(db: Db) {
         sql`select id from issues where company_id = ${run.companyId} and execution_run_id = ${run.id} for update`,
       );
 
-      let issue: { id: string; companyId: string } | null = await tx
+      let issue: { id: string; companyId: string; assigneeAgentId: string | null } | null = await tx
         .select({
           id: issues.id,
           companyId: issues.companyId,
@@ -4206,6 +4218,7 @@ export function heartbeatService(db: Db) {
             id: issues.id,
             companyId: issues.companyId,
             executionRunId: issues.executionRunId,
+            assigneeAgentId: issues.assigneeAgentId,
           })
           .from(issues)
           .where(and(eq(issues.id, ctxIssueId), eq(issues.companyId, run.companyId)))
@@ -4218,7 +4231,7 @@ export function heartbeatService(db: Db) {
           // Issue not found, or a different run now owns the execution lock — skip.
           return null;
         }
-        issue = { id: candidate.id, companyId: candidate.companyId };
+        issue = { id: candidate.id, companyId: candidate.companyId, assigneeAgentId: candidate.assigneeAgentId };
       }
 
       await tx
