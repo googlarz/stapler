@@ -1608,6 +1608,7 @@ function isPrivateOrReservedIpv6(address: string) {
   if (lower.startsWith("2001:db8:") || lower === "2001:db8::") return true;
   if (lower.startsWith("2001:2:") || lower === "2001:2::") return true;
   if (lower.startsWith("2002:")) return true;
+  if (lower.startsWith("64:ff9b:")) return true;
   return false;
 }
 

@@ -92,6 +92,8 @@ describe("GET /invites/:token/test-resolution", () => {
     ["RFC1918 192.168/16", "http://192.168.1.10/api/health", "192.168.1.10"],
     ["link-local metadata", "http://169.254.169.254/latest/meta-data", "169.254.169.254"],
     ["multicast", "http://224.0.0.1/probe", "224.0.0.1"],
+    ["NAT64 well-known prefix", "https://gateway.example.test/health", "64:ff9b::0a00:0001"],
+    ["NAT64 local-use prefix", "https://gateway.example.test/health", "64:ff9b:1::0a00:0001"],
   ])("rejects %s targets before probing", async (_label, url, address) => {
     lookup.mockResolvedValue([{ address, family: address.includes(":") ? 6 : 4 }]);
     const app = createApp(createDbStub([createInvite()]));
