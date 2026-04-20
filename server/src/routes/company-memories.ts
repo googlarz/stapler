@@ -244,8 +244,8 @@ export function companyMemoryRoutes(db: Db) {
         res.status(400).json({ error: "Invalid body: expiresAt is not a valid datetime" });
         return;
       }
-      if (d <= new Date()) {
-        res.status(400).json({ error: "Invalid body: expiresAt must be in the future" });
+      if (d <= new Date(Date.now() + 60_000)) {
+        res.status(400).json({ error: "Invalid body: expiresAt must be at least 60 seconds in the future" });
         return;
       }
       parsedExpiresAt = d;
@@ -317,8 +317,8 @@ export function companyMemoryRoutes(db: Db) {
           res.status(400).json({ error: "Invalid body: expiresAt is not a valid datetime" });
           return;
         }
-        if (d <= new Date()) {
-          res.status(400).json({ error: "Invalid body: expiresAt must be in the future" });
+        if (d <= new Date(Date.now() + 60_000)) {
+          res.status(400).json({ error: "Invalid body: expiresAt must be at least 60 seconds in the future" });
           return;
         }
         update.expiresAt = d;
@@ -333,7 +333,10 @@ export function companyMemoryRoutes(db: Db) {
       return;
     }
 
-    const updated = await svc.patch(id, companyId, update);
+    // Agent tokens may only patch memories they created themselves.
+    const callerAgentId =
+      req.actor.type === "agent" ? req.actor.agentId ?? undefined : undefined;
+    const updated = await svc.patch(id, companyId, update, callerAgentId);
     if (!updated) {
       res.status(404).json({ error: "Memory not found" });
       return;

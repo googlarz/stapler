@@ -112,7 +112,7 @@ export class StaplerApiClient {
     }
 
     if (this.runId) {
-      headers["x-paperclip-run-id"] = this.runId;
+      headers["x-stapler-run-id"] = this.runId;
     }
 
     let response: Response;

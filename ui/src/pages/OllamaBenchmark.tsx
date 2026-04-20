@@ -54,13 +54,16 @@ export function OllamaBenchmark() {
 
     (async () => {
       try {
-        const effectiveUrl = baseUrl.replace(/\/$/, "");
-        const res = await fetch(`${effectiveUrl}/api/tags`, {
-          signal: AbortSignal.timeout(5000),
+        const res = await fetch("/api/instance/settings/ollama-proxy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ baseUrl, action: "tags" }),
+          signal: AbortSignal.timeout(8000),
         });
         if (cancelled) return;
         if (!res.ok) {
-          throw new Error(`Ollama responded with ${res.status}`);
+          const err = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(err.error ?? `Ollama responded with ${res.status}`);
         }
         const body = (await res.json()) as { models: { name: string }[] };
         if (cancelled) return;
@@ -103,7 +106,6 @@ export function OllamaBenchmark() {
   async function runBenchmark() {
     if (checkedCount === 0 || status === "running") return;
 
-    const effectiveUrl = baseUrl.replace(/\/$/, "");
     const toRun = selectedModels.map((m) => m.name);
 
     setResults([]);
@@ -119,13 +121,17 @@ export function OllamaBenchmark() {
       const start = performance.now();
 
       try {
-        const res = await fetch(`${effectiveUrl}/api/chat`, {
+        const res = await fetch("/api/instance/settings/ollama-proxy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: modelName,
-            messages: [{ role: "user", content: BENCH_PROMPT }],
-            stream: false,
+            baseUrl,
+            action: "chat",
+            payload: {
+              model: modelName,
+              messages: [{ role: "user", content: BENCH_PROMPT }],
+              stream: false,
+            },
           }),
           signal: controller.signal,
         });

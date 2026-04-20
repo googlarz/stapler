@@ -424,6 +424,8 @@ export function companyMemoryService(db: Db) {
         tags?: string[];
         expiresAt?: Date | null;
       },
+      /** When set, only rows created by this agent may be patched. */
+      callerAgentId?: string,
     ): Promise<CompanyMemory | null> => {
       const setValues: {
         updatedAt: ReturnType<typeof sql>;
@@ -437,6 +439,10 @@ export function companyMemoryService(db: Db) {
         setValues.expiresAt = update.expiresAt ?? null;
       }
 
+      const ownerFilter = callerAgentId
+        ? eq(companyMemories.createdByAgentId, callerAgentId)
+        : undefined;
+
       return db
         .update(companyMemories)
         .set(setValues)
@@ -445,6 +451,7 @@ export function companyMemoryService(db: Db) {
             eq(companyMemories.id, id),
             eq(companyMemories.companyId, companyId),
             isNull(companyMemories.wikiSlug),
+            ownerFilter,
           ),
         )
         .returning()

@@ -2662,7 +2662,7 @@ export function issueService(db: Db) {
         .where(
           and(
             eq(issues.status, "backlog"),
-            sql`${issues.scheduledFor} <= ${now}`,
+            sql`${issues.scheduledFor} <= ${now.toISOString()}`,
             isNull(issues.hiddenAt),
           ),
         );

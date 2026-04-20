@@ -89,6 +89,18 @@ export async function maybeLoadMemoriesForInjection(
       ? Math.min(config.companyWikiInjectionBudgetBytes, 200_000)
       : DEFAULT_COMPANY_WIKI_INJECTION_BUDGET_BYTES;
 
+  // Guard: combined wiki budget must not overflow small context-window models.
+  // Log a warning if agent + company wiki budgets together exceed 64 KB (~16K
+  // tokens) — likely to crowd out the real system prompt on 4K–8K models.
+  const combinedWikiBudget = wikiBudgetBytes + companyWikiBudgetBytes;
+  if (combinedWikiBudget > 65_536) {
+    console.warn(
+      `[memory-injection] Combined wiki budget ${combinedWikiBudget} bytes may overflow ` +
+        `small context-window models. Consider reducing wikiInjectionBudgetBytes or ` +
+        `companyWikiInjectionBudgetBytes in the agent's adapter config.`,
+    );
+  }
+
   const allCompanyWikiPages = await companySvc.wikiList(agent.companyId);
   const companyWikiByRecency = [...allCompanyWikiPages].sort(
     (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
