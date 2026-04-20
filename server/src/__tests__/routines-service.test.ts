@@ -28,6 +28,14 @@ import { routineService } from "../services/routines.ts";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
+const ROUTINES_TEST_TIMEOUT_MS = 15_000;
+const ROUTINES_HOOK_TIMEOUT_MS = 20_000;
+
+const routineTest = (
+  name: Parameters<typeof it>[0],
+  fn: Parameters<typeof it>[1],
+  timeout = ROUTINES_TEST_TIMEOUT_MS,
+) => it(name, fn, timeout);
 
 if (!embeddedPostgresSupport.supported) {
   console.warn(
@@ -42,7 +50,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-routines-service-");
     db = createDb(tempDb.connectionString);
-  }, 20_000);
+  }, ROUTINES_HOOK_TIMEOUT_MS);
 
   afterEach(async () => {
     await db.delete(activityLog);
@@ -59,11 +67,11 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     await db.delete(agents);
     await db.delete(companies);
     await db.delete(instanceSettings);
-  });
+  }, ROUTINES_HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await tempDb?.cleanup();
-  });
+  }, ROUTINES_HOOK_TIMEOUT_MS);
 
   async function seedFixture(opts?: {
     wakeup?: (
@@ -174,7 +182,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     return { companyId, agentId, issuePrefix, issueSvc, projectId, routine, svc, wakeups };
   }
 
-  it("cancels orphaned routine issues before creating a fresh execution issue", async () => {
+  routineTest("cancels orphaned routine issues before creating a fresh execution issue", async () => {
     const { agentId, companyId, issueSvc, routine, svc } = await seedFixture();
     const orphanedRunIds = [randomUUID(), randomUUID()];
     const orphanedHeartbeatRunIds = [randomUUID(), randomUUID()];
@@ -272,7 +280,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     ).toBe(true);
   });
 
-  it("does not overwrite completed routine runs when cleaning up reopened orphaned issues", async () => {
+  routineTest("does not overwrite completed routine runs when cleaning up reopened orphaned issues", async () => {
     const { agentId, companyId, issueSvc, routine, svc } = await seedFixture();
     const completedRunId = randomUUID();
     const completedHeartbeatRunId = randomUUID();
@@ -335,7 +343,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(routineIssues.map((issue) => issue.id)).toContain(run.linkedIssueId);
   });
 
-  it("creates draft routines without a project or default assignee", async () => {
+  routineTest("creates draft routines without a project or default assignee", async () => {
     const { companyId, svc } = await seedFixture();
 
     const routine = await svc.create(
@@ -360,7 +368,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(routine.status).toBe("paused");
   });
 
-  it("wakes the assignee when a routine creates a fresh execution issue", async () => {
+  routineTest("wakes the assignee when a routine creates a fresh execution issue", async () => {
     const { agentId, routine, svc, wakeups } = await seedFixture();
 
     const run = await svc.runRoutine(routine.id, { source: "manual" });
@@ -383,7 +391,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     ]);
   });
 
-  it("waits for the assignee wakeup to be queued before returning the routine run", async () => {
+  routineTest("waits for the assignee wakeup to be queued before returning the routine run", async () => {
     let wakeupResolved = false;
     const { routine, svc } = await seedFixture({
       wakeup: async () => {
@@ -399,7 +407,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(wakeupResolved).toBe(true);
   });
 
-  it("coalesces only when the existing routine issue has a live execution run", async () => {
+  routineTest("coalesces only when the existing routine issue has a live execution run", async () => {
     const { agentId, companyId, issueSvc, routine, svc } = await seedFixture();
     const previousRunId = randomUUID();
     const liveHeartbeatRunId = randomUUID();
@@ -532,7 +540,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(routineIssues[0]?.id).toBe(previousIssue.id);
   });
 
-  it("interpolates routine variables into the execution issue and stores resolved values", async () => {
+  routineTest("interpolates routine variables into the execution issue and stores resolved values", async () => {
     const { companyId, agentId, projectId, svc } = await seedFixture();
     const variableRoutine = await svc.create(
       companyId,
@@ -582,7 +590,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     });
   });
 
-  it("attaches the selected execution workspace to manually triggered routine issues", async () => {
+  routineTest("attaches the selected execution workspace to manually triggered routine issues", async () => {
     const { companyId, projectId, routine, svc } = await seedFixture();
     const projectWorkspaceId = randomUUID();
     const executionWorkspaceId = randomUUID();
@@ -644,7 +652,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     });
   });
 
-  it("runs draft routines with one-off agent and project overrides", async () => {
+  routineTest("runs draft routines with one-off agent and project overrides", async () => {
     const { companyId, agentId, projectId, svc } = await seedFixture();
     const draftRoutine = await svc.create(
       companyId,
@@ -687,7 +695,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     });
   });
 
-  it("rejects enabling automation for routines without a default agent", async () => {
+  routineTest("rejects enabling automation for routines without a default agent", async () => {
     const { companyId, svc } = await seedFixture();
     const draftRoutine = await svc.create(
       companyId,
@@ -711,7 +719,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     ).rejects.toThrow(/default agent required/i);
   });
 
-  it("blocks schedule triggers when required variables do not have defaults", async () => {
+  routineTest("blocks schedule triggers when required variables do not have defaults", async () => {
     const { companyId, agentId, projectId, svc } = await seedFixture();
     const variableRoutine = await svc.create(
       companyId,
@@ -743,7 +751,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     ).rejects.toThrow(/require defaults for required variables/i);
   });
 
-  it("treats malformed stored defaults as missing when validating schedule triggers", async () => {
+  routineTest("treats malformed stored defaults as missing when validating schedule triggers", async () => {
     const { companyId, agentId, projectId, svc } = await seedFixture();
     const variableRoutine = await svc.create(
       companyId,
@@ -791,7 +799,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     ).rejects.toThrow(/require defaults for required variables/i);
   });
 
-  it("serializes concurrent dispatches until the first execution issue is linked to a queued run", async () => {
+  routineTest("serializes concurrent dispatches until the first execution issue is linked to a queued run", async () => {
     const { routine, svc } = await seedFixture({
       wakeup: async (wakeupAgentId, wakeupOpts) => {
         const issueId =
@@ -839,7 +847,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(routineIssues).toHaveLength(1);
   });
 
-  it("fails the run and cleans up the execution issue when wakeup queueing fails", async () => {
+  routineTest("fails the run and cleans up the execution issue when wakeup queueing fails", async () => {
     const { routine, svc } = await seedFixture({
       wakeup: async () => {
         throw new Error("queue unavailable");
@@ -953,7 +961,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(blocker?.description).toContain("If this is a visual review routine and browser or vision access is unavailable");
   });
 
-  it("accepts standard second-precision webhook timestamps for HMAC triggers", async () => {
+  routineTest("accepts standard second-precision webhook timestamps for HMAC triggers", async () => {
     const { routine, svc } = await seedFixture();
     const { trigger, secretMaterial } = await svc.createTrigger(
       routine.id,
@@ -988,7 +996,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(run.linkedIssueId).toBeTruthy();
   });
 
-  it("accepts GitHub-style X-Hub-Signature-256 with github_hmac signing mode", async () => {
+  routineTest("accepts GitHub-style X-Hub-Signature-256 with github_hmac signing mode", async () => {
     const { routine, svc } = await seedFixture();
     const { trigger, secretMaterial } = await svc.createTrigger(
       routine.id,
@@ -1015,7 +1023,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(run.status).toBe("issue_created");
   });
 
-  it("rejects invalid signature for github_hmac signing mode", async () => {
+  routineTest("rejects invalid signature for github_hmac signing mode", async () => {
     const { routine, svc } = await seedFixture();
     const { trigger } = await svc.createTrigger(
       routine.id,
@@ -1037,7 +1045,7 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     ).rejects.toThrow();
   });
 
-  it("accepts any request with none signing mode", async () => {
+  routineTest("accepts any request with none signing mode", async () => {
     const { routine, svc } = await seedFixture();
     const { trigger } = await svc.createTrigger(
       routine.id,
