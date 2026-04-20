@@ -13,7 +13,7 @@ import {
   issueInboxArchives,
   issueRelations,
   issues,
-} from "@paperclipai/db";
+} from "@stapler/db";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
