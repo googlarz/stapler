@@ -3262,10 +3262,13 @@ export function heartbeatService(db: Db) {
     if (executionWorkspace.projectId && !readNonEmptyString(context.projectId)) {
       context.projectId = executionWorkspace.projectId;
     }
+    // Don't reuse runtime.sessionId across an adapter swap: the stored ID is in the
+    // prior adapter's format (e.g. opencode "ses_*" vs claude UUID) and the new adapter's
+    // CLI rejects it, hard-failing every heartbeat until manually cleared.
     const allowAgentRuntimeSessionFallback = shouldUseAgentRuntimeSessionForTaskScope({
       taskKey,
       resetTaskSession,
-    });
+    }) && runtime.adapterType === agent.adapterType;
     const runtimeSessionParamsForFallback = allowAgentRuntimeSessionFallback ? runtimeSessionParams : null;
     const runtimeSessionFallback = allowAgentRuntimeSessionFallback ? runtime.sessionId : null;
     let previousSessionDisplayId = truncateDisplayId(
