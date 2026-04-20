@@ -1596,10 +1596,24 @@ function isPrivateOrReservedIpv4(address: string) {
   return false;
 }
 
+function parseMappedIpv4Hex(address: string) {
+  const match = address.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (!match) return null;
+  const hi = Number.parseInt(match[1]!, 16);
+  const lo = Number.parseInt(match[2]!, 16);
+  if (!Number.isInteger(hi) || !Number.isInteger(lo)) return null;
+  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+}
+
 function isPrivateOrReservedIpv6(address: string) {
   const lower = address.toLowerCase();
-  const mappedIpv4 = lower.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
-  if (mappedIpv4?.[1]) return isPrivateOrReservedIpv4(mappedIpv4[1]);
+  if (lower.startsWith("::ffff:")) {
+    const mappedIpv4 = lower.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+    if (mappedIpv4?.[1]) return isPrivateOrReservedIpv4(mappedIpv4[1]);
+    const mappedIpv4Hex = parseMappedIpv4Hex(lower);
+    if (mappedIpv4Hex) return isPrivateOrReservedIpv4(mappedIpv4Hex);
+    return true;
+  }
   if (lower === "::" || lower === "::1") return true;
   if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
   if (/^fe[89ab]/.test(lower)) return true;

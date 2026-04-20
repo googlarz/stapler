@@ -87,6 +87,8 @@ describe("GET /invites/:token/test-resolution", () => {
     ["localhost", "http://localhost:3100/api/health", "127.0.0.1"],
     ["IPv4 loopback", "http://127.0.0.1:3100/api/health", "127.0.0.1"],
     ["IPv6 loopback", "http://[::1]:3100/api/health", "::1"],
+    ["IPv4-mapped IPv6 loopback hex", "http://[::ffff:7f00:1]/api/health", "::ffff:7f00:1"],
+    ["IPv4-mapped IPv6 RFC1918 hex", "http://[::ffff:c0a8:101]/api/health", "::ffff:c0a8:101"],
     ["RFC1918 10/8", "http://10.0.0.5/api/health", "10.0.0.5"],
     ["RFC1918 172.16/12", "http://172.16.10.5/api/health", "172.16.10.5"],
     ["RFC1918 192.168/16", "http://192.168.1.10/api/health", "192.168.1.10"],
