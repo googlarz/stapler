@@ -202,30 +202,13 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
       linkedIssueId: issue.id,
       completedAt: new Date(`2026-03-20T12:0${index}:00.000Z`),
     })));
-    await db.insert(heartbeatRuns).values({
-      id: orphanedExecutionHeartbeatRunId,
-      companyId,
-      agentId,
-      invocationSource: "assignment" as const,
-      triggerDetail: "system",
-      status: "completed" as const,
-      contextSnapshot: { issueId: orphanedIssues[0]!.id },
-      startedAt: new Date("2026-03-20T12:00:15.000Z"),
-      finishedAt: new Date("2026-03-20T12:00:20.000Z"),
-    });
-    await db
+    await Promise.all(orphanedIssues.map((issue, index) => db
       .update(issues)
       .set({
-        executionRunId: orphanedExecutionHeartbeatRunId,
-        executionLockedAt: new Date("2026-03-20T12:00:30.000Z"),
+        executionRunId: orphanedRunIds[index]!,
+        executionLockedAt: new Date(`2026-03-20T12:0${index}:30.000Z`),
       })
-      .where(eq(issues.id, orphanedIssues[0]!.id));
-    await db
-      .update(issues)
-      .set({
-        executionLockedAt: new Date("2026-03-20T12:01:30.000Z"),
-      })
-      .where(eq(issues.id, orphanedIssues[1]!.id));
+      .where(eq(issues.id, issue.id))));
 
     const detailBefore = await svc.getDetail(routine.id);
     expect(detailBefore?.activeIssue).toBeNull();
@@ -301,26 +284,15 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
       routineId: routine.id,
       triggerId: null,
       source: "manual",
-      status: "issue_created",
+      status: "completed",
       triggeredAt: new Date("2026-03-20T12:00:00.000Z"),
       linkedIssueId: reopenedIssue.id,
-      completedAt: new Date("2026-03-20T12:00:00.000Z"),
-    });
-    await db.insert(heartbeatRuns).values({
-      id: completedHeartbeatRunId,
-      companyId,
-      agentId,
-      invocationSource: "assignment",
-      triggerDetail: "system",
-      status: "completed",
-      contextSnapshot: { issueId: reopenedIssue.id },
-      startedAt: new Date("2026-03-20T12:00:30.000Z"),
-      finishedAt: new Date("2026-03-20T12:05:00.000Z"),
+      completedAt: new Date("2026-03-20T12:05:00.000Z"),
     });
     await db
       .update(issues)
       .set({
-        executionRunId: completedHeartbeatRunId,
+        executionRunId: completedRunId,
         executionLockedAt: new Date("2026-03-20T12:05:00.000Z"),
       })
       .where(eq(issues.id, reopenedIssue.id));
@@ -329,17 +301,21 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(run.status).toBe("issue_created");
     expect(run.linkedIssueId).not.toBe(reopenedIssue.id);
 
-    const routineIssues = await db
+    const storedCompletedRun = await db
       .select({
-        id: issues.id,
-        originRunId: issues.originRunId,
+        status: routineRuns.status,
+        failureReason: routineRuns.failureReason,
+        completedAt: routineRuns.completedAt,
       })
-      .from(issues)
-      .where(eq(issues.originId, routine.id));
+      .from(routineRuns)
+      .where(eq(routineRuns.id, completedRunId))
+      .then((rows) => rows[0] ?? null);
 
-    expect(routineIssues).toHaveLength(2);
-    expect(routineIssues.map((issue) => issue.id)).toContain(reopenedIssue.id);
-    expect(routineIssues.map((issue) => issue.id)).toContain(run.linkedIssueId);
+    expect(storedCompletedRun).toEqual({
+      status: "completed",
+      failureReason: null,
+      completedAt: new Date("2026-03-20T12:05:00.000Z"),
+    });
   });
 
   routineTest("creates draft routines without a project or default assignee", async () => {

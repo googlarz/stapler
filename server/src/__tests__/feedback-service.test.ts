@@ -25,6 +25,7 @@ import {
   issues,
 } from "@stapler/db";
 import { feedbackService } from "../services/feedback.ts";
+import { getEmbeddedPostgresTestSupport } from "./helpers/embedded-postgres.js";
 
 type EmbeddedPostgresInstance = {
   initialise(): Promise<void>;
@@ -92,7 +93,20 @@ async function startTempDatabase() {
   return { connectionString, dataDir, instance };
 }
 
-describe("feedbackService.saveIssueVote", () => {
+async function closeDbClient(db: ReturnType<typeof createDb> | undefined) {
+  await db?.$client?.end?.({ timeout: 0 });
+}
+
+const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
+const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
+
+if (!embeddedPostgresSupport.supported) {
+  console.warn(
+    `Skipping embedded Postgres feedback service tests on this host: ${embeddedPostgresSupport.reason ?? "unsupported environment"}`,
+  );
+}
+
+describeEmbeddedPostgres("feedbackService.saveIssueVote", () => {
   let db!: ReturnType<typeof createDb>;
   let svc!: ReturnType<typeof feedbackService>;
   let instance: EmbeddedPostgresInstance | null = null;
