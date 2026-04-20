@@ -25,7 +25,14 @@ import { Router } from "express";
 import type { Request } from "express";
 import { and, desc, eq, gte } from "drizzle-orm";
 import type { Db } from "@stapler/db";
-import { companies, pluginLogs, pluginWebhookDeliveries } from "@stapler/db";
+import {
+  agents,
+  companies,
+  heartbeatRuns,
+  pluginLogs,
+  pluginWebhookDeliveries,
+  projects,
+} from "@stapler/db";
 import type {
   PluginStatus,
   PaperclipPluginManifestV1,
@@ -47,8 +54,9 @@ import type { PluginStreamBus } from "../services/plugin-stream-bus.js";
 import type { PluginToolDispatcher } from "../services/plugin-tool-dispatcher.js";
 import type { ToolRunContext } from "@stapler/plugin-sdk";
 import { JsonRpcCallError, PLUGIN_RPC_ERROR_CODES } from "@stapler/plugin-sdk";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { assertAuthenticated, assertBoard, assertBoardOrgAccess, assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "./authz.js";
 import { validateInstanceConfig } from "../services/plugin-config-validator.js";
+import { badRequest, forbidden, notFound, unauthorized, unprocessable } from "../errors.js";
 
 /** UI slot declaration extracted from plugin manifest */
 type PluginUiSlotDeclaration = NonNullable<NonNullable<PaperclipPluginManifestV1["ui"]>["slots"]>[number];
@@ -357,6 +365,52 @@ export function pluginRoutes(
       })));
   }
 
+  function assertPluginBridgeScope(req: Request, companyId: unknown): string | undefined {
+    if (companyId === undefined || companyId === null) {
+      assertInstanceAdmin(req);
+      return undefined;
+    }
+    if (typeof companyId !== "string" || companyId.trim().length === 0) {
+      throw badRequest('"companyId" must be a non-empty string when provided');
+    }
+    assertCompanyAccess(req, companyId);
+    return companyId;
+  }
+
+  async function validateToolRunContextScope(runContext: ToolRunContext): Promise<string | null> {
+    const [agent] = await db
+      .select({ companyId: agents.companyId })
+      .from(agents)
+      .where(eq(agents.id, runContext.agentId))
+      .limit(1);
+    if (!agent || agent.companyId !== runContext.companyId) {
+      return '"runContext.agentId" does not belong to "runContext.companyId"';
+    }
+
+    const [run] = await db
+      .select({ companyId: heartbeatRuns.companyId, agentId: heartbeatRuns.agentId })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.id, runContext.runId))
+      .limit(1);
+    if (!run || run.companyId !== runContext.companyId) {
+      return '"runContext.runId" does not belong to "runContext.companyId"';
+    }
+    if (run.agentId !== runContext.agentId) {
+      return '"runContext.runId" does not belong to "runContext.agentId"';
+    }
+
+    const [project] = await db
+      .select({ companyId: projects.companyId })
+      .from(projects)
+      .where(eq(projects.id, runContext.projectId))
+      .limit(1);
+    if (!project || project.companyId !== runContext.companyId) {
+      return '"runContext.projectId" does not belong to "runContext.companyId"';
+    }
+
+    return null;
+  }
+
   /**
    * GET /api/plugins
    *
@@ -551,6 +605,11 @@ export function pluginRoutes(
     }
 
     assertCompanyAccess(req, runContext.companyId);
+    const scopeError = await validateToolRunContextScope(runContext);
+    if (scopeError) {
+      res.status(403).json({ error: scopeError });
+      return;
+    }
 
     // Verify the tool exists
     const registeredTool = toolDeps.toolDispatcher.getTool(tool);
@@ -826,9 +885,7 @@ export function pluginRoutes(
       return;
     }
 
-    if (body.companyId) {
-      assertCompanyAccess(req, body.companyId);
-    }
+    assertPluginBridgeScope(req, body.companyId);
 
     try {
       const result = await bridgeDeps.workerManager.call(
@@ -909,9 +966,7 @@ export function pluginRoutes(
       return;
     }
 
-    if (body.companyId) {
-      assertCompanyAccess(req, body.companyId);
-    }
+    assertPluginBridgeScope(req, body.companyId);
 
     try {
       const result = await bridgeDeps.workerManager.call(
@@ -992,9 +1047,7 @@ export function pluginRoutes(
       renderEnvironment?: PluginLauncherRenderContextSnapshot | null;
     } | undefined;
 
-    if (body?.companyId) {
-      assertCompanyAccess(req, body.companyId);
-    }
+    assertPluginBridgeScope(req, body?.companyId);
 
     try {
       const result = await bridgeDeps.workerManager.call(
@@ -1071,9 +1124,7 @@ export function pluginRoutes(
       renderEnvironment?: PluginLauncherRenderContextSnapshot | null;
     } | undefined;
 
-    if (body?.companyId) {
-      assertCompanyAccess(req, body.companyId);
-    }
+    assertPluginBridgeScope(req, body?.companyId);
 
     try {
       const result = await bridgeDeps.workerManager.call(
@@ -1836,7 +1887,7 @@ export function pluginRoutes(
    * - 400 if job not found, not active, already running, or worker unavailable
    */
   router.post("/plugins/:pluginId/jobs/:jobId/trigger", async (req, res) => {
-    assertBoard(req);
+    assertInstanceAdmin(req);
     if (!jobDeps) {
       res.status(501).json({ error: "Job scheduling is not enabled" });
       return;
