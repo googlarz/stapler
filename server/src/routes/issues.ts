@@ -610,7 +610,7 @@ export function issueRoutes(
   async function hasActiveCheckoutManagementOverride(
     actorAgentId: string,
     companyId: string,
-    assigneeAgentId: string | null,
+    assigneeAgentId: string,
   ) {
     const allowedByGrant = await access.hasPermission(
       companyId,
@@ -620,16 +620,18 @@ export function issueRoutes(
     );
     if (allowedByGrant) return true;
 
-    const actorAgent = await agentsSvc.getById(actorAgentId);
-    if (!actorAgent || actorAgent.companyId !== companyId) return false;
+    const companyAgents = await agentsSvc.list(companyId);
+    const agentsById = new Map(companyAgents.map((agent) => [agent.id, agent]));
+    const actorAgent = agentsById.get(actorAgentId);
+    if (!actorAgent) return false;
     if (canCreateAgentsLegacy(actorAgent)) return true;
 
     // Reporting-chain managers may intervene in an agent's active checkout
     // without taking the task over. Peers must own the checkout/run first.
-    let cursor = assigneeAgentId;
+    let cursor: string | null = assigneeAgentId;
     for (let depth = 0; cursor && depth < 50; depth += 1) {
-      const assignee = await agentsSvc.getById(cursor);
-      if (!assignee || assignee.companyId !== companyId) return false;
+      const assignee = agentsById.get(cursor);
+      if (!assignee) return false;
       if (assignee.reportsTo === actorAgentId) return true;
       cursor = assignee.reportsTo;
     }
@@ -648,7 +650,7 @@ export function issueRoutes(
       res.status(403).json({ error: "Agent authentication required" });
       return false;
     }
-    if (issue.status !== "in_progress") {
+    if (issue.status !== "in_progress" || issue.assigneeAgentId === null) {
       return true;
     }
     if (issue.assigneeAgentId !== actorAgentId) {

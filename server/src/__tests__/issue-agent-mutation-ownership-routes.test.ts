@@ -34,6 +34,7 @@ const mockAccessService = vi.hoisted(() => ({
 
 const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
+  list: vi.fn(),
   resolveByReference: vi.fn(),
 }));
 
@@ -185,6 +186,10 @@ describe("agent issue mutation checkout ownership", () => {
       if (id === peerAgentId) return makeAgent(peerAgentId);
       return null;
     });
+    mockAgentService.list.mockResolvedValue([
+      makeAgent(ownerAgentId),
+      makeAgent(peerAgentId),
+    ]);
     mockAgentService.resolveByReference.mockResolvedValue({ ambiguous: false, agent: null });
     mockIssueService.getById.mockResolvedValue(makeIssue());
     mockIssueService.getByIdentifier.mockResolvedValue(null);
@@ -348,6 +353,20 @@ describe("agent issue mutation checkout ownership", () => {
     }));
 
     const res = await request(createApp(peerActor())).patch(`/api/issues/${issueId}`).send({ title: "Todo update" });
+
+    expect(res.status).toBe(200);
+    expect(mockIssueService.assertCheckoutOwner).not.toHaveBeenCalled();
+    expect(mockIssueService.update).toHaveBeenCalled();
+  });
+
+  it("allows same-company agent mutations on unassigned in-progress issues", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({ assigneeAgentId: null }));
+    mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+      ...makeIssue({ assigneeAgentId: null }),
+      ...patch,
+    }));
+
+    const res = await request(createApp(peerActor())).patch(`/api/issues/${issueId}`).send({ title: "Claimable update" });
 
     expect(res.status).toBe(200);
     expect(mockIssueService.assertCheckoutOwner).not.toHaveBeenCalled();
