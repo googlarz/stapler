@@ -2346,9 +2346,8 @@ export function heartbeatService(db: Db) {
         await tx
           .update(issues)
           .set({
-            executionRunId: null,
-            executionAgentNameKey: null,
-            executionLockedAt: null,
+            executionRunId: retryRun.id,
+            executionLockedAt: now,
             updatedAt: now,
           })
           .where(and(eq(issues.id, issueId), eq(issues.companyId, run.companyId), eq(issues.executionRunId, run.id)));
@@ -2797,8 +2796,11 @@ export function heartbeatService(db: Db) {
     run: Pick<typeof heartbeatRuns.$inferSelect, "error" | "errorCode"> | null,
   ): string | null {
     if (!run) return null;
-    if (run.error) return ` Last error: ${run.error.slice(0, 200)}.`;
-    if (run.errorCode) return ` Last error code: ${run.errorCode}.`;
+    if (run.errorCode && run.error) {
+      return ` Latest retry failure: \`${run.errorCode}\` - ${run.error.slice(0, 200)}.`;
+    }
+    if (run.errorCode) return ` Latest retry failure: \`${run.errorCode}\`.`;
+    if (run.error) return ` Latest retry failure: ${run.error.slice(0, 200)}.`;
     return null;
   }
 
@@ -4319,6 +4321,26 @@ export function heartbeatService(db: Db) {
           continue;
         }
 
+        // Reopen the issue if it was completed — a deferred comment wake means the user
+        // expects a follow-up response even though the primary run already closed the issue.
+        // Only reopen after confirming the deferred agent is still invokable and still owns
+        // the issue, to avoid leaving a "done" issue as "in_progress" with no run to handle it.
+        const currentIssueStatus = await tx
+          .select({ status: issues.status })
+          .from(issues)
+          .where(eq(issues.id, issue.id))
+          .then((rows) => rows[0]?.status ?? null);
+        if (currentIssueStatus === "done") {
+          await tx
+            .update(issues)
+            .set({
+              status: "in_progress",
+              completedAt: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(issues.id, issue.id));
+        }
+
         const deferredPayload = parseObject(deferred.payload);
         const deferredContextSeed = parseObject(deferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
         const promotedContextSeed: Record<string, unknown> = { ...deferredContextSeed };
@@ -5333,6 +5355,8 @@ export function heartbeatService(db: Db) {
     reportRunActivity: clearDetachedRunWarning,
 
     reapOrphanedRuns,
+
+    reconcileStrandedAssignedIssues,
 
     resumeQueuedRuns,
 

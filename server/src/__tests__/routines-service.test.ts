@@ -202,13 +202,30 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
       linkedIssueId: issue.id,
       completedAt: new Date(`2026-03-20T12:0${index}:00.000Z`),
     })));
-    await Promise.all(orphanedIssues.map((issue, index) => db
+    await db.insert(heartbeatRuns).values({
+      id: orphanedExecutionHeartbeatRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment" as const,
+      triggerDetail: "system",
+      status: "completed" as const,
+      contextSnapshot: { issueId: orphanedIssues[0]!.id },
+      startedAt: new Date("2026-03-20T12:00:15.000Z"),
+      finishedAt: new Date("2026-03-20T12:00:20.000Z"),
+    });
+    await db
       .update(issues)
       .set({
-        executionRunId: orphanedRunIds[index]!,
-        executionLockedAt: new Date(`2026-03-20T12:0${index}:30.000Z`),
+        executionRunId: orphanedExecutionHeartbeatRunId,
+        executionLockedAt: new Date("2026-03-20T12:00:30.000Z"),
       })
-      .where(eq(issues.id, issue.id))));
+      .where(eq(issues.id, orphanedIssues[0]!.id));
+    await db
+      .update(issues)
+      .set({
+        executionLockedAt: new Date("2026-03-20T12:01:30.000Z"),
+      })
+      .where(eq(issues.id, orphanedIssues[1]!.id));
 
     const detailBefore = await svc.getDetail(routine.id);
     expect(detailBefore?.activeIssue).toBeNull();
@@ -289,10 +306,21 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
       linkedIssueId: reopenedIssue.id,
       completedAt: new Date("2026-03-20T12:05:00.000Z"),
     });
+    await db.insert(heartbeatRuns).values({
+      id: completedHeartbeatRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "completed",
+      contextSnapshot: { issueId: reopenedIssue.id },
+      startedAt: new Date("2026-03-20T12:00:15.000Z"),
+      finishedAt: new Date("2026-03-20T12:05:00.000Z"),
+    });
     await db
       .update(issues)
       .set({
-        executionRunId: completedRunId,
+        executionRunId: completedHeartbeatRunId,
         executionLockedAt: new Date("2026-03-20T12:05:00.000Z"),
       })
       .where(eq(issues.id, reopenedIssue.id));
@@ -499,20 +527,19 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     const detailBefore = await svc.getDetail(routine.id);
     expect(detailBefore?.activeIssue).toBeNull();
 
-    // The routine dispatch should coalesce into the stranded issue instead of
-    // throwing "duplicate key value violates unique constraint issues_open_routine_execution_uq".
+    // Orphan cleanup cancels the stranded issue and a fresh execution issue is created.
     const run = await svc.runRoutine(routine.id, { source: "schedule" });
-    expect(run.status).toBe("coalesced");
-    expect(run.linkedIssueId).toBe(previousIssue.id);
-    expect(run.coalescedIntoRunId).toBe(previousRunId);
+    expect(run.status).toBe("issue_created");
+    expect(run.linkedIssueId).not.toBe(previousIssue.id);
 
     const routineIssues = await db
-      .select({ id: issues.id })
+      .select({ id: issues.id, status: issues.status })
       .from(issues)
       .where(eq(issues.originId, routine.id));
 
-    expect(routineIssues).toHaveLength(1);
-    expect(routineIssues[0]?.id).toBe(previousIssue.id);
+    expect(routineIssues).toHaveLength(2);
+    expect(routineIssues.find((i) => i.id === previousIssue.id)?.status).toBe("cancelled");
+    expect(routineIssues.find((i) => i.id === run.linkedIssueId)?.status).toBe("todo");
   });
 
   routineTest("interpolates routine variables into the execution issue and stores resolved values", async () => {

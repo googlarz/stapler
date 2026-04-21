@@ -594,6 +594,12 @@ async function reconcileExecutionStateForIssues(
       return row;
     }
 
+    // in_review issues with a pending execution stage manage their own executionRunId
+    // via the execution stage machinery — skip reconciliation to avoid clearing it.
+    if (row.status === "in_review" && parseIssueExecutionState(row.executionState)?.status === "pending") {
+      return row;
+    }
+
     const activeCheckoutRun = row.checkoutRunId ? runMap.get(row.checkoutRunId) : null;
     const activeExecutionRun = row.executionRunId ? runMap.get(row.executionRunId) : null;
     const hasMatchingActiveExecution = runOwnsIssueExecution(row, activeExecutionRun ?? null);
@@ -2016,11 +2022,16 @@ export function issueService(db: Db) {
           sql`select id from issues where id = ${id} for update`,
         );
         const preCheckRow = await tx
-          .select({ checkoutRunId: issues.checkoutRunId, executionRunId: issues.executionRunId })
+          .select({ checkoutRunId: issues.checkoutRunId, executionRunId: issues.executionRunId, status: issues.status, executionState: issues.executionState })
           .from(issues)
           .where(eq(issues.id, id))
           .then((rows) => rows[0] ?? null);
         if (!preCheckRow?.executionRunId) return;
+        // in_review issues with a pending execution stage manage executionRunId via
+        // stage machinery — skip Fix C staleness clear so it isn't lost here.
+        if (preCheckRow.status === "in_review" && parseIssueExecutionState(preCheckRow.executionState)?.status === "pending") {
+          return;
+        }
         if (!preCheckRow.checkoutRunId) {
           await tx
             .update(issues)

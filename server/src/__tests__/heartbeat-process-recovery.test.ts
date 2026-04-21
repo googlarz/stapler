@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  activityLog,
   agentRuntimeState,
   agents,
   agentWakeupRequests,
@@ -11,6 +12,7 @@ import {
   createDb,
   heartbeatRunEvents,
   heartbeatRuns,
+  issueComments,
   issues,
 } from "@stapler/db";
 import {
@@ -68,6 +70,21 @@ async function waitForPidExit(pid: number, timeoutMs = 2_000) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return !isPidAlive(pid);
+}
+
+async function waitForRunToSettle(
+  heartbeat: ReturnType<typeof heartbeatService>,
+  runId: string,
+  timeoutMs = 500,
+) {
+  const terminalStatuses = ["succeeded", "failed", "cancelled", "completed"];
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const run = await heartbeat.getRun(runId);
+    if (run && terminalStatuses.includes(run.status)) return run;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return null;
 }
 
 async function spawnOrphanedProcessGroup() {
@@ -136,6 +153,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       }
     }
     cleanupPids.clear();
+    await db.delete(issueComments);
+    await db.delete(activityLog);
     await db.delete(issues);
     await db.delete(heartbeatRunEvents);
     await db.delete(heartbeatRuns);
@@ -898,26 +917,6 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     expect(mockTrackAgentFirstHeartbeat).toHaveBeenCalledWith(mockTelemetryClient, {
       agentRole: "engineer",
     });
-    const heartbeat = heartbeatService(db);
-
-    const result = await heartbeat.reconcileStrandedAssignedIssues();
-    expect(result.dispatchRequeued).toBe(1);
-    expect(result.continuationRequeued).toBe(0);
-    expect(result.escalated).toBe(0);
-    expect(result.issueIds).toEqual([issueId]);
-
-    const runs = await db
-      .select()
-      .from(heartbeatRuns)
-      .where(eq(heartbeatRuns.agentId, agentId));
-    expect(runs).toHaveLength(2);
-
-    const retryRun = runs.find((row) => row.id !== runId);
-    expect(retryRun?.id).toBeTruthy();
-    expect((retryRun?.contextSnapshot as Record<string, unknown>)?.retryReason).toBe("assignment_recovery");
-    if (retryRun) {
-      await waitForRunToSettle(heartbeat, retryRun.id);
-    }
   });
 
   it("blocks assigned todo work after the one automatic dispatch recovery was already used", async () => {

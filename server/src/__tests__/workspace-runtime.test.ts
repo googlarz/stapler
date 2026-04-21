@@ -19,16 +19,20 @@ import {
 } from "@stapler/db";
 import { eq } from "drizzle-orm";
 import {
+  buildWorkspaceRuntimeDesiredStatePatch,
   cleanupExecutionWorkspaceArtifacts,
   ensureServerWorkspaceLinksCurrent,
   ensureRuntimeServicesForRun,
+  listConfiguredRuntimeServiceEntries,
   normalizeAdapterManagedRuntimeServices,
   reconcilePersistedRuntimeServicesOnStartup,
   realizeExecutionWorkspace,
   releaseRuntimeServicesForRun,
   resetRuntimeServicesForTests,
   resolveShell,
+  resolveWorkspaceRuntimeReadinessTimeoutSec,
   sanitizeRuntimeServiceBaseEnv,
+  startRuntimeServicesForWorkspaceControl,
   stopRuntimeServicesForExecutionWorkspace,
   type RealizedExecutionWorkspace,
 } from "../services/workspace-runtime.ts";
@@ -337,7 +341,7 @@ describe("realizeExecutionWorkspace", () => {
     expect(first.cwd).toContain(path.join(".paperclip", "worktrees"));
     await expect(fs.stat(path.join(first.cwd, ".git"))).resolves.toBeTruthy();
     const redirectContents = await fs.readFile(path.join(first.cwd, ".beads", "redirect"), "utf8");
-    expect(path.resolve(first.cwd, redirectContents.trim())).toBe(path.join(repoRoot, ".beads"));
+    expect(await fs.realpath(path.resolve(first.cwd, redirectContents.trim()))).toBe(await fs.realpath(path.join(repoRoot, ".beads")));
 
     const second = await realizeExecutionWorkspace({
       base: {

@@ -1431,6 +1431,21 @@ function resolveServiceScopeId(input: {
   return { scopeType: "run" as const, scopeId: input.runId };
 }
 
+function looksLikeWorkspaceDevServerCommand(command: string) {
+  const normalized = command.trim().toLowerCase();
+  if (!normalized) return false;
+  return /(?:^|\s)(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?dev(?:\s|$)/.test(normalized);
+}
+
+export function resolveWorkspaceRuntimeReadinessTimeoutSec(service: Record<string, unknown>) {
+  const readiness = parseObject(service.readiness);
+  const explicitTimeoutSec = asNumber(readiness.timeoutSec, 0);
+  if (explicitTimeoutSec > 0) {
+    return Math.max(1, explicitTimeoutSec);
+  }
+  return looksLikeWorkspaceDevServerCommand(asString(service.command, "")) ? 90 : 30;
+}
+
 async function waitForReadiness(input: {
   service: Record<string, unknown>;
   url: string | null;
@@ -1438,7 +1453,7 @@ async function waitForReadiness(input: {
   const readiness = parseObject(input.service.readiness);
   const readinessType = asString(readiness.type, "");
   if (readinessType !== "http" || !input.url) return;
-  const timeoutSec = Math.max(1, asNumber(readiness.timeoutSec, 30));
+  const timeoutSec = resolveWorkspaceRuntimeReadinessTimeoutSec(input.service);
   const intervalMs = Math.max(100, asNumber(readiness.intervalMs, 500));
   const deadline = Date.now() + timeoutSec * 1000;
   let lastError = "service did not become ready";
@@ -1895,6 +1910,7 @@ async function stopRuntimeService(serviceId: string) {
 async function markPersistedRuntimeServicesStoppedForExecutionWorkspace(input: {
   db: Db;
   executionWorkspaceId: string;
+  runtimeServiceId?: string | null;
 }) {
   const now = new Date();
   await input.db
@@ -1910,6 +1926,9 @@ async function markPersistedRuntimeServicesStoppedForExecutionWorkspace(input: {
       and(
         eq(workspaceRuntimeServices.executionWorkspaceId, input.executionWorkspaceId),
         inArray(workspaceRuntimeServices.status, ["starting", "running"]),
+        input.runtimeServiceId != null
+          ? eq(workspaceRuntimeServices.id, input.runtimeServiceId)
+          : undefined,
       ),
     );
 }
@@ -1940,9 +1959,69 @@ function registerRuntimeService(db: Db | undefined, record: RuntimeServiceRecord
 
 function readRuntimeServiceEntries(config: Record<string, unknown>) {
   const runtime = parseObject(config.workspaceRuntime);
-  return Array.isArray(runtime.services)
-    ? runtime.services.filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
-    : [];
+  if (Array.isArray(runtime.services)) {
+    return runtime.services.filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null);
+  }
+  if (Array.isArray(runtime.commands)) {
+    return runtime.commands.filter(
+      (entry): entry is Record<string, unknown> =>
+        typeof entry === "object" && entry !== null && (entry as Record<string, unknown>).kind === "service",
+    );
+  }
+  return [];
+}
+
+type WorkspaceRuntimeDesiredState = "running" | "stopped";
+type WorkspaceRuntimeServiceStateMap = Record<string, WorkspaceRuntimeDesiredState>;
+
+export function listConfiguredRuntimeServiceEntries(config: Record<string, unknown>) {
+  return readRuntimeServiceEntries(config);
+}
+
+function readConfiguredServiceStates(config: Record<string, unknown>) {
+  const raw = parseObject(config.serviceStates);
+  const states: WorkspaceRuntimeServiceStateMap = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (value === "running" || value === "stopped") {
+      states[key] = value as WorkspaceRuntimeDesiredState;
+    }
+  }
+  return states;
+}
+
+export function buildWorkspaceRuntimeDesiredStatePatch(input: {
+  config: Record<string, unknown>;
+  currentDesiredState: WorkspaceRuntimeDesiredState | null;
+  currentServiceStates: WorkspaceRuntimeServiceStateMap | null | undefined;
+  action: "start" | "stop" | "restart";
+  serviceIndex?: number | null;
+}): {
+  desiredState: WorkspaceRuntimeDesiredState;
+  serviceStates: WorkspaceRuntimeServiceStateMap | null;
+} {
+  const configuredServices = listConfiguredRuntimeServiceEntries(input.config);
+  const fallbackState: WorkspaceRuntimeDesiredState = input.currentDesiredState === "running" ? "running" : "stopped";
+  const nextServiceStates: WorkspaceRuntimeServiceStateMap = {};
+
+  for (let index = 0; index < configuredServices.length; index += 1) {
+    nextServiceStates[String(index)] = input.currentServiceStates?.[String(index)] ?? fallbackState;
+  }
+
+  const nextState: WorkspaceRuntimeDesiredState = input.action === "stop" ? "stopped" : "running";
+  if (input.serviceIndex === undefined || input.serviceIndex === null) {
+    for (let index = 0; index < configuredServices.length; index += 1) {
+      nextServiceStates[String(index)] = nextState;
+    }
+  } else if (input.serviceIndex >= 0 && input.serviceIndex < configuredServices.length) {
+    nextServiceStates[String(input.serviceIndex)] = nextState;
+  }
+
+  const desiredState = Object.values(nextServiceStates).some((state) => state === "running") ? "running" : "stopped";
+
+  return {
+    desiredState,
+    serviceStates: Object.keys(nextServiceStates).length > 0 ? nextServiceStates : null,
+  };
 }
 
 export async function ensureRuntimeServicesForRun(input: {
@@ -2036,9 +2115,14 @@ export async function startRuntimeServicesForWorkspaceControl(input: {
   executionWorkspaceId?: string | null;
   config: Record<string, unknown>;
   adapterEnv: Record<string, string>;
+  serviceIndex?: number | null;
   onLog?: (stream: "stdout" | "stderr", chunk: string) => Promise<void>;
 }): Promise<RuntimeServiceRef[]> {
-  const rawServices = readRuntimeServiceEntries(input.config);
+  const allServices = readRuntimeServiceEntries(input.config);
+  const rawServices =
+    input.serviceIndex != null && input.serviceIndex >= 0 && input.serviceIndex < allServices.length
+      ? [allServices[input.serviceIndex]!]
+      : allServices;
   const refs: RuntimeServiceRef[] = [];
   const invocationId = input.invocationId ?? randomUUID();
 
@@ -2128,10 +2212,12 @@ export async function stopRuntimeServicesForExecutionWorkspace(input: {
   db?: Db;
   executionWorkspaceId: string;
   workspaceCwd?: string | null;
+  runtimeServiceId?: string | null;
 }) {
   const normalizedWorkspaceCwd = input.workspaceCwd ? path.resolve(input.workspaceCwd) : null;
   const matchingServiceIds = Array.from(runtimeServicesById.values())
     .filter((record) => {
+      if (input.runtimeServiceId != null && record.id !== input.runtimeServiceId) return false;
       if (record.executionWorkspaceId === input.executionWorkspaceId) return true;
       if (!normalizedWorkspaceCwd || !record.cwd) return false;
       const resolvedCwd = path.resolve(record.cwd);
@@ -2150,6 +2236,7 @@ export async function stopRuntimeServicesForExecutionWorkspace(input: {
     await markPersistedRuntimeServicesStoppedForExecutionWorkspace({
       db: input.db,
       executionWorkspaceId: input.executionWorkspaceId,
+      runtimeServiceId: input.runtimeServiceId,
     });
   }
 }

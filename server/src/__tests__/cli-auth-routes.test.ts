@@ -36,7 +36,7 @@ vi.mock("../services/index.js", () => ({
   deduplicateAgentName: vi.fn((name: string) => name),
 }));
 
-function createApp(actor: any) {
+function createApp(actor: any, db: any = {} as any) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -45,7 +45,7 @@ function createApp(actor: any) {
   });
   app.use(
     "/api",
-    accessRoutes({} as any, {
+    accessRoutes(db, {
       deploymentMode: "authenticated",
       deploymentExposure: "private",
       bindHost: "127.0.0.1",
@@ -60,7 +60,6 @@ describe("cli auth routes", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
-
   it("creates a CLI auth challenge with approval metadata", async () => {
     mockBoardAuthService.createCliAuthChallenge.mockResolvedValue({
       challenge: {
