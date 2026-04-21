@@ -18,6 +18,9 @@ import {
   MAX_EXCERPT_BYTES,
   parseJson,
   parseObject,
+  redactEnvForLogs,
+  renderTemplate,
+  resolvePathValue,
 } from "./server-utils.js";
 
 // ---------------------------------------------------------------------------
@@ -396,5 +399,105 @@ describe("joinPromptSections", () => {
     const sections = Array.from({ length: 100 }, (_, i) => `section ${i}`);
     const result = joinPromptSections(sections);
     expect(result.split("\n\n")).toHaveLength(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolvePathValue
+// ---------------------------------------------------------------------------
+
+describe("resolvePathValue", () => {
+  it("resolves a top-level key", () => {
+    expect(resolvePathValue({ name: "Alice" }, "name")).toBe("Alice");
+  });
+
+  it("resolves a nested dotted path", () => {
+    expect(resolvePathValue({ a: { b: { c: "deep" } } }, "a.b.c")).toBe("deep");
+  });
+
+  it("returns empty string for missing key", () => {
+    expect(resolvePathValue({ a: 1 }, "b")).toBe("");
+  });
+
+  it("returns empty string for path into non-object", () => {
+    expect(resolvePathValue({ a: "string" }, "a.nested")).toBe("");
+  });
+
+  it("returns empty string for null value", () => {
+    expect(resolvePathValue({ a: null }, "a")).toBe("");
+  });
+
+  it("converts number to string", () => {
+    expect(resolvePathValue({ count: 42 }, "count")).toBe("42");
+  });
+
+  it("converts boolean to string", () => {
+    expect(resolvePathValue({ flag: true }, "flag")).toBe("true");
+  });
+
+  it("JSON-stringifies nested objects", () => {
+    const result = resolvePathValue({ meta: { key: "val" } }, "meta");
+    expect(result).toBe('{"key":"val"}');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderTemplate
+// ---------------------------------------------------------------------------
+
+describe("renderTemplate", () => {
+  it("replaces a simple placeholder", () => {
+    expect(renderTemplate("Hello {{name}}!", { name: "World" })).toBe("Hello World!");
+  });
+
+  it("replaces multiple placeholders", () => {
+    const result = renderTemplate("{{a}} and {{b}}", { a: "X", b: "Y" });
+    expect(result).toBe("X and Y");
+  });
+
+  it("resolves nested path placeholder", () => {
+    const result = renderTemplate("Task: {{issue.title}}", {
+      issue: { title: "Fix the bug" },
+    });
+    expect(result).toBe("Task: Fix the bug");
+  });
+
+  it("leaves unknown placeholders as empty string", () => {
+    expect(renderTemplate("Value: {{missing}}", {})).toBe("Value: ");
+  });
+
+  it("handles whitespace inside braces", () => {
+    expect(renderTemplate("{{ name }}", { name: "Bob" })).toBe("Bob");
+  });
+
+  it("returns template unchanged when no placeholders", () => {
+    expect(renderTemplate("plain text", {})).toBe("plain text");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// redactEnvForLogs
+// ---------------------------------------------------------------------------
+
+describe("redactEnvForLogs", () => {
+  it("redacts env var with SECRET in name", () => {
+    const result = redactEnvForLogs({ MY_SECRET: "supersecret" });
+    expect(result.MY_SECRET).not.toBe("supersecret");
+    expect(result.MY_SECRET).toContain("***");
+  });
+
+  it("redacts ANTHROPIC_API_KEY", () => {
+    const result = redactEnvForLogs({ ANTHROPIC_API_KEY: "sk-ant-123" });
+    expect(result.ANTHROPIC_API_KEY).not.toBe("sk-ant-123");
+  });
+
+  it("preserves non-sensitive env vars", () => {
+    const result = redactEnvForLogs({ NODE_ENV: "production", PORT: "3100" });
+    expect(result.NODE_ENV).toBe("production");
+    expect(result.PORT).toBe("3100");
+  });
+
+  it("handles empty env", () => {
+    expect(redactEnvForLogs({})).toEqual({});
   });
 });

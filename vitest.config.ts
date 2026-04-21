@@ -7,6 +7,7 @@ export default defineConfig({
       "packages/db",
       "packages/adapter-utils",
       "packages/adapters/claude-local",
+      "packages/adapters/cursor-local",
       "packages/adapters/codex-local",
       "packages/adapters/gemini-local",
       "packages/adapters/ollama-local",
