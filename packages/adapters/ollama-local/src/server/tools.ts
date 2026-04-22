@@ -455,6 +455,56 @@ export const STAPLER_TOOLS: OllamaTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "stapler_delegate_task",
+      description:
+        "Delegate a task to another agent in the same company. Creates an issue, " +
+        "assigns it to the target agent, and wakes them immediately. Returns a " +
+        "delegationId (issue ID) you can poll with stapler_check_delegation. " +
+        "Use this to spawn subagents, divide parallel workstreams, or escalate " +
+        "specialized work to a purpose-built agent.",
+      parameters: {
+        type: "object",
+        properties: {
+          agentId: {
+            type: "string",
+            description: "ID of the target agent to delegate to.",
+          },
+          task: {
+            type: "string",
+            description: "Task description — becomes the issue title and body.",
+          },
+          context: {
+            type: "string",
+            description: "Additional background or constraints for the target agent.",
+          },
+        },
+        required: ["agentId", "task"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "stapler_check_delegation",
+      description:
+        "Check the status of a previously delegated task. Returns the current " +
+        "status and, once done, the target agent's most recent comment as the result. " +
+        "Poll every few minutes until status is 'done' or 'failed'.",
+      parameters: {
+        type: "object",
+        properties: {
+          delegationId: {
+            type: "string",
+            description: "The issue ID returned by stapler_delegate_task.",
+          },
+        },
+        required: ["delegationId"],
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -774,6 +824,78 @@ export async function executeStaplerTool(
         `${base}/api/outputs/${encodeURIComponent(id)}/versions`,
         { method: "POST", body: JSON.stringify(body), authToken },
       );
+    }
+
+    case "stapler_delegate_task": {
+      const targetAgentId = String(args.agentId ?? "").trim();
+      const task = String(args.task ?? "").trim();
+      if (!targetAgentId) return { error: "agentId is required" };
+      if (!task) return { error: "task is required" };
+
+      const issueBody: Record<string, unknown> = {
+        title: task,
+        description: typeof args.context === "string" && args.context.trim()
+          ? args.context.trim()
+          : undefined,
+        assigneeId: targetAgentId,
+      };
+
+      const issue = await paperclipFetch(
+        `${base}/api/companies/${encodeURIComponent(companyId)}/issues`,
+        { method: "POST", body: JSON.stringify(issueBody), authToken },
+      ) as Record<string, unknown>;
+
+      if (issue?.error) return issue;
+
+      const issueId = String(issue?.id ?? "");
+      if (!issueId) return { error: "Failed to create delegation issue", detail: issue };
+
+      // Wake the target agent immediately
+      await paperclipFetch(
+        `${base}/api/agents/${encodeURIComponent(targetAgentId)}/wakeup`,
+        { method: "POST", body: JSON.stringify({ reason: `Delegated task: ${task.slice(0, 100)}` }), authToken },
+      );
+
+      return {
+        delegationId: issueId,
+        issueUrl: `/issues/${issueId}`,
+        status: "delegated",
+        message: `Task delegated to agent ${targetAgentId}. Use stapler_check_delegation with delegationId "${issueId}" to check progress.`,
+      };
+    }
+
+    case "stapler_check_delegation": {
+      const delegationId = String(args.delegationId ?? "").trim();
+      if (!delegationId) return { error: "delegationId is required" };
+
+      const [issue, comments] = await Promise.all([
+        paperclipFetch(`${base}/api/issues/${encodeURIComponent(delegationId)}`, { authToken }) as Promise<Record<string, unknown>>,
+        paperclipFetch(`${base}/api/issues/${encodeURIComponent(delegationId)}/comments`, { authToken }) as Promise<unknown[]>,
+      ]);
+
+      if (issue?.error) return issue;
+
+      const issueStatus = String(issue?.status ?? "");
+      const status =
+        issueStatus === "done" ? "done"
+          : issueStatus === "in_progress" || issueStatus === "active" ? "in_progress"
+            : issueStatus === "cancelled" ? "failed"
+              : "pending";
+
+      const agentComments = Array.isArray(comments)
+        ? (comments as Array<Record<string, unknown>>).filter(
+            (c) => c.actorType === "agent" || c.type === "agent",
+          )
+        : [];
+      const latest = agentComments[agentComments.length - 1];
+
+      return {
+        delegationId,
+        status,
+        result: latest?.body ?? latest?.content ?? null,
+        issueStatus,
+        commentCount: agentComments.length,
+      };
     }
 
     default:

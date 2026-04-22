@@ -167,6 +167,16 @@ const memoryDeleteSchema = z.object({
   id: z.string().uuid(),
 });
 
+const delegateTaskSchema = z.object({
+  agentId: z.string().uuid({ message: "agentId must be a valid UUID" }),
+  task: z.string().trim().min(1).max(2000, "task must be at most 2000 characters"),
+  context: z.string().trim().max(8000).optional(),
+});
+
+const checkDelegationSchema = z.object({
+  delegationId: z.string().min(1, "delegationId is required"),
+});
+
 export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[] {
   return [
     makeTool(
@@ -766,6 +776,63 @@ export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[
       async ({ slug }) => {
         const companyId = client.resolveCompanyId();
         return client.requestJson("DELETE", `/companies/${encodeURIComponent(companyId)}/memories/wiki/${encodeURIComponent(slug)}`);
+      },
+    ),
+    makeTool(
+      "delegateTask",
+      "Delegate a task to another agent in the same company. Creates an issue, assigns it to the " +
+        "target agent, and wakes them immediately. Returns a delegationId (issue ID) you can poll " +
+        "with checkDelegation. Use this to spawn subagents, divide parallel workstreams, or hand off " +
+        "specialized work to a purpose-built agent.",
+      delegateTaskSchema,
+      async ({ agentId, task, context }) => {
+        const companyId = client.resolveCompanyId();
+        const issue = await client.requestJson("POST", `/companies/${encodeURIComponent(companyId)}/issues`, {
+          body: { title: task, description: context ?? undefined, assigneeId: agentId },
+        });
+        const issueId = (issue as Record<string, unknown>)?.id;
+        if (!issueId) throw new Error("Failed to create delegation issue");
+        // Wake the target agent
+        await client.requestJson("POST", `/agents/${encodeURIComponent(agentId)}/wakeup`, {
+          body: { reason: `Delegated task: ${task.slice(0, 100)}` },
+        }).catch(() => null); // non-fatal — agent may self-wake on issue assign
+        return {
+          delegationId: issueId,
+          issueUrl: `/issues/${issueId}`,
+          status: "delegated",
+          message: `Task delegated. Poll with checkDelegation({ delegationId: "${issueId}" }) to check progress.`,
+        };
+      },
+    ),
+    makeTool(
+      "checkDelegation",
+      "Check the status of a previously delegated task. Returns status ('pending', 'in_progress', " +
+        "'done', or 'failed') and, once done, the target agent's most recent comment as the result. " +
+        "Poll every few minutes until status is 'done' or 'failed'.",
+      checkDelegationSchema,
+      async ({ delegationId }) => {
+        const [issue, comments] = await Promise.all([
+          client.requestJson("GET", `/issues/${encodeURIComponent(delegationId)}`),
+          client.requestJson("GET", `/issues/${encodeURIComponent(delegationId)}/comments`),
+        ]);
+        const issueStatus = String((issue as Record<string, unknown>)?.status ?? "");
+        const status =
+          issueStatus === "done" ? "done"
+            : issueStatus === "in_progress" || issueStatus === "active" ? "in_progress"
+              : issueStatus === "cancelled" ? "failed"
+                : "pending";
+
+        const commentList = Array.isArray(comments) ? comments as Array<Record<string, unknown>> : [];
+        const agentComments = commentList.filter((c) => c.actorType === "agent" || c.type === "agent");
+        const latest = agentComments[agentComments.length - 1];
+
+        return {
+          delegationId,
+          status,
+          result: latest?.body ?? latest?.content ?? null,
+          issueStatus,
+          commentCount: agentComments.length,
+        };
       },
     ),
   ];
