@@ -74,6 +74,7 @@ import {
 } from "@stapler/adapter-utils";
 import { maybeLoadMemoriesForInjection } from "./memory-injection.js";
 import { maybeAutoExtractMemories } from "./memory-extractor.js";
+import { maybeScoreRun } from "./run-scorer.js";
 import { logActivity } from "./activity-log.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -4090,6 +4091,11 @@ export function heartbeatService(db: Db) {
       if (outcome === "succeeded" && stdoutExcerpt) {
         void maybeAutoExtractMemories(db, agent, run.id, stdoutExcerpt).catch((err) => {
           logger.warn({ err, runId: run.id }, "auto-memory extraction failed");
+        });
+        // Continuous scoring — Pillar 1 of the Quality Flywheel.
+        // Opt-in via `autoScoreRuns: true` in the agent's adapterConfig.
+        void maybeScoreRun(db, agent, run.id, stdoutExcerpt).catch((err) => {
+          logger.warn({ err, runId: run.id }, "run scoring failed");
         });
       }
     } catch (err) {

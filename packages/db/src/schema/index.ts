@@ -69,3 +69,4 @@ export { evalSuites } from "./eval_suites.js";
 export { evalCases } from "./eval_cases.js";
 export { evalRuns } from "./eval_runs.js";
 export { evalCaseResults } from "./eval_case_results.js";
+export { runScores } from "./run_scores.js";

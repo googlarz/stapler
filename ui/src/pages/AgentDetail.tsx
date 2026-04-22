@@ -11,6 +11,8 @@ import {
 import { companySkillsApi } from "../api/companySkills";
 import { budgetsApi } from "../api/budgets";
 import { heartbeatsApi } from "../api/heartbeats";
+import { qualityApi } from "../api/quality";
+import { RunScoreBadge } from "../components/RunScoreBadge";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { ApiError } from "../api/client";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
@@ -710,6 +712,7 @@ export function AgentDetail() {
     refetchInterval: 30_000,
     staleTime: 5_000,
   });
+
 
   const assignedIssues = (allIssues ?? [])
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -1481,6 +1484,12 @@ function AgentOverview({
   agentId: string;
   agentRouteId: string;
 }) {
+  const { data: qualityTrend } = useQuery({
+    queryKey: ["quality", "agentTrend", agent.id],
+    queryFn: () => qualityApi.agentTrend(agent.id),
+    enabled: !!agent.id,
+    staleTime: 30_000,
+  });
   return (
     <div className="space-y-8">
       {/* Latest Run */}
@@ -1499,6 +1508,37 @@ function AgentOverview({
         </ChartCard>
         <ChartCard title="Success Rate" subtitle="Last 14 days">
           <SuccessRateChart runs={runs} />
+        </ChartCard>
+        <ChartCard
+          title="Quality"
+          subtitle={
+            qualityTrend && qualityTrend.sampleSize > 0
+              ? `Last ${qualityTrend.windowDays} days · ${qualityTrend.sampleSize} runs`
+              : "Last 30 days"
+          }
+        >
+          <div className="flex flex-col items-start gap-2 py-2">
+            <RunScoreBadge
+              score={qualityTrend?.avgScore ?? null}
+              variant="full"
+              reasoning={
+                qualityTrend && qualityTrend.sampleSize === 0
+                  ? "No scored runs yet. Enable autoScoreRuns in the agent's adapter config."
+                  : undefined
+              }
+            />
+            {qualityTrend && qualityTrend.recent.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {qualityTrend.recent.slice(0, 8).map((r) => (
+                  <RunScoreBadge
+                    key={r.id}
+                    score={r.score}
+                    reasoning={r.reasoning ?? undefined}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </ChartCard>
       </div>
 
