@@ -3,7 +3,8 @@ import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
 import type { Db } from "@stapler/db";
-import { issueExecutionDecisions } from "@stapler/db";
+import { issueComments, issueExecutionDecisions } from "@stapler/db";
+import { eq } from "drizzle-orm";
 import {
   addIssueCommentSchema,
   createIssueAttachmentMetadataSchema,
@@ -61,6 +62,7 @@ import {
   SVG_CONTENT_TYPE,
 } from "../attachment-types.js";
 import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.js";
+import { runPostMortem } from "../services/post-mortem.js";
 import {
   applyIssueExecutionPolicyTransition,
   normalizeIssueExecutionPolicy,
@@ -3057,6 +3059,27 @@ export function issueRoutes(
       } catch (err) {
         logger.warn({ err, issueId: issue.id, traceId: result.traceId }, "failed to flush shared feedback trace immediately");
       }
+    }
+
+    // Pillar 3 — Failure → Rule pipeline.
+    // When a user thumbs-down an issue comment that was created by a run,
+    // look up the run ID and fire a post-mortem to extract a durable rule.
+    if (result.vote.vote === "down" && result.vote.targetType === "issue_comment" && result.vote.targetId) {
+      void (async () => {
+        try {
+          const commentRows = await db
+            .select({ createdByRunId: issueComments.createdByRunId })
+            .from(issueComments)
+            .where(eq(issueComments.id, result.vote.targetId!))
+            .limit(1);
+          const runId = commentRows[0]?.createdByRunId;
+          if (runId) {
+            await runPostMortem(db, runId, result.vote.reason ?? null);
+          }
+        } catch {
+          // Post-mortem failures must not affect the vote response.
+        }
+      })();
     }
 
     res.status(201).json(result.vote);

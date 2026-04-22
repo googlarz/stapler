@@ -12,6 +12,7 @@ import type { Db } from "@stapler/db";
 import { agents, heartbeatRuns, runScores } from "@stapler/db";
 import { assertCompanyAccess } from "./authz.js";
 import { notFound } from "../errors.js";
+import { runPostMortem } from "../services/post-mortem.js";
 
 const WINDOW_DAYS = 30;
 
@@ -101,6 +102,35 @@ export function qualityRoutes(db: Db) {
       .groupBy(runScores.agentId);
 
     res.json({ windowDays: WINDOW_DAYS, items: rows });
+  });
+
+  /**
+   * Manually trigger a post-mortem on a run (Pillar 3).
+   * Useful for runs that scored poorly but were auto-scored before the
+   * post-mortem pipeline was wired, or for re-running after fixing a rule.
+   */
+  router.post("/runs/:id/post-mortem", async (req, res) => {
+    const { id: runId } = req.params as { id: string };
+    const runRows = await db
+      .select({ companyId: runScores.companyId })
+      .from(runScores)
+      .where(eq(runScores.runId, runId))
+      .limit(1);
+    // Fall back to heartbeat_runs for runs without a score
+    const heartbeatRows = runRows.length === 0
+      ? await db
+          .select({ companyId: heartbeatRuns.companyId })
+          .from(heartbeatRuns)
+          .where(eq(heartbeatRuns.id, runId))
+          .limit(1)
+      : [];
+    const companyId = runRows[0]?.companyId ?? heartbeatRows[0]?.companyId;
+    if (!companyId) throw notFound("Run not found");
+    assertCompanyAccess(req, companyId);
+
+    const reason = (req.body as { reason?: string }).reason ?? null;
+    void runPostMortem(db, runId, reason).catch(() => {});
+    res.status(202).json({ runId, status: "post-mortem queued" });
   });
 
   /** List recent scores across a company (for timelines + drill-down). */

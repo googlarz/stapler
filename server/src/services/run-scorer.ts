@@ -19,6 +19,7 @@
 import type { Db } from "@stapler/db";
 import { agents, runScores } from "@stapler/db";
 import { judgeOutput } from "./eval-judge.js";
+import { maybeRunPostMortemOnLowScore } from "./post-mortem.js";
 
 const GENERIC_RUBRIC_VERSION = "generic-v1";
 
@@ -74,6 +75,14 @@ export async function scoreRun(
         judgeModel: inferJudgeModel(),
       })
       .returning();
+
+    // Pillar 3 — Failure → Rule pipeline. Fire a post-mortem for low-scoring runs.
+    if (row && judgement.score < 0.5) {
+      void maybeRunPostMortemOnLowScore(db, input.runId, judgement.score).catch(() => {
+        // Post-mortem failures must never crash the scorer.
+      });
+    }
+
     return row ?? null;
   } catch (err) {
     console.warn(`[run-scorer] failed to score run ${input.runId}:`, err);
