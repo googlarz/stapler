@@ -89,6 +89,8 @@ import {
   Repeat,
   SlidersHorizontal,
   Trash2,
+  Lightbulb,
+  X,
 } from "lucide-react";
 import {
   getClosedIsolatedExecutionWorkspaceMessage,
@@ -383,6 +385,7 @@ export function IssueDetail() {
     approvalId: string;
     action: "approve" | "reject";
   } | null>(null);
+  const [routingSuggestionDismissed, setRoutingSuggestionDismissed] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [attachmentDragActive, setAttachmentDragActive] = useState(false);
@@ -598,6 +601,23 @@ export function IssueDetail() {
     for (const a of agents ?? []) map.set(a.id, a);
     return map;
   }, [agents]);
+
+  /** Detect routing suggestion comment and resolve to agentId via agentMap */
+  const routingSuggestion = useMemo<{ agentId: string; agentName: string; body: string } | null>(() => {
+    if (!issue || issue.assigneeAgentId) return null; // already assigned
+    const suggComment = (comments ?? []).find((c) => c.body?.includes("Routing suggestion"));
+    if (!suggComment?.body) return null;
+    const match = /Assign to \*\*(.+?)\*\*/.exec(suggComment.body);
+    if (!match) return null;
+    const agentName = match[1];
+    // Find agentId by name
+    let agentId: string | null = null;
+    for (const [id, a] of agentMap) {
+      if (a.name === agentName) { agentId = id; break; }
+    }
+    if (!agentId) return null;
+    return { agentId, agentName, body: suggComment.body };
+  }, [issue, comments, agentMap]);
   const transcriptRuns = useMemo(
     () =>
       resolveIssueChatTranscriptRuns({
@@ -2145,6 +2165,29 @@ export function IssueDetail() {
                   </Button>
                 </div>
               ) : null}
+              {routingSuggestion && !routingSuggestionDismissed && (
+                <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-800 dark:bg-amber-950">
+                  <Lightbulb className="h-4 w-4 shrink-0 text-amber-500" />
+                  <span className="flex-1 text-amber-800 dark:text-amber-200">
+                    Suggested assignee: <strong>{routingSuggestion.agentName}</strong>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 border-amber-300 px-2 text-xs text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300"
+                    onClick={() => updateIssue.mutate({ assigneeAgentId: routingSuggestion.agentId })}
+                  >
+                    Assign
+                  </Button>
+                  <button
+                    className="text-amber-400 hover:text-amber-600 dark:hover:text-amber-200"
+                    onClick={() => setRoutingSuggestionDismissed(true)}
+                    aria-label="Dismiss suggestion"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
               <IssueChatThread
                 composerRef={commentComposerRef}
                 comments={commentsWithRunMeta}

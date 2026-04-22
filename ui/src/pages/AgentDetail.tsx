@@ -87,6 +87,17 @@ import {
   HelpCircle,
   FolderOpen,
   Sparkles,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  ArrowRightLeft,
+  BookOpen,
+  AlertTriangle,
+  CheckCircle,
+  Play,
+  ToggleLeft,
+  ToggleRight,
+  Wrench,
 } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -239,7 +250,7 @@ function scrollToContainerBottom(container: ScrollContainer, behavior: ScrollBeh
   container.scrollTo({ top: container.scrollHeight, behavior });
 }
 
-type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget" | "memories";
+type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget" | "memories" | "quality" | "collab" | "playbooks";
 
 function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "instructions" || value === "prompts") return "instructions";
@@ -248,6 +259,9 @@ function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "budget") return "budget";
   if (value === "memories") return "memories";
   if (value === "runs") return value;
+  if (value === "quality") return "quality";
+  if (value === "collab") return "collab";
+  if (value === "playbooks") return "playbooks";
   return "dashboard";
 }
 
@@ -775,7 +789,13 @@ export function AgentDetail() {
                 ? "budget"
                 : activeView === "memories"
                   ? "memories"
-                  : "dashboard";
+                  : activeView === "quality"
+                    ? "quality"
+                    : activeView === "collab"
+                      ? "collab"
+                      : activeView === "playbooks"
+                        ? "playbooks"
+                        : "dashboard";
     if (routeAgentRef !== canonicalAgentRef || urlTab !== canonicalTab) {
       navigate(`/agents/${canonicalAgentRef}/${canonicalTab}`, { replace: true });
       return;
@@ -1103,6 +1123,9 @@ export function AgentDetail() {
               { value: "configuration", label: "Configuration" },
               { value: "runs", label: "Runs" },
               { value: "memories", label: "Memories" },
+              { value: "quality", label: "Quality" },
+              { value: "collab", label: "Collaboration" },
+              { value: "playbooks", label: "Playbooks" },
               { value: "budget", label: "Budget" },
             ]}
             value={activeView}
@@ -1241,6 +1264,18 @@ export function AgentDetail() {
       ) : null}
 
       {activeView === "memories" && <AgentMemoryList agentId={agent.id} />}
+
+      {activeView === "quality" && (
+        <AgentQualityTab agentId={agent.id} />
+      )}
+
+      {activeView === "collab" && (
+        <AgentCollabTab agentId={agent.id} />
+      )}
+
+      {activeView === "playbooks" && (
+        <AgentPlaybooksTab agentId={agent.id} />
+      )}
 
       {/* Propose Tasks Dialog */}
       <Dialog open={proposeOpen} onOpenChange={setProposeOpen}>
@@ -4547,6 +4582,268 @@ function KeysTab({ agentId, companyId }: { agentId: string; companyId?: string }
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Quality Tab ───────────────────────────────────────────────────────────────
+
+function AgentQualityTab({ agentId }: { agentId: string }) {
+  const { data: trends } = useQuery({
+    queryKey: ["quality", "agentTrends", agentId],
+    queryFn: () => qualityApi.agentTrends(agentId),
+    staleTime: 30_000,
+  });
+  const { data: recent } = useQuery({
+    queryKey: ["quality", "agentTrend", agentId],
+    queryFn: () => qualityApi.agentTrend(agentId, 50),
+    staleTime: 30_000,
+  });
+
+  function WindowCard({ label, window: w }: { label: string; window: { windowDays: number; avgScore: number | null; sampleSize: number } }) {
+    return (
+      <div className="border border-border rounded-xl p-4 space-y-2">
+        <div className="text-xs text-muted-foreground font-medium">{label}</div>
+        <RunScoreBadge score={w.avgScore} variant="full" />
+        <div className="text-xs text-muted-foreground">{w.sampleSize} run{w.sampleSize !== 1 ? "s" : ""}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 pb-16">
+      <div>
+        <h2 className="text-sm font-medium">Rolling Averages</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">Quality scores over different time windows.</p>
+      </div>
+
+      {trends ? (
+        <div className="grid grid-cols-3 gap-4">
+          <WindowCard label="Last 7 days" window={trends.windows.d7} />
+          <WindowCard label="Last 30 days" window={trends.windows.d30} />
+          <WindowCard label="Last 90 days" window={trends.windows.d90} />
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      )}
+
+      {recent && recent.recent.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium">Recent Scored Runs</h2>
+          <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
+            {recent.recent.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                <RunScoreBadge score={s.score} reasoning={s.reasoning ?? undefined} />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-xs text-muted-foreground">{s.runId.slice(0, 8)}</span>
+                  {s.reasoning && (
+                    <p className="text-xs text-muted-foreground truncate">{s.reasoning}</p>
+                  )}
+                </div>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {new Date(s.judgedAt).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recent && recent.recent.length === 0 && (
+        <div className="flex flex-col items-center py-12 text-center text-sm text-muted-foreground gap-2">
+          <TrendingUp className="h-8 w-8 text-muted-foreground/40" />
+          <p>No scored runs yet.</p>
+          <p className="text-xs">Set <code className="bg-muted px-1 py-0.5 rounded">autoScoreRuns: true</code> in the adapter config.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Collaboration Tab ─────────────────────────────────────────────────────────
+
+function AgentCollabTab({ agentId }: { agentId: string }) {
+  const { data } = useQuery({
+    queryKey: ["collab", "stats", agentId],
+    queryFn: () => qualityApi.agentCollabStats(agentId),
+    staleTime: 30_000,
+  });
+
+  const items = data?.items ?? [];
+
+  function formatMs(ms: number | null): string {
+    if (ms == null) return "—";
+    if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+    if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+    return `${Math.round(ms / 3_600_000)}h`;
+  }
+
+  return (
+    <div className="space-y-6 pb-16">
+      <div>
+        <h2 className="text-sm font-medium">Delegation Partners</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Agents this agent delegates to, ranked by total delegations.
+        </p>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center py-12 text-center text-sm text-muted-foreground gap-2">
+          <ArrowRightLeft className="h-8 w-8 text-muted-foreground/40" />
+          <p>No delegation data yet.</p>
+          <p className="text-xs">Delegation edges are recorded when this agent creates and assigns issues to other agents.</p>
+        </div>
+      ) : (
+        <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
+          <div className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/30">
+            <span>Agent</span>
+            <span className="text-right">Delegations</span>
+            <span className="text-right">Successes</span>
+            <span className="text-right">Win Rate</span>
+            <span className="text-right">Avg Time</span>
+          </div>
+          {items.map((item) => {
+            const winRatePct = Math.round(item.winRate * 100);
+            return (
+              <div key={item.toAgentId} className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center">
+                <Link to={`/agents/${item.toAgentId}`} className="text-sm font-medium hover:underline no-underline truncate">
+                  {item.toAgentName}
+                </Link>
+                <span className="text-right text-sm tabular-nums">{item.totalDelegations}</span>
+                <span className="text-right text-sm tabular-nums">{item.successCount}</span>
+                <span className={cn(
+                  "text-right text-sm tabular-nums font-medium",
+                  winRatePct >= 70 ? "text-emerald-500" : winRatePct >= 40 ? "text-amber-500" : "text-rose-500"
+                )}>
+                  {winRatePct}%
+                </span>
+                <span className="text-right text-xs text-muted-foreground tabular-nums">
+                  {formatMs(item.avgRoundTripMs)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Playbooks Tab ─────────────────────────────────────────────────────────────
+
+function AgentPlaybooksTab({ agentId }: { agentId: string }) {
+  const queryClient = useQueryClient();
+  const { pushToast } = useToast();
+
+  const { data } = useQuery({
+    queryKey: ["playbooks", agentId],
+    queryFn: () => qualityApi.agentPlaybooks(agentId),
+    staleTime: 30_000,
+  });
+
+  const mineMutation = useMutation({
+    mutationFn: () => qualityApi.minePlaybooks(agentId),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["playbooks", agentId] });
+      pushToast({ title: `Mining complete — ${result.playbooksUpserted} playbook${result.playbooksUpserted !== 1 ? "s" : ""} updated`, tone: "success" });
+    },
+    onError: () => pushToast({ title: "Mining failed", tone: "error" }),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ playbookId, active }: { playbookId: string; active: boolean }) =>
+      qualityApi.updatePlaybook(agentId, playbookId, { active }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["playbooks", agentId] }),
+    onError: () => pushToast({ title: "Failed to update playbook", tone: "error" }),
+  });
+
+  const items = data?.items ?? [];
+
+  return (
+    <div className="space-y-6 pb-16">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-medium">Playbooks</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Step-by-step strategies mined from high-scoring runs.
+            Enable <code className="bg-muted px-1 py-0.5 rounded text-xs">enablePlaybooks: true</code> in the adapter config.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => mineMutation.mutate()}
+          disabled={mineMutation.isPending}
+          className="gap-1.5"
+        >
+          {mineMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
+          Mine now
+        </Button>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center py-12 text-center text-sm text-muted-foreground gap-2">
+          <BookOpen className="h-8 w-8 text-muted-foreground/40" />
+          <p>No playbooks yet.</p>
+          <p className="text-xs">Click "Mine now" after at least 3 high-scoring runs of similar tasks.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.map((pb) => {
+            let steps: string[] = [];
+            try { steps = JSON.parse(pb.steps) as string[]; } catch { /* */ }
+            const isActive = pb.active === 1;
+            return (
+              <div
+                key={pb.id}
+                className={cn(
+                  "border border-border rounded-xl p-4 space-y-3 transition-colors",
+                  !isActive && "opacity-50"
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{pb.title}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">v{pb.version}</span>
+                      {pb.abTesting === 1 && (
+                        <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 px-1.5 py-0.5 rounded">A/B</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {pb.sampleSize} run{pb.sampleSize !== 1 ? "s" : ""}
+                      {pb.winRate != null && ` · ${Math.round(pb.winRate * 100)}% win rate`}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 h-7 px-2 gap-1"
+                    onClick={() => toggleMutation.mutate({ playbookId: pb.id, active: !isActive })}
+                    disabled={toggleMutation.isPending}
+                  >
+                    {isActive
+                      ? <><ToggleRight className="h-4 w-4 text-emerald-500" /><span className="text-xs">Enabled</span></>
+                      : <><ToggleLeft className="h-4 w-4 text-muted-foreground" /><span className="text-xs">Disabled</span></>
+                    }
+                  </Button>
+                </div>
+
+                {steps.length > 0 && (
+                  <ol className="space-y-1">
+                    {steps.map((step, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <span className="shrink-0 w-4 text-right text-muted-foreground/50 font-mono">{i + 1}.</span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
