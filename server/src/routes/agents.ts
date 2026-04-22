@@ -2026,7 +2026,13 @@ export function agentRoutes(db: Db) {
         return [key];
       });
       if (changedKeys.some((k) => GATED_KEYS.has(k))) {
-        const decision = await runConfigGate(db, existing, changedKeys);
+        // Build the DB-level candidate patch so the gate evaluates the *proposed*
+        // config rather than the currently-persisted one.
+        const candidatePatch: Record<string, unknown> = {};
+        if ("adapterType" in patchData) candidatePatch.adapterType = patchData.adapterType;
+        if ("adapterConfig" in patchData) candidatePatch.adapterConfig = patchData.adapterConfig;
+        if ("runtimeConfig" in patchData) candidatePatch.runtimeConfig = patchData.runtimeConfig;
+        const decision = await runConfigGate(db, existing, changedKeys, candidatePatch as Parameters<typeof runConfigGate>[3]);
         if (decision && !decision.passed) {
           res.status(409).json({
             error: "config_gate_failed",

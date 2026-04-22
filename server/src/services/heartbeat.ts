@@ -4130,23 +4130,15 @@ export function heartbeatService(db: Db) {
         });
       }
 
-      // P6 — Organizational Learning: finalize routing outcome when run ends
-      // (regardless of outcome) so the routing suggester learns win/loss.
-      // P7 — Collaboration Learning: finalize delegation edge outcome.
+      // P6/P7 routing and delegation finalization has been moved to the issue
+      // status-transition path in routes/issues.ts. That fires when the issue
+      // itself reaches "done" or "cancelled", which is the correct semantic
+      // boundary (not when an individual run finishes, since an issue may have
+      // multiple retried runs before it resolves).
+      //
       // P8 — Workflow Learning: update playbook win rate.
       {
         const ctxSnapshot = run.contextSnapshot as Record<string, unknown> | null;
-        const ctxIssueId = readNonEmptyString(ctxSnapshot?.issueId);
-        if (ctxIssueId) {
-          const scoreForOutcome =
-            outcome === "succeeded" ? 1 : outcome === "failed" ? 0 : null;
-          void finalizeRoutingOutcome(db, ctxIssueId, scoreForOutcome).catch(() => {});
-          const delegationOutcome =
-            outcome === "succeeded" ? "succeeded"
-              : outcome === "cancelled" ? "cancelled"
-                : "failed";
-          void finalizeDelegationEdge(db, ctxIssueId, delegationOutcome).catch(() => {});
-        }
         // P8 — update playbook win rate if agent has playbooks enabled
         const taskTitle =
           readNonEmptyString(ctxSnapshot?.issueTitle) ??

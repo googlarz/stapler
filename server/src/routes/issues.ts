@@ -64,10 +64,11 @@ import {
 import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.js";
 import { runPostMortem } from "../services/post-mortem.js";
 import {
+  finalizeRoutingOutcome,
   maybePostRoutingSuggestion,
   recordRoutingOutcome,
 } from "../services/routing-suggester.js";
-import { recordDelegationEdge } from "../services/collaboration-analyzer.js";
+import { finalizeDelegationEdge, recordDelegationEdge } from "../services/collaboration-analyzer.js";
 import {
   applyIssueExecutionPolicyTransition,
   normalizeIssueExecutionPolicy,
@@ -1966,6 +1967,22 @@ export function issueRoutes(
     if (actor.runId) {
       await heartbeat.reportRunActivity(actor.runId).catch((err) =>
         logger.warn({ err, runId: actor.runId }, "failed to clear detached run warning after issue activity"));
+    }
+
+    // P6/P7 — Finalize routing outcome and delegation edge when the issue
+    // actually resolves (done or cancelled). This is the correct semantic
+    // boundary: an issue may have multiple retried runs before it closes, so
+    // finalizing on run completion (as we did before) would poison the
+    // learning tables with the first run's outcome rather than the final one.
+    const isNowTerminal =
+      (issue.status === "done" || issue.status === "cancelled") &&
+      existing.status !== "done" &&
+      existing.status !== "cancelled";
+    if (isNowTerminal) {
+      const routingScore = issue.status === "done" ? 1 : 0;
+      void finalizeRoutingOutcome(db, existing.id, routingScore).catch(() => {});
+      const delegationOutcome = issue.status === "done" ? "succeeded" : "cancelled";
+      void finalizeDelegationEdge(db, existing.id, delegationOutcome).catch(() => {});
     }
 
     // Build activity details with previous values for changed fields

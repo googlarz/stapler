@@ -10,9 +10,9 @@
  * (used by goal-decomposer to inject successful decomposition examples).
  */
 
-import { and, avg, desc, eq, isNotNull } from "drizzle-orm";
+import { and, avg, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "@stapler/db";
-import { decompositionOutcomes, issues, runScores } from "@stapler/db";
+import { decompositionOutcomes, heartbeatRuns, issues, runScores } from "@stapler/db";
 
 /** Normalise a goal title for lightweight similarity matching */
 function normTitle(title: string): string {
@@ -58,13 +58,20 @@ export async function finalizeDecompositionOutcome(
   companyId: string,
 ): Promise<void> {
   try {
-    // Get all issues for this goal that have run scores
+    // Correct join chain: run_scores.runId → heartbeat_runs.id → issues via
+    // contextSnapshot->>'issueId'. This is the only reliable link because
+    // heartbeat_runs has no direct FK to issues — the issue context is stored
+    // in the JSONB contextSnapshot field.
     const scoreRows = await db
       .select({
         avgScore: avg(runScores.score).mapWith(Number),
       })
       .from(runScores)
-      .innerJoin(issues, eq(issues.id, runScores.runId))
+      .innerJoin(heartbeatRuns, eq(heartbeatRuns.id, runScores.runId))
+      .innerJoin(
+        issues,
+        eq(issues.id, sql`(${heartbeatRuns.contextSnapshot}->>'issueId')::uuid`),
+      )
       .where(
         and(
           eq(issues.goalId, goalId),

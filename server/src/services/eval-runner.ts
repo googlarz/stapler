@@ -45,7 +45,8 @@ async function waitForRun(
       row.status === "succeeded" ||
       row.status === "failed" ||
       row.status === "cancelled" ||
-      row.status === "timed_out"
+      row.status === "timed_out" ||
+      row.status === "needs_review"  // Pillar 2: self-critique gate; treat as terminal
     ) {
       return row;
     }

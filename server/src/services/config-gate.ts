@@ -23,6 +23,12 @@ import type { Db } from "@stapler/db";
 import { agents, evalRuns, evalSuites } from "@stapler/db";
 import { runEvalSuite } from "./eval-runner.js";
 
+/** Subset of agent columns that gated config keys can touch. */
+type CandidatePatch = Partial<Pick<
+  typeof agents.$inferInsert,
+  "adapterType" | "adapterConfig" | "runtimeConfig"
+>>;
+
 /** Config keys that trigger the smoke gate when changed. */
 export const GATED_KEYS = new Set([
   "systemPrompt",
@@ -41,13 +47,18 @@ export type ConfigGateDecision =
 /**
  * Run the smoke eval suite for the given agent and return a gate decision.
  *
- * @param agent     Full agent row (must have smokeSuiteId set).
- * @param changedKeys  Keys that changed in this config update.
+ * @param agent          Full agent row (must have smokeSuiteId set).
+ * @param changedKeys    Keys that changed in this config update.
+ * @param candidatePatch The proposed DB-level changes that the eval should test.
+ *                       Applied temporarily before the eval run, then restored.
+ *                       Without this, the gate would evaluate the *current* config
+ *                       rather than the *proposed* one — rendering it useless.
  */
 export async function runConfigGate(
   db: Db,
   agent: typeof agents.$inferSelect,
   changedKeys: string[],
+  candidatePatch?: CandidatePatch,
 ): Promise<ConfigGateDecision | null> {
   // Skip gate if no suite pinned or no gated keys changed.
   if (!agent.smokeSuiteId) return null;
@@ -79,8 +90,27 @@ export async function runConfigGate(
     .returning();
   if (!newRun) return null;
 
-  // Run synchronously — the route awaits us.
-  await runEvalSuite(db, newRun.id);
+  // Temporarily write the candidate config so the eval wakeup reads the
+  // proposed values, not the currently-persisted ones.
+  if (candidatePatch && Object.keys(candidatePatch).length > 0) {
+    await db.update(agents).set(candidatePatch).where(eq(agents.id, agent.id));
+  }
+  try {
+    // Run synchronously — the route awaits us.
+    await runEvalSuite(db, newRun.id);
+  } finally {
+    // Always restore the original config, whether the eval passed or failed.
+    if (candidatePatch && Object.keys(candidatePatch).length > 0) {
+      await db
+        .update(agents)
+        .set({
+          adapterType: agent.adapterType ?? undefined,
+          adapterConfig: agent.adapterConfig ?? undefined,
+          runtimeConfig: agent.runtimeConfig ?? undefined,
+        })
+        .where(eq(agents.id, agent.id));
+    }
+  }
 
   // Re-read the finished run.
   const runRows = await db
