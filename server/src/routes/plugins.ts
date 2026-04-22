@@ -660,7 +660,7 @@ export function pluginRoutes(
    * - `500` — installation succeeded but manifest is missing (indicates a loader bug)
    */
   router.post("/plugins/install", async (req, res) => {
-    assertBoard(req);
+    assertInstanceAdmin(req);
     const { packageName, version, isLocalPath } = req.body as PluginInstallRequest;
 
     // Input validation
@@ -1279,7 +1279,7 @@ export function pluginRoutes(
    * Errors: 404 if plugin not found, 400 for lifecycle errors
    */
   router.delete("/plugins/:pluginId", async (req, res) => {
-    assertBoard(req);
+    assertInstanceAdmin(req);
     const { pluginId } = req.params;
     const purge = req.query.purge === "true";
 
@@ -1315,7 +1315,7 @@ export function pluginRoutes(
    * Errors: 404 if plugin not found, 400 for lifecycle errors
    */
   router.post("/plugins/:pluginId/enable", async (req, res) => {
-    assertBoard(req);
+    assertInstanceAdmin(req);
     const { pluginId } = req.params;
 
     const plugin = await resolvePlugin(registry, pluginId);
@@ -1353,7 +1353,7 @@ export function pluginRoutes(
    * Errors: 404 if plugin not found, 400 for lifecycle errors
    */
   router.post("/plugins/:pluginId/disable", async (req, res) => {
-    assertBoard(req);
+    assertInstanceAdmin(req);
     const { pluginId } = req.params;
     const body = req.body as { reason?: string } | undefined;
     const reason = body?.reason;
@@ -1512,7 +1512,7 @@ export function pluginRoutes(
    * Errors: 404 if plugin not found, 400 for lifecycle errors
    */
   router.post("/plugins/:pluginId/upgrade", async (req, res) => {
-    assertBoard(req);
+    assertInstanceAdmin(req);
     const { pluginId } = req.params;
     const body = req.body as { version?: string } | undefined;
     const version = body?.version;
@@ -1591,7 +1591,7 @@ export function pluginRoutes(
    * - 404 if plugin not found
    */
   router.post("/plugins/:pluginId/config", async (req, res) => {
-    assertBoard(req);
+    assertInstanceAdmin(req);
     const { pluginId } = req.params;
 
     const plugin = await resolvePlugin(registry, pluginId);
@@ -2301,6 +2301,76 @@ export function pluginRoutes(
       health,
       checkedAt: new Date().toISOString(),
     });
+  });
+
+  /**
+   * ALL /plugins/:pluginKey/api/*
+   *
+   * Dispatches manifest-declared scoped API routes to the plugin worker.
+   * The plugin manifest must declare `apiRoutes` with a matching routeKey.
+   * Company access is enforced via `companyResolution` config on the route.
+   */
+  router.all(/^\/plugins\/([^/]+)\/api\/(.+)$/, async (req, res) => {
+    const match = /^\/plugins\/([^/]+)\/api\/(.+)$/.exec(req.path);
+    if (!match) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const [, pluginKey, routePath] = match;
+
+    assertAuthenticated(req);
+
+    if (!bridgeDeps?.workerManager) {
+      res.status(503).json({ error: "Plugin bridge not available" });
+      return;
+    }
+
+    const plugin = await registry.getByKey(pluginKey);
+    if (!plugin) {
+      res.status(404).json({ error: "Plugin not found" });
+      return;
+    }
+
+    const manifest = plugin.manifestJson as unknown as Record<string, unknown> | null;
+    const apiRoutes = Array.isArray(manifest?.apiRoutes) ? (manifest.apiRoutes as Array<Record<string, unknown>>) : [];
+
+    const matchedRoute = apiRoutes.find((r) => {
+      const rPath = typeof r.path === "string" ? r.path.replace(/^\//, "") : "";
+      return rPath === routePath && typeof r.method === "string" && r.method.toUpperCase() === req.method.toUpperCase();
+    });
+
+    if (!matchedRoute) {
+      res.status(404).json({ error: "Plugin API route not found" });
+      return;
+    }
+
+    // Resolve companyId
+    const resolution = matchedRoute.companyResolution as { from?: string; key?: string } | undefined;
+    let companyId: string | undefined;
+    if (resolution?.from === "query" && typeof resolution.key === "string") {
+      const val = req.query[resolution.key];
+      companyId = typeof val === "string" ? val : undefined;
+    } else if (resolution?.from === "body" && typeof resolution.key === "string") {
+      companyId = typeof (req.body as Record<string, unknown>)?.[resolution.key] === "string"
+        ? (req.body as Record<string, unknown>)[resolution.key] as string
+        : undefined;
+    }
+
+    if (companyId) {
+      assertCompanyAccess(req, companyId);
+    }
+
+    const result = await bridgeDeps.workerManager.call(plugin.id, "handleApiRequest", {
+      routeKey: matchedRoute.routeKey,
+      method: req.method,
+      companyId: companyId ?? null,
+      query: req.query,
+      body: req.body,
+      headers: req.headers,
+    });
+
+    const status = typeof result?.status === "number" ? result.status : 200;
+    res.status(status).json(result?.body ?? result);
   });
 
   return router;

@@ -380,6 +380,8 @@ export interface HostToWorkerMethods {
   performAction: [params: PerformActionParams, result: unknown];
   /** @see PLUGIN_SPEC.md §13.10 */
   executeTool: [params: ExecuteToolParams, result: ToolResult];
+  /** Dispatches a manifest-declared scoped API route request to the worker. */
+  handleApiRequest: [params: Record<string, unknown>, result: { status: number; body: unknown }];
 }
 
 /** Union of all host→worker method names. */

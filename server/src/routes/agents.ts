@@ -50,6 +50,10 @@ import {
 import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { assertBoard, assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "./authz.js";
 import {
+  assertNoAgentHostWorkspaceCommandMutation,
+  collectAgentAdapterWorkspaceCommandPaths,
+} from "./workspace-command-authz.js";
+import {
   detectAdapterModel,
   findActiveServerAdapter,
   findServerAdapter,
@@ -318,9 +322,22 @@ export function agentRoutes(db: Db) {
     };
   }
 
+  async function assertBoardCanManageAgentsForCompany(req: Request, companyId: string) {
+    assertBoard(req);
+    assertCompanyAccess(req, companyId);
+    if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return;
+    const allowed = await access.canUser(companyId, req.actor.userId, "agents:create");
+    if (!allowed) {
+      throw forbidden("Missing permission: agents:create");
+    }
+  }
+
   async function assertCanUpdateAgent(req: Request, targetAgent: { id: string; companyId: string }) {
     assertCompanyAccess(req, targetAgent.companyId);
-    if (req.actor.type === "board") return;
+    if (req.actor.type === "board") {
+      await assertBoardCanManageAgentsForCompany(req, targetAgent.companyId);
+      return;
+    }
     if (!req.actor.agentId) throw forbidden("Agent authentication required");
 
     const actorAgent = await svc.getById(req.actor.agentId);
@@ -440,6 +457,18 @@ export function agentRoutes(db: Db) {
       }
     }
     return merged;
+  }
+
+  function assertNoAgentInstructionsConfigMutation(
+    req: Request,
+    adapterConfig: Record<string, unknown> | null | undefined,
+  ) {
+    if (req.actor.type !== "agent" || !adapterConfig) return;
+    const changedSensitiveKeys = KNOWN_INSTRUCTIONS_BUNDLE_KEYS.filter((key) => adapterConfig[key] !== undefined);
+    if (changedSensitiveKeys.length === 0) return;
+    throw forbidden(
+      `Agent-authenticated callers cannot modify instructions path or bundle configuration (${changedSensitiveKeys.join(", ")})`,
+    );
   }
 
   function parseBooleanLike(value: unknown): boolean | null {
@@ -613,19 +642,12 @@ export function agentRoutes(db: Db) {
 
   async function assertCanManageInstructionsPath(req: Request, targetAgent: { id: string; companyId: string }) {
     assertCompanyAccess(req, targetAgent.companyId);
-    if (req.actor.type === "board") return;
-    if (!req.actor.agentId) throw forbidden("Agent authentication required");
-
-    const actorAgent = await svc.getById(req.actor.agentId);
-    if (!actorAgent || actorAgent.companyId !== targetAgent.companyId) {
-      throw forbidden("Agent key cannot access another company");
+    if (req.actor.type !== "board") {
+      throw forbidden(
+        "Only board-authenticated callers can manage instructions path or bundle configuration",
+      );
     }
-    if (actorAgent.id === targetAgent.id) return;
-
-    const chainOfCommand = await svc.getChainOfCommand(targetAgent.id);
-    if (chainOfCommand.some((manager) => manager.id === actorAgent.id)) return;
-
-    throw forbidden("Only the target agent or an ancestor manager can update instructions path");
+    await assertBoardCanManageAgentsForCompany(req, targetAgent.companyId);
   }
 
   function summarizeAgentUpdateDetails(patch: Record<string, unknown>) {
@@ -993,7 +1015,7 @@ export function agentRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
     const result = await svc.list(companyId);
     const canReadConfigs = await actorCanReadConfigurationsForCompany(req, companyId);
-    if (canReadConfigs || req.actor.type === "board") {
+    if (canReadConfigs) {
       res.json(result);
       return;
     }
@@ -1338,6 +1360,7 @@ export function agentRoutes(db: Db) {
       hireInput.adapterType,
       ((hireInput.adapterConfig ?? {}) as Record<string, unknown>),
     );
+    assertNoAgentInstructionsConfigMutation(req, requestedAdapterConfig);
     const desiredSkillAssignment = await resolveDesiredSkillAssignment(
       companyId,
       hireInput.adapterType,
@@ -1912,6 +1935,11 @@ export function agentRoutes(db: Db) {
         res.status(422).json({ error: "adapterConfig must be an object" });
         return;
       }
+      assertNoAgentInstructionsConfigMutation(req, adapterConfig);
+      assertNoAgentHostWorkspaceCommandMutation(
+        req,
+        collectAgentAdapterWorkspaceCommandPaths(adapterConfig),
+      );
       const changingInstructionsPath = Object.keys(adapterConfig).some((key) =>
         KNOWN_INSTRUCTIONS_PATH_KEYS.has(key),
       );
@@ -2145,6 +2173,10 @@ export function agentRoutes(db: Db) {
   router.post("/agents/:id/keys", validate(createAgentKeySchema), async (req, res) => {
     assertBoard(req);
     const id = req.params.id as string;
+    const keyTarget = await svc.getById(id);
+    if (keyTarget) {
+      await assertBoardCanManageAgentsForCompany(req, keyTarget.companyId);
+    }
     const key = await svc.createApiKey(id, req.body.name);
 
     const agent = await svc.getById(id);
@@ -2182,6 +2214,9 @@ export function agentRoutes(db: Db) {
       return;
     }
     assertCompanyAccess(req, agent.companyId);
+    if (req.actor.type === "board") {
+      await assertBoardCanManageAgentsForCompany(req, agent.companyId);
+    }
     // Same-company agents may wake peer agents — this is the meta-agent
     // primitive. assertCompanyAccess above already bounds the caller to
     // agent.companyId; the self-only restriction is removed intentionally.

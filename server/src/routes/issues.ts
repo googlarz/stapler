@@ -49,6 +49,10 @@ import {
 import { logger } from "../middleware/logger.js";
 import { forbidden, HttpError, unauthorized, unprocessable } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import {
+  assertNoAgentHostWorkspaceCommandMutation,
+  collectIssueWorkspaceCommandPaths,
+} from "./workspace-command-authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import {
   isInlineAttachmentContentType,
@@ -637,6 +641,25 @@ export function issueRoutes(
     }
 
     return false;
+  }
+
+
+  function toValidTimestamp(value: Date | string | null | undefined) {
+    if (!value) return null;
+    const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  function isQueuedIssueCommentForActiveRun(params: {
+    comment: { authorAgentId?: string | null; createdAt?: Date | string | null };
+    activeRun: { agentId?: string | null; startedAt?: Date | string | null; createdAt?: Date | string | null };
+  }) {
+    const activeRunStartedAtMs =
+      toValidTimestamp(params.activeRun.startedAt) ?? toValidTimestamp(params.activeRun.createdAt);
+    const commentCreatedAtMs = toValidTimestamp(params.comment.createdAt);
+    if (activeRunStartedAtMs === null || commentCreatedAtMs === null) return false;
+    if (params.comment.authorAgentId && params.comment.authorAgentId === params.activeRun.agentId) return false;
+    return commentCreatedAtMs >= activeRunStartedAtMs;
   }
 
   async function assertAgentIssueMutationAllowed(

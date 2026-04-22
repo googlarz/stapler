@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIssueExecutionPolicyTransition, normalizeIssueExecutionPolicy, parseIssueExecutionState } from "../services/issue-execution-policy.ts";
+import { applyIssueExecutionPolicyTransition, assigneePrincipal, normalizeIssueExecutionPolicy, parseIssueExecutionState } from "../services/issue-execution-policy.ts";
 import type { IssueExecutionPolicy, IssueExecutionState } from "@stapler/shared";
 
 const coderAgentId = "11111111-1111-4111-8111-111111111111";
@@ -32,6 +32,38 @@ function approvalOnlyPolicy() {
     { type: "approval", participants: [{ type: "user", userId: ctoUserId }] },
   ]);
 }
+
+describe("assigneePrincipal", () => {
+  it("returns an agent principal when assigneeAgentId is set", () => {
+    expect(assigneePrincipal({ assigneeAgentId: coderAgentId })).toEqual({
+      type: "agent",
+      agentId: coderAgentId,
+      userId: null,
+    });
+  });
+
+  it("returns a user principal when only assigneeUserId is set", () => {
+    expect(assigneePrincipal({ assigneeUserId: ctoUserId })).toEqual({
+      type: "user",
+      userId: ctoUserId,
+      agentId: null,
+    });
+  });
+
+  it("prefers agentId over userId when both are set", () => {
+    const result = assigneePrincipal({ assigneeAgentId: coderAgentId, assigneeUserId: ctoUserId });
+    expect(result?.type).toBe("agent");
+    expect(result?.agentId).toBe(coderAgentId);
+  });
+
+  it("returns null when neither agentId nor userId is set", () => {
+    expect(assigneePrincipal({})).toBeNull();
+  });
+
+  it("returns null when both are null", () => {
+    expect(assigneePrincipal({ assigneeAgentId: null, assigneeUserId: null })).toBeNull();
+  });
+});
 
 describe("normalizeIssueExecutionPolicy", () => {
   it("returns null for null/undefined input", () => {

@@ -35,7 +35,7 @@ import {
   updateUserCompanyAccessSchema,
   PERMISSION_KEYS
 } from "@stapler/shared";
-import type { DeploymentExposure, DeploymentMode } from "@stapler/shared";
+import type { DeploymentExposure, DeploymentMode, PermissionKey } from "@stapler/shared";
 import {
   forbidden,
   conflict,

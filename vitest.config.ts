@@ -12,6 +12,7 @@ export default defineConfig({
       "packages/adapters/gemini-local",
       "packages/adapters/ollama-local",
       "packages/adapters/opencode-local",
+      "packages/adapters/openclaw-gateway",
       "packages/plugins/slack-sync",
       "server",
       "ui",

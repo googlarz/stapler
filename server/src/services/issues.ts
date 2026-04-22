@@ -2475,6 +2475,22 @@ export function issueService(db: Db) {
           return comment ? redactIssueComment(comment, censorUsernameInLogs) : null;
         })),
 
+    removeComment: async (commentId: string) => {
+      const { censorUsernameInLogs } = await instanceSettings.getGeneral();
+      return db.transaction(async (tx) => {
+        const [comment] = await tx
+          .delete(issueComments)
+          .where(eq(issueComments.id, commentId))
+          .returning();
+        if (!comment) return null;
+        await tx
+          .update(issues)
+          .set({ updatedAt: new Date() })
+          .where(eq(issues.id, comment.issueId));
+        return redactIssueComment(comment, censorUsernameInLogs);
+      });
+    },
+
     addComment: async (
       issueId: string,
       body: string,
