@@ -70,3 +70,4 @@ export { evalCases } from "./eval_cases.js";
 export { evalRuns } from "./eval_runs.js";
 export { evalCaseResults } from "./eval_case_results.js";
 export { runScores } from "./run_scores.js";
+export { goldenRuns } from "./golden_runs.js";

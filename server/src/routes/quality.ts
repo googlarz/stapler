@@ -9,8 +9,9 @@
 import { Router } from "express";
 import { and, avg, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "@stapler/db";
-import { agents, heartbeatRuns, runScores } from "@stapler/db";
+import { agents, goldenRuns, heartbeatRuns, runScores } from "@stapler/db";
 import { assertCompanyAccess } from "./authz.js";
+import { assertBoard } from "./authz.js";
 import { notFound } from "../errors.js";
 import { runPostMortem } from "../services/post-mortem.js";
 
@@ -158,6 +159,61 @@ export function qualityRoutes(db: Db) {
       .limit(limit);
 
     res.json({ items: rows });
+  });
+
+  // ── Golden Runs (Pillar 4) ──────────────────────────────────────────────────
+
+  /** List golden runs for an agent. */
+  router.get("/agents/:id/golden-runs", async (req, res) => {
+    const { id: agentId } = req.params as { id: string };
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    const agent = agentRows[0];
+    if (!agent) throw notFound("Agent not found");
+    assertCompanyAccess(req, agent.companyId);
+    const rows = await db
+      .select()
+      .from(goldenRuns)
+      .where(eq(goldenRuns.agentId, agentId))
+      .orderBy(desc(goldenRuns.createdAt));
+    res.json({ items: rows });
+  });
+
+  /** Mark a run as golden. Body: { runId, label, frozenScore? } */
+  router.post("/agents/:id/golden-runs", async (req, res) => {
+    assertBoard(req);
+    const { id: agentId } = req.params as { id: string };
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    const agent = agentRows[0];
+    if (!agent) throw notFound("Agent not found");
+    assertCompanyAccess(req, agent.companyId);
+    const { runId, label, frozenScore } = req.body as {
+      runId: string;
+      label: string;
+      frozenScore?: number;
+    };
+    const [row] = await db
+      .insert(goldenRuns)
+      .values({
+        companyId: agent.companyId,
+        agentId,
+        runId,
+        label: label ?? `golden-${new Date().toISOString().slice(0, 10)}`,
+        frozenScore: frozenScore ?? null,
+      })
+      .returning();
+    res.status(201).json(row);
+  });
+
+  /** Remove a golden run record. */
+  router.delete("/agents/:agentId/golden-runs/:id", async (req, res) => {
+    assertBoard(req);
+    const { agentId, id } = req.params as { agentId: string; id: string };
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    const agent = agentRows[0];
+    if (!agent) throw notFound("Agent not found");
+    assertCompanyAccess(req, agent.companyId);
+    await db.delete(goldenRuns).where(and(eq(goldenRuns.id, id), eq(goldenRuns.agentId, agentId)));
+    res.status(204).send();
   });
 
   return router;

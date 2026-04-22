@@ -2013,6 +2013,33 @@ export function agentRoutes(db: Db) {
       );
     }
 
+    // Pillar 4 — Config-change gate.
+    // If the agent has a smoke suite and gated keys changed, run the gate
+    // before applying the update. Pass ?gate=false to bypass.
+    const gateEnabled = req.query.gate !== "false";
+    if (gateEnabled && existing.smokeSuiteId) {
+      const { runConfigGate, GATED_KEYS } = await import("../services/config-gate.js");
+      const changedKeys = Object.keys(patchData).flatMap((key) => {
+        if (key === "adapterConfig" && hasOwn(patchData, "adapterConfig")) {
+          return Object.keys((patchData.adapterConfig as Record<string, unknown>) ?? {});
+        }
+        return [key];
+      });
+      if (changedKeys.some((k) => GATED_KEYS.has(k))) {
+        const decision = await runConfigGate(db, existing, changedKeys);
+        if (decision && !decision.passed) {
+          res.status(409).json({
+            error: "config_gate_failed",
+            message: decision.message,
+            runId: decision.runId,
+            score: decision.score,
+            baseline: decision.baseline,
+          });
+          return;
+        }
+      }
+    }
+
     const actor = getActorInfo(req);
     const previousHeartbeatPolicy = parseSchedulerHeartbeatPolicy(existing.runtimeConfig);
     const agent = await svc.update(id, patchData, {
