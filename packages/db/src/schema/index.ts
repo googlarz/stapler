@@ -65,3 +65,7 @@ export { pluginEntities } from "./plugin_entities.js";
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
+export { evalSuites } from "./eval_suites.js";
+export { evalCases } from "./eval_cases.js";
+export { evalRuns } from "./eval_runs.js";
+export { evalCaseResults } from "./eval_case_results.js";

@@ -323,3 +323,12 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./plugin.js";
+
+export {
+  createEvalSuiteSchema,
+  createEvalCaseSchema,
+  triggerEvalRunSchema,
+  type CreateEvalSuite,
+  type CreateEvalCase,
+  type TriggerEvalRun,
+} from "./eval.js";

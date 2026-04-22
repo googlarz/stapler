@@ -453,6 +453,8 @@
     { "idx": 64, "version": "7", "when": 1776278400000, "tag": "0064_wiki_slugs", "breakpoints": true },
     { "idx": 65, "version": "7", "when": 1776364800000, "tag": "0065_company_wiki_slug", "breakpoints": true },
     { "idx": 66, "version": "7", "when": 1776451200000, "tag": "0066_memory_expires_at", "breakpoints": true },
-    { "idx": 67, "version": "7", "when": 1776537600000, "tag": "0067_memory_embeddings", "breakpoints": true }
+    { "idx": 67, "version": "7", "when": 1776537600000, "tag": "0067_memory_embeddings", "breakpoints": true },
+    { "idx": 68, "version": "7", "when": 1776624000000, "tag": "0068_project_memories", "breakpoints": true },
+    { "idx": 69, "version": "7", "when": 1776710400000, "tag": "0069_evals", "breakpoints": true }
   ]
 }

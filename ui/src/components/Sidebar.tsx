@@ -14,6 +14,7 @@ import {
   FileText,
   BookOpen,
   Brain,
+  FlaskConical,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -106,6 +107,7 @@ export function Sidebar() {
           <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
           <SidebarNavItem to="/outputs" label="Outputs" icon={BookOpen} />
+          <SidebarNavItem to="/evals" label="Evals" icon={FlaskConical} />
         </SidebarSection>
 
         <SidebarProjects />

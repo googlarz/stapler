@@ -664,6 +664,12 @@ export {
   type PluginStateScopeKey,
   type SetPluginState,
   type ListPluginState,
+  createEvalSuiteSchema,
+  createEvalCaseSchema,
+  triggerEvalRunSchema,
+  type CreateEvalSuite,
+  type CreateEvalCase,
+  type TriggerEvalRun,
 } from "./validators/index.js";
 
 export { API_PREFIX, API } from "./api.js";

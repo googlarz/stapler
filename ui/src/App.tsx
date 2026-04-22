@@ -44,6 +44,8 @@ import { PluginPage } from "./pages/PluginPage";
 import { IssueChatUxLab } from "./pages/IssueChatUxLab";
 import { RunTranscriptUxLab } from "./pages/RunTranscriptUxLab";
 import { OrgChart } from "./pages/OrgChart";
+import { Evals } from "./pages/Evals";
+import { EvalSuiteDetail } from "./pages/EvalSuiteDetail";
 import { NewAgent } from "./pages/NewAgent";
 import { AuthPage } from "./pages/Auth";
 import { BoardClaimPage } from "./pages/BoardClaim";
@@ -176,6 +178,8 @@ function boardRoutes() {
       <Route path="execution-workspaces/:workspaceId/issues" element={<ExecutionWorkspaceDetail />} />
       <Route path="goals" element={<Goals />} />
       <Route path="goals/:goalId" element={<GoalDetail />} />
+      <Route path="evals" element={<Evals />} />
+      <Route path="evals/:suiteId" element={<EvalSuiteDetail />} />
       <Route path="outputs" element={<Outputs />} />
       <Route path="outputs/:outputId" element={<OutputDetail />} />
       <Route path="approvals" element={<Navigate to="/approvals/pending" replace />} />
