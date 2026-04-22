@@ -23,7 +23,7 @@ const CANDIDATE_SAMPLE = 200;    // recent outcomes to score against
 const MIN_WIN_RATE_SAMPLE = 3;   // need ≥3 wins to surface a suggestion
 
 /** Lower-case + strip common stop-words for lightweight similarity */
-function normTitle(title: string): string {
+export function normTitle(title: string): string {
   const STOP = new Set(["the","a","an","in","on","at","for","to","of","and","or","is","are","be","was","with","from","that","this","by","as","it"]);
   return title
     .toLowerCase()
@@ -34,7 +34,7 @@ function normTitle(title: string): string {
 }
 
 /** Jaccard similarity between two space-separated token strings */
-function jaccard(a: string, b: string): number {
+export function jaccard(a: string, b: string): number {
   const sa = new Set(a.split(" ").filter(Boolean));
   const sb = new Set(b.split(" ").filter(Boolean));
   if (sa.size === 0 && sb.size === 0) return 0;

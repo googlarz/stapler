@@ -11,13 +11,14 @@
  * starts so a slow run never causes a double-fire within the same minute.
  */
 
-import { and, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import type { Db } from "@stapler/db";
-import { evalSuites, evalRuns } from "@stapler/db";
+import { agents, companies, delegationEdges, evalSuites, evalRuns } from "@stapler/db";
 import { eq } from "drizzle-orm";
 import { parseCron, validateCron } from "./cron.js";
 import { runEvalSuite } from "./eval-runner.js";
 import { logActivity } from "./activity-log.js";
+import { runPlaybookMiningForCompany } from "./playbook-miner.js";
 
 function cronMatchesNow(expression: string, now: Date): boolean {
   try {
@@ -128,6 +129,55 @@ async function runEvalSuiteWithAlert(
   }
 }
 
+// ── Nightly jobs ──────────────────────────────────────────────────────────────
+
+const ORPHAN_HOURS = 4; // delegation edge is "orphan" if unresolved after 4 h
+
+/**
+ * Detect delegation edges that have been open (no resolvedAt) for more than
+ * ORPHAN_HOURS hours and log an activity event for each unique issue.
+ * Also runs playbook mining for every company with at least one agent that
+ * has `enablePlaybooks: true`.
+ */
+export async function tickNightlyJobs(db: Db, now: Date = new Date()): Promise<void> {
+  const cutoff = new Date(now.getTime() - ORPHAN_HOURS * 60 * 60 * 1000);
+
+  // ── Orphan delegation detection ────────────────────────────────────────────
+  const orphans = await db
+    .select({
+      id: delegationEdges.id,
+      companyId: delegationEdges.companyId,
+      fromAgentId: delegationEdges.fromAgentId,
+      toAgentId: delegationEdges.toAgentId,
+      issueId: delegationEdges.issueId,
+    })
+    .from(delegationEdges)
+    .where(and(isNull(delegationEdges.resolvedAt), lte(delegationEdges.createdAt, cutoff)));
+
+  for (const edge of orphans) {
+    await logActivity(db, {
+      companyId: edge.companyId,
+      actorType: "system",
+      actorId: "eval-scheduler",
+      action: "collab.orphan_delegation",
+      entityType: "issue",
+      entityId: edge.issueId ?? edge.fromAgentId,
+      details: {
+        edgeId: edge.id,
+        fromAgentId: edge.fromAgentId,
+        toAgentId: edge.toAgentId,
+        openSinceHours: ORPHAN_HOURS,
+      },
+    }).catch(() => {});
+  }
+
+  // ── Playbook mining ────────────────────────────────────────────────────────
+  const allCompanies = await db.select({ id: companies.id }).from(companies);
+  for (const company of allCompanies) {
+    await runPlaybookMiningForCompany(db, company.id).catch(() => {});
+  }
+}
+
 /**
  * Creates a scheduler that ticks every minute.
  * Returns a stop function that clears the interval.
@@ -141,10 +191,16 @@ export function createEvalScheduler(db: Db): { start: () => void; stop: () => vo
       // Align to the next minute boundary for predictable cron matching
       const msToNextMinute = 60_000 - (Date.now() % 60_000);
       setTimeout(() => {
-        void tickEvalScheduler(db).catch(console.error);
-        timer = setInterval(() => {
-          void tickEvalScheduler(db).catch(console.error);
-        }, 60_000);
+        const tick = () => {
+          const now = new Date();
+          void tickEvalScheduler(db, now).catch(console.error);
+          // Nightly jobs fire at 02:00 UTC
+          if (now.getUTCHours() === 2 && now.getUTCMinutes() === 0) {
+            void tickNightlyJobs(db, now).catch(console.error);
+          }
+        };
+        tick();
+        timer = setInterval(tick, 60_000);
         timer.unref?.();
       }, msToNextMinute);
     },

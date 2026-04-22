@@ -28,7 +28,7 @@ const OPENAI_MODEL = "gpt-4o-mini";
 const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
 const DEFAULT_OLLAMA_MODEL = "llama3.2";
 
-function normTitle(title: string): string {
+export function normTitle(title: string): string {
   const STOP = new Set(["the","a","an","in","on","at","for","to","of","and","or","is","are","be","was","with","from","that","this","by","as","it"]);
   return title
     .toLowerCase()
@@ -38,7 +38,7 @@ function normTitle(title: string): string {
     .join(" ");
 }
 
-function jaccard(a: string, b: string): number {
+export function jaccard(a: string, b: string): number {
   const sa = new Set(a.split(" ").filter(Boolean));
   const sb = new Set(b.split(" ").filter(Boolean));
   if (sa.size === 0 && sb.size === 0) return 0;
@@ -48,7 +48,7 @@ function jaccard(a: string, b: string): number {
 }
 
 /** Cluster run titles into groups by jaccard similarity (greedy) */
-function clusterTitles(
+export function clusterTitles(
   items: Array<{ norm: string; excerpt: string; score: number }>,
   threshold = 0.3,
 ): Array<Array<{ norm: string; excerpt: string; score: number }>> {
