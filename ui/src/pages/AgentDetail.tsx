@@ -1381,6 +1381,15 @@ function SummaryRow({ label, children }: { label: string; children: React.ReactN
 }
 
 function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: string }) {
+  const queryClient = useQueryClient();
+  const reviewMutation = useMutation({
+    mutationFn: ({ runId, action }: { runId: string; action: "approve" | "reject" }) =>
+      heartbeatsApi.review(runId, action),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["heartbeats"] });
+    },
+  });
+
   if (runs.length === 0) return null;
 
   const sorted = [...runs].sort(
@@ -1388,8 +1397,10 @@ function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: strin
   );
 
   const liveRun = sorted.find((r) => r.status === "running" || r.status === "queued");
-  const run = liveRun ?? sorted[0];
+  const pendingReviewRun = sorted.find((r) => r.status === "needs_review");
+  const run = liveRun ?? pendingReviewRun ?? sorted[0];
   const isLive = run.status === "running" || run.status === "queued";
+  const isNeedsReview = run.status === "needs_review";
   const statusInfo = runStatusIcons[run.status] ?? { icon: Clock, color: "text-neutral-400" };
   const StatusIcon = statusInfo.icon;
   const summaryRaw = run.resultJson
@@ -1416,29 +1427,22 @@ function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: strin
 
   return (
     <div className="space-y-3">
-      <div className="flex w-full items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
-          {isLive && (
-            <span className="relative flex h-2 w-2">
-              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
-            </span>
-          )}
-          {isLive ? "Live Run" : "Latest Run"}
-        </h3>
-        <Link
-          to={`/agents/${agentId}/runs/${run.id}`}
-          className="shrink-0 text-xs text-muted-foreground hover:text-foreground transition-colors no-underline"
-        >
-          View details &rarr;
-        </Link>
-      </div>
+      <h3 className="flex items-center gap-2 text-sm font-medium">
+        {isLive && (
+          <span className="relative flex h-2 w-2">
+            <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
+          </span>
+        )}
+        {isNeedsReview ? "Awaiting Review" : isLive ? "Live Run" : "Latest Run"}
+      </h3>
 
-      <Link
-        to={`/agents/${agentId}/runs/${run.id}`}
+      <div
         className={cn(
-          "block border rounded-lg p-4 space-y-2 w-full no-underline transition-colors hover:bg-muted/50 cursor-pointer",
-          isLive ? "border-cyan-500/30 shadow-[0_0_12px_rgba(6,182,212,0.08)]" : "border-border"
+          "border rounded-lg p-4 space-y-2 w-full transition-colors",
+          isLive ? "border-cyan-500/30 shadow-[0_0_12px_rgba(6,182,212,0.08)]"
+            : isNeedsReview ? "border-amber-400/40 shadow-[0_0_12px_rgba(251,191,36,0.08)]"
+            : "border-border"
         )}
       >
         <div className="flex items-center gap-2">
@@ -1462,7 +1466,38 @@ function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: strin
             <MarkdownBody className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">{summary}</MarkdownBody>
           </div>
         )}
-      </Link>
+
+        {isNeedsReview && (
+          <div className="flex items-center gap-2 pt-1 border-t border-amber-300/30">
+            <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
+              Self-critique flagged this run — review before it ships.
+            </span>
+            <button
+              type="button"
+              disabled={reviewMutation.isPending}
+              onClick={() => reviewMutation.mutate({ runId: run.id, action: "approve" })}
+              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              disabled={reviewMutation.isPending}
+              onClick={() => reviewMutation.mutate({ runId: run.id, action: "reject" })}
+              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors"
+            >
+              Reject
+            </button>
+          </div>
+        )}
+
+        <Link
+          to={`/agents/${agentId}/runs/${run.id}`}
+          className="block text-xs text-muted-foreground hover:text-foreground transition-colors no-underline text-right"
+        >
+          View details &rarr;
+        </Link>
+      </div>
     </div>
   );
 }

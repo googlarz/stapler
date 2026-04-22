@@ -60,6 +60,9 @@ export const statusBadge: Record<string, string> = {
   terminated: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
   pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300",
 
+  // Self-critique gate (Pillar 2)
+  needs_review: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
+
   // Approval statuses
   pending_approval: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
   revision_requested: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",

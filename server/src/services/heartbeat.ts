@@ -75,6 +75,7 @@ import {
 import { maybeLoadMemoriesForInjection } from "./memory-injection.js";
 import { maybeAutoExtractMemories } from "./memory-extractor.js";
 import { maybeScoreRun } from "./run-scorer.js";
+import { maybeSelfCritique } from "./self-critique.js";
 import { logActivity } from "./activity-log.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -3942,9 +3943,25 @@ export function heartbeatService(db: Db) {
         logSummary = await runLogStore.finalize(handle);
       }
 
+      // Pillar 2 — Self-Critique gate. If the agent has a selfCritiqueThreshold
+      // and the output scores below it, hold the run as "needs_review" so a
+      // human can approve or reject before it is treated as succeeded.
+      let critiqueNotes: string | null = null;
+      let effectiveSucceededStatus: "succeeded" | "needs_review" = "succeeded";
+      if (outcome === "succeeded" && stdoutExcerpt) {
+        try {
+          const { status: critiqueStatus, critique } = await maybeSelfCritique(agent, stdoutExcerpt);
+          effectiveSucceededStatus = critiqueStatus;
+          if (critique) critiqueNotes = `[self-critique ${Math.round(critique.score * 100)}%] ${critique.reasoning}`;
+        } catch (err) {
+          // Never block a run because the judge failed — just log and pass.
+          logger.warn({ err, runId: run.id }, "self-critique gate failed; treating run as succeeded");
+        }
+      }
+
       const status =
         outcome === "succeeded"
-          ? "succeeded"
+          ? effectiveSucceededStatus
           : outcome === "cancelled"
             ? "cancelled"
             : outcome === "timed_out"
@@ -3998,7 +4015,7 @@ export function heartbeatService(db: Db) {
 
       await setRunStatus(run.id, status, {
         finishedAt: new Date(),
-        error: persistedError,
+        error: persistedError ?? (status === "needs_review" ? critiqueNotes : null),
         errorCode:
           outcome === "timed_out"
             ? "timeout"
@@ -4036,7 +4053,9 @@ export function heartbeatService(db: Db) {
             exitCode: adapterResult.exitCode,
           },
         });
-        if (issueId && outcome === "succeeded") {
+        // Only post an issue comment for truly succeeded runs — not for
+        // needs_review runs (the comment fires after human approval instead).
+        if (issueId && outcome === "succeeded" && status === "succeeded") {
           try {
             const issueComment = buildHeartbeatRunIssueComment(persistedResultJson);
             if (issueComment) {
@@ -5411,6 +5430,22 @@ export function heartbeatService(db: Db) {
     },
 
     cancelRun: (runId: string) => cancelRunInternal(runId),
+
+    /**
+     * Pillar 2 — approve a run held in "needs_review".
+     * Transitions to "succeeded" and publishes a live event.
+     */
+    approveRun: async (runId: string) => {
+      return setRunStatus(runId, "succeeded");
+    },
+
+    /**
+     * Pillar 2 — reject a run held in "needs_review".
+     * Transitions to "failed" so it feeds the post-mortem pipeline (Pillar 3).
+     */
+    rejectRun: async (runId: string) => {
+      return setRunStatus(runId, "failed", { error: "Rejected by reviewer" });
+    },
 
     cancelActiveForAgent: (agentId: string, reason?: string) => cancelActiveForAgentInternal(agentId, reason),
 

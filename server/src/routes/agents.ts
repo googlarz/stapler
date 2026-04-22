@@ -2493,6 +2493,80 @@ export function agentRoutes(db: Db) {
     res.json(run);
   });
 
+  /**
+   * Approve or reject a run that is held in "needs_review" (Pillar 2 — Self-Critique gate).
+   * Body: { action: "approve" | "reject" }
+   *
+   * approve → transitions status to "succeeded"; posts issue comment if run is linked to an issue.
+   * reject  → transitions status to "failed"; error is set to the reviewer's note.
+   */
+  router.post("/heartbeat-runs/:runId/review", async (req, res) => {
+    assertBoard(req);
+    const runId = req.params.runId as string;
+    const { action } = req.body as { action?: string };
+    if (action !== "approve" && action !== "reject") {
+      res.status(400).json({ error: "action must be 'approve' or 'reject'" });
+      return;
+    }
+
+    const existing = await heartbeat.getRun(runId);
+    if (!existing) throw notFound("Heartbeat run not found");
+    assertCompanyAccess(req, existing.companyId);
+
+    if (existing.status !== "needs_review") {
+      res.status(409).json({ error: "Run is not in needs_review status" });
+      return;
+    }
+
+    if (action === "approve") {
+      const approved = await heartbeat.approveRun(runId);
+      if (approved) {
+        // Post issue comment now that a human approved the output.
+        const issueId = (approved.contextSnapshot as Record<string, unknown> | null)?.["issueId"];
+        if (typeof issueId === "string" && issueId) {
+          try {
+            const { buildHeartbeatRunIssueComment } = await import("../services/heartbeat-run-summary.js");
+            const comment = buildHeartbeatRunIssueComment(
+              approved.resultJson as Record<string, unknown> | null,
+            );
+            if (comment) {
+              await issueService(db).addComment(issueId, comment, {
+                agentId: approved.agentId,
+                runId: approved.id,
+              });
+            }
+          } catch {
+            // Best-effort — don't fail the approval if the comment fails.
+          }
+        }
+        await logActivity(db, {
+          companyId: approved.companyId,
+          actorType: "user",
+          actorId: req.actor.userId ?? "board",
+          action: "heartbeat.approved",
+          entityType: "heartbeat_run",
+          entityId: approved.id,
+          details: { agentId: approved.agentId },
+        });
+      }
+      res.json(approved);
+    } else {
+      const rejected = await heartbeat.rejectRun(runId);
+      if (rejected) {
+        await logActivity(db, {
+          companyId: rejected.companyId,
+          actorType: "user",
+          actorId: req.actor.userId ?? "board",
+          action: "heartbeat.rejected",
+          entityType: "heartbeat_run",
+          entityId: rejected.id,
+          details: { agentId: rejected.agentId },
+        });
+      }
+      res.json(rejected);
+    }
+  });
+
   router.get("/heartbeat-runs/:runId/events", async (req, res) => {
     const runId = req.params.runId as string;
     const run = await heartbeat.getRun(runId);

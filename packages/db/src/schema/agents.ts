@@ -4,6 +4,7 @@ import {
   uuid,
   text,
   integer,
+  real,
   timestamp,
   jsonb,
   index,
@@ -27,6 +28,12 @@ export const agents = pgTable(
     runtimeConfig: jsonb("runtime_config").$type<Record<string, unknown>>().notNull().default({}),
     budgetMonthlyCents: integer("budget_monthly_cents").notNull().default(0),
     spentMonthlyCents: integer("spent_monthly_cents").notNull().default(0),
+    /**
+     * Pillar 2 — Self-Critique gate. When set, runs whose self-critique score
+     * falls below this value transition to "needs_review" instead of "succeeded".
+     * 0.0–1.0. Null means the gate is disabled (default).
+     */
+    selfCritiqueThreshold: real("self_critique_threshold"),
     pauseReason: text("pause_reason"),
     pausedAt: timestamp("paused_at", { withTimezone: true }),
     permissions: jsonb("permissions").$type<Record<string, unknown>>().notNull().default({}),
