@@ -29,7 +29,7 @@ Describe a mission. Hire agents. Set goals. Let the org run itself.
 
 ---
 
-**Stapler** is a personal fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip), built for running a real AI-first company on your own machine. It keeps everything good about upstream Paperclip — multi-adapter, self-hosted, wizard onboarding — and adds the parts a long-running org actually needs: **semantic memory search, auto-tagging, cross-agent knowledge sharing, meta-agent orchestration, TTL memories, and a full audit trail**.
+**Stapler** is a personal fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip), built for running a real AI-first company on your own machine. It keeps everything good about upstream Paperclip — multi-adapter, self-hosted, wizard onboarding — and adds the parts a long-running org actually needs: **semantic memory search, auto-tagging, cross-agent knowledge sharing, meta-agent orchestration, TTL memories, a full audit trail, and a compounding Quality Flywheel that makes every agent measurably better over time**.
 
 Agents run on any adapter the platform supports — **Claude**, **Gemini**, **Codex**, **Cursor**, **Ollama** (fully local), **OpenCode**, and more. Different agents in the same company can use different adapters. Different memories can be keyword-searched (free, always on) or semantically searched (opt-in, one env var away).
 
@@ -61,6 +61,14 @@ Agents run on any adapter the platform supports — **Claude**, **Gemini**, **Co
 | Run cost display (USD, per run) | ✅ | ❌ |
 | Outputs — living versioned documents | ✅ | ❌ |
 | Default model per company | ✅ | ❌ |
+| **Quality Flywheel** — every run auto-scored (P1) | ✅ | ❌ |
+| Self-critique gate — agents review own output before submit (P2) | ✅ | ❌ |
+| Failure → Rule pipeline — 👎 + low scores become guardrails (P3) | ✅ | ❌ |
+| Config-change gate — smoke eval blocks regressions (P4) | ✅ | ❌ |
+| Quality dashboard + drift detection — per-agent trendlines (P5) | ✅ | ❌ |
+| **Meta-Flywheel** — routing suggester learns who resolves what (P6) | ✅ | ❌ |
+| Collaboration learning — delegation edge win rates + anti-patterns (P7) | ✅ | ❌ |
+| Workflow playbooks — mined from high-scoring runs, A/B tested (P8) | ✅ | ❌ |
 
 ---
 
@@ -128,6 +136,40 @@ pnpm stapler run                     # long-running server mode
 ```
 
 Everything is visible in the React UI. You can intervene at any point — edit instructions, create issues manually, wake agents, or just watch.
+
+---
+
+## Quality Flywheel + Meta-Flywheel
+
+Stapler ships two nested compounding loops — the only open-source agent platform that closes feedback from production all the way back into agent behavior and organizational structure.
+
+### Quality Flywheel (Pillars 1–5) — better output every run
+
+| Pillar | What it does |
+|--------|-------------|
+| **P1 Continuous Scoring** | Every successful heartbeat run is automatically graded by an LLM judge against issue acceptance criteria or a generic quality rubric. Score stored in `run_scores`; rolling 7d/30d/90d trends visible on each agent's Quality tab. |
+| **P2 Self-Critique Gate** | Before finalizing as `succeeded`, agents run a self-critique pass. If the score falls below `selfCritiqueThreshold` (default 0.6), the run moves to `needs_review` and waits for approval. Bad output never auto-ships. |
+| **P3 Failure → Rule** | Low scores (< 0.5) and 👎 votes trigger an LLM post-mortem that extracts a durable rule — stored as a tagged memory and auto-injected into future runs. Rules that survive N runs without contradiction are promoted to company-wide memories. |
+| **P4 Config-Change Gate** | Pinning a smoke eval suite to an agent gates every significant config change (system prompt, model, adapter type). The gate evaluates the *proposed* config before persisting it; regressions > tolerance return HTTP 409 with the eval run ID. |
+| **P5 Quality Dashboard** | `/quality` shows per-agent sparklines, top failure modes, and drift alerts. Drift detection compares rolling 7d averages — a >10% drop fires a `quality.drift` activity event. |
+
+### Meta-Flywheel (Pillars 6–8) — better organization every week
+
+| Pillar | What it does |
+|--------|-------------|
+| **P6 Organizational Learning** | The routing suggester finds which agents historically resolve similar issues (Jaccard title similarity + labels + win rate), and posts a dismissable `💡 Routing suggestion` chip on new unassigned issues. Goal decompositions are RAG-augmented with past successful decompositions. |
+| **P7 Collaboration Learning** | Every delegation (`stapler_delegate_task`) is tracked as an edge. The collaboration analyzer computes per-pair win rates and flags anti-patterns: ping-pong (A→B→A with no progress), depth runaway (chain > 4), and orphan delegations (unresolved after 4 h). All visible on the agent's Collaboration tab. |
+| **P8 Workflow Playbooks** | A nightly job clusters high-scoring runs by task similarity and extracts step-by-step playbooks using an LLM. Playbooks are injected into the agent's context at run-start alongside memories. When two playbook versions exist, traffic is split 50/50 and the winner auto-promoted after N runs. |
+
+Turn on per company via `adapterConfig`:
+
+```json
+{
+  "autoScoreRuns": true,
+  "selfCritiqueThreshold": 0.6,
+  "enablePlaybooks": true
+}
+```
 
 ---
 
