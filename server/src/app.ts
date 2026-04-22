@@ -34,6 +34,7 @@ import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { evalRoutes } from "./routes/evals.js";
+import { createEvalScheduler } from "./services/eval-scheduler.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
@@ -324,6 +325,8 @@ export async function createApp(
 
   jobCoordinator.start();
   scheduler.start();
+  const evalScheduler = createEvalScheduler(db);
+  evalScheduler.start();
   const feedbackExportTimer = opts.feedbackExportService
     ? setInterval(() => {
       void opts.feedbackExportService?.flushPendingFeedbackTraces().catch((err) => {

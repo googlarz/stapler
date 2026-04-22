@@ -665,9 +665,11 @@ export {
   type SetPluginState,
   type ListPluginState,
   createEvalSuiteSchema,
+  updateEvalSuiteSchema,
   createEvalCaseSchema,
   triggerEvalRunSchema,
   type CreateEvalSuite,
+  type UpdateEvalSuite,
   type CreateEvalCase,
   type TriggerEvalRun,
 } from "./validators/index.js";

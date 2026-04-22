@@ -488,6 +488,36 @@ export const STAPLER_TOOLS: OllamaTool[] = [
   {
     type: "function",
     function: {
+      name: "stapler_decompose_goal",
+      description:
+        "Decompose a goal into concrete implementation issues. Fetches the goal's " +
+        "title, description, and acceptance criteria, generates a set of actionable " +
+        "tasks using an LLM, and creates them as issues linked to the goal. Returns " +
+        "the list of created issue IDs and titles. Use this to turn a high-level " +
+        "goal into a tracked work plan.",
+      parameters: {
+        type: "object",
+        properties: {
+          goalId: {
+            type: "string",
+            description: "ID of the goal to decompose.",
+          },
+          assigneeAgentId: {
+            type: "string",
+            description: "Agent ID to assign the generated issues to. Defaults to the calling agent.",
+          },
+          maxIssues: {
+            type: "number",
+            description: "Maximum number of issues to create (1–10, default 5).",
+          },
+        },
+        required: ["goalId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "stapler_check_delegation",
       description:
         "Check the status of a previously delegated task. Returns the current " +
@@ -824,6 +854,31 @@ export async function executeStaplerTool(
         `${base}/api/outputs/${encodeURIComponent(id)}/versions`,
         { method: "POST", body: JSON.stringify(body), authToken },
       );
+    }
+
+    case "stapler_decompose_goal": {
+      const goalId = String(args.goalId ?? "").trim();
+      if (!goalId) return { error: "goalId is required" };
+
+      const assigneeAgentId =
+        typeof args.assigneeAgentId === "string" && args.assigneeAgentId.trim()
+          ? args.assigneeAgentId.trim()
+          : agentId; // default: assign to the calling agent
+
+      const rawMax = Number(args.maxIssues);
+      const maxIssues = Number.isFinite(rawMax) && rawMax > 0 ? Math.min(10, rawMax) : 5;
+
+      const result = await paperclipFetch(
+        `${base}/api/goals/${encodeURIComponent(goalId)}/decompose`,
+        {
+          method: "POST",
+          body: JSON.stringify({ assigneeAgentId, maxIssues }),
+          authToken,
+        },
+      ) as Record<string, unknown>;
+
+      if (result?.error) return result;
+      return result;
     }
 
     case "stapler_delegate_task": {

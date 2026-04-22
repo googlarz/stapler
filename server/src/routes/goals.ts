@@ -14,7 +14,8 @@ import {
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { getTelemetryClient } from "../telemetry.js";
 import { logger } from "../middleware/logger.js";
-import { badRequest, conflict } from "../errors.js";
+import { badRequest, conflict, notFound } from "../errors.js";
+import { decomposeGoal } from "../services/goal-decomposer.js";
 
 export function goalRoutes(db: Db) {
   const router = Router();
@@ -177,6 +178,48 @@ export function goalRoutes(db: Db) {
     }
 
     res.json({ verificationIssueId: result.verificationIssueId });
+  });
+
+  /**
+   * Decompose a goal into concrete issues using an LLM.
+   * POST /goals/:id/decompose
+   * Body: { assigneeAgentId?: string, maxIssues?: number }
+   */
+  router.post("/goals/:id/decompose", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) throw notFound("Goal not found");
+    assertCompanyAccess(req, existing.companyId);
+
+    const assigneeAgentId =
+      typeof req.body?.assigneeAgentId === "string" ? req.body.assigneeAgentId : null;
+    const rawMax = Number(req.body?.maxIssues);
+    const maxIssues = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : 5;
+
+    const result = await decomposeGoal(
+      db,
+      id,
+      existing.companyId,
+      assigneeAgentId,
+      maxIssues,
+    );
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: existing.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "goal.decomposed",
+      entityType: "goal",
+      entityId: id,
+      details: {
+        issueCount: result.issues.length,
+        issueIds: result.issues.map((i) => i.id),
+      },
+    });
+
+    res.status(201).json(result);
   });
 
   router.delete("/goals/:id", async (req, res) => {

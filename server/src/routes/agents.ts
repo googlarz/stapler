@@ -2515,6 +2515,63 @@ export function agentRoutes(db: Db) {
     res.json(redactedEvents);
   });
 
+  router.get("/heartbeat-runs/:runId/stream", async (req, res) => {
+    const runId = req.params.runId as string;
+    const run = await heartbeat.getRun(runId);
+    if (!run) {
+      res.status(404).json({ error: "Heartbeat run not found" });
+      return;
+    }
+    assertCompanyAccess(req, run.companyId);
+
+    // SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering
+    res.flushHeaders();
+
+    const TERMINAL_STATUSES = new Set(["done", "failed", "cancelled"]);
+    const POLL_INTERVAL_MS = 1_000;
+
+    let lastSeq = 0;
+    let closed = false;
+    req.on("close", () => { closed = true; });
+
+    const currentUserRedactionOptions = await getCurrentUserRedactionOptions();
+
+    const tick = async () => {
+      if (closed) return;
+
+      const events = await heartbeat.listEvents(runId, lastSeq, 50);
+      for (const event of events) {
+        if (closed) break;
+        const redacted = redactCurrentUserValue(
+          { ...event, payload: redactEventPayload(event.payload) },
+          currentUserRedactionOptions,
+        );
+        res.write(`data: ${JSON.stringify(redacted)}\n\n`);
+        lastSeq = event.seq;
+      }
+
+      // Check if run has reached a terminal state
+      const currentRun = await heartbeat.getRun(runId);
+      if (!currentRun || TERMINAL_STATUSES.has(currentRun.status)) {
+        // Send a sentinel event so the client knows the stream is done
+        res.write(`data: ${JSON.stringify({ type: "stream_end", status: currentRun?.status ?? "unknown" })}\n\n`);
+        res.end();
+        return;
+      }
+
+      if (!closed) {
+        timer = setTimeout(() => void tick(), POLL_INTERVAL_MS);
+      }
+    };
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    void tick();
+  });
+
   router.get("/heartbeat-runs/:runId/log", async (req, res) => {
     const runId = req.params.runId as string;
     const run = await heartbeat.getRun(runId);

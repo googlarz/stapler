@@ -73,6 +73,7 @@ import {
   type SessionCompactionPolicy,
 } from "@stapler/adapter-utils";
 import { maybeLoadMemoriesForInjection } from "./memory-injection.js";
+import { maybeAutoExtractMemories } from "./memory-extractor.js";
 import { logActivity } from "./activity-log.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -4083,6 +4084,14 @@ export function heartbeatService(db: Db) {
         }
       }
       await finalizeAgentStatus(agent.id, outcome);
+
+      // Auto-extract memories from successful runs (fire-and-forget).
+      // Opt-in via `autoExtractMemories: true` in the agent's adapterConfig.
+      if (outcome === "succeeded" && stdoutExcerpt) {
+        void maybeAutoExtractMemories(db, agent, run.id, stdoutExcerpt).catch((err) => {
+          logger.warn({ err, runId: run.id }, "auto-memory extraction failed");
+        });
+      }
     } catch (err) {
       const message = redactRunLogCredentialsText(
         redactCurrentUserText(

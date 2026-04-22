@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, real, timestamp, index } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 
@@ -18,6 +18,12 @@ export const evalSuites = pgTable(
       .references(() => agents.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
+    /** Cron expression (UTC). When set, the scheduler triggers a run automatically. */
+    scheduleExpression: text("schedule_expression"),
+    /** 0.0–1.0. When a scheduled run's avgScore drops below this, an alert is logged. */
+    alertThreshold: real("alert_threshold"),
+    /** Timestamp of the last scheduler-triggered run (used to avoid double-firing). */
+    lastScheduledRunAt: timestamp("last_scheduled_run_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

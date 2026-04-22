@@ -326,9 +326,11 @@ export {
 
 export {
   createEvalSuiteSchema,
+  updateEvalSuiteSchema,
   createEvalCaseSchema,
   triggerEvalRunSchema,
   type CreateEvalSuite,
+  type UpdateEvalSuite,
   type CreateEvalCase,
   type TriggerEvalRun,
 } from "./eval.js";

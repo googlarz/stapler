@@ -167,6 +167,12 @@ const memoryDeleteSchema = z.object({
   id: z.string().uuid(),
 });
 
+const decomposeGoalSchema = z.object({
+  goalId: z.string().uuid({ message: "goalId must be a valid UUID" }),
+  assigneeAgentId: z.string().uuid().optional(),
+  maxIssues: z.number().int().min(1).max(10).optional(),
+});
+
 const delegateTaskSchema = z.object({
   agentId: z.string().uuid({ message: "agentId must be a valid UUID" }),
   task: z.string().trim().min(1).max(2000, "task must be at most 2000 characters"),
@@ -776,6 +782,19 @@ export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[
       async ({ slug }) => {
         const companyId = client.resolveCompanyId();
         return client.requestJson("DELETE", `/companies/${encodeURIComponent(companyId)}/memories/wiki/${encodeURIComponent(slug)}`);
+      },
+    ),
+    makeTool(
+      "decomposeGoal",
+      "Decompose a goal into concrete implementation issues using an LLM. Fetches the goal's " +
+        "title, description, and acceptance criteria, generates actionable tasks, and creates " +
+        "them as issues linked to the goal. Returns the list of created issues. Use this to " +
+        "turn a high-level goal into a tracked work plan before starting implementation.",
+      decomposeGoalSchema,
+      async ({ goalId, assigneeAgentId, maxIssues }) => {
+        return client.requestJson("POST", `/goals/${encodeURIComponent(goalId)}/decompose`, {
+          body: { assigneeAgentId, maxIssues },
+        });
       },
     ),
     makeTool(

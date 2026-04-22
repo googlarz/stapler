@@ -47,6 +47,7 @@ import { PackageFileTree, buildFileTree } from "../components/PackageFileTree";
 import { ScrollToBottom } from "../components/ScrollToBottom";
 import { formatCents, formatDate, relativeTime, formatTokens, visibleRunCostUsd } from "../lib/utils";
 import { cn } from "../lib/utils";
+import { useRunStream } from "../hooks/useRunStream";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
@@ -3751,6 +3752,9 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     distanceFromBottom: Number.POSITIVE_INFINITY,
   });
   const isLive = run.status === "running" || run.status === "queued";
+  // SSE stream — active only for live runs. Falls back gracefully when SSE is
+  // unavailable (setIsStreamingConnected stays false → polling takes over).
+  const { events: sseEvents, streamStatus } = useRunStream(isLive ? run.id : null);
   const { data: workspaceOperations = [] } = useQuery({
     queryKey: queryKeys.runWorkspaceOperations(run.id),
     queryFn: () => heartbeatsApi.workspaceOperations(run.id),
@@ -3793,10 +3797,12 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     }
   }
 
-  // Fetch events
+  // Fetch events (used for completed runs; live runs use SSE stream below)
   const { data: initialEvents } = useQuery({
     queryKey: ["run-events", run.id],
     queryFn: () => heartbeatsApi.events(run.id, 0, 200),
+    // Skip initial fetch for live runs — SSE delivers events in real-time.
+    enabled: !isLive,
   });
 
   useEffect(() => {
@@ -3805,6 +3811,20 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
       setLoading(false);
     }
   }, [initialEvents]);
+
+  // Wire SSE events for live runs
+  useEffect(() => {
+    if (!isLive) return;
+    if (streamStatus === "streaming" || streamStatus === "done") {
+      setIsStreamingConnected(true);
+      setEvents(sseEvents);
+      setLoading(false);
+    }
+    if (streamStatus === "error") {
+      // SSE failed — fall back to polling by leaving isStreamingConnected false
+      setIsStreamingConnected(false);
+    }
+  }, [isLive, sseEvents, streamStatus]);
 
   const getScrollContainer = useCallback((): ScrollContainer => {
     if (scrollContainerRef.current) return scrollContainerRef.current;

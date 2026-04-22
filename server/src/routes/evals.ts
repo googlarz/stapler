@@ -2,7 +2,7 @@ import { Router } from "express";
 import { eq, desc } from "drizzle-orm";
 import type { Db } from "@stapler/db";
 import { evalCaseResults, evalCases, evalRuns, evalSuites } from "@stapler/db";
-import { createEvalCaseSchema, createEvalSuiteSchema, triggerEvalRunSchema } from "@stapler/shared";
+import { createEvalCaseSchema, createEvalSuiteSchema, updateEvalSuiteSchema, triggerEvalRunSchema } from "@stapler/shared";
 import { validate } from "../middleware/validate.js";
 import { assertCompanyAccess } from "./authz.js";
 import { notFound } from "../errors.js";
@@ -35,15 +35,24 @@ export function evalRoutes(db: Db) {
       const { companyId } = req.params as { companyId: string };
       assertCompanyAccess(req, companyId);
 
-      const { agentId, name, description } = req.body as {
+      const { agentId, name, description, scheduleExpression, alertThreshold } = req.body as {
         agentId: string;
         name: string;
         description?: string;
+        scheduleExpression?: string;
+        alertThreshold?: number;
       };
 
       const [suite] = await db
         .insert(evalSuites)
-        .values({ companyId, agentId, name, description: description ?? null })
+        .values({
+          companyId,
+          agentId,
+          name,
+          description: description ?? null,
+          scheduleExpression: scheduleExpression ?? null,
+          alertThreshold: alertThreshold ?? null,
+        })
         .returning();
 
       res.status(201).json(suite);
@@ -66,6 +75,40 @@ export function evalRoutes(db: Db) {
 
     res.json({ ...suite, cases });
   });
+
+  /** Update an eval suite (name, description, schedule, threshold) */
+  router.patch(
+    "/eval-suites/:id",
+    validate(updateEvalSuiteSchema),
+    async (req, res) => {
+      const { id } = req.params as { id: string };
+      const rows = await db.select().from(evalSuites).where(eq(evalSuites.id, id)).limit(1);
+      const suite = rows[0];
+      if (!suite) throw notFound("Eval suite not found");
+      assertCompanyAccess(req, suite.companyId);
+
+      const body = req.body as {
+        name?: string;
+        description?: string | null;
+        scheduleExpression?: string | null;
+        alertThreshold?: number | null;
+      };
+
+      const [updated] = await db
+        .update(evalSuites)
+        .set({
+          ...(body.name !== undefined ? { name: body.name } : {}),
+          ...(body.description !== undefined ? { description: body.description } : {}),
+          ...(body.scheduleExpression !== undefined ? { scheduleExpression: body.scheduleExpression } : {}),
+          ...(body.alertThreshold !== undefined ? { alertThreshold: body.alertThreshold } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(evalSuites.id, id))
+        .returning();
+
+      res.json(updated);
+    },
+  );
 
   /** Delete an eval suite */
   router.delete("/eval-suites/:id", async (req, res) => {
