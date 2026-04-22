@@ -13,6 +13,7 @@ import {
 } from "../lib/goal-verification-prompt.js";
 import { logActivity } from "./activity-log.js";
 import { issueService } from "./issues.js";
+import { finalizeDecompositionOutcome } from "./decomposition-evaluator.js";
 import { queueIssueAssignmentWakeup, type IssueAssignmentWakeupDeps } from "./issue-assignment-wakeup.js";
 
 /**
@@ -424,6 +425,8 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc, heartbeat?: 
           via: "verification_outcome",
         },
       });
+      // P6 — finalize decomposition outcome so future goals can learn from this one
+      void finalizeDecompositionOutcome(db, goal.id, companyId).catch(() => {});
       return { kind: "passed" };
     }
 
@@ -544,6 +547,8 @@ export function goalVerificationService(db: Db, issueSvc: IssueSvc, heartbeat?: 
       },
     });
 
+    // P6 — finalize decomposition outcome even on failure (signal = low)
+    void finalizeDecompositionOutcome(db, goal.id, companyId).catch(() => {});
     return { kind: "failed", followUpIssueId: followUp?.id ?? null };
   }
 

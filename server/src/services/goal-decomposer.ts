@@ -13,6 +13,10 @@ import type { Db } from "@stapler/db";
 import type { GoalAcceptanceCriterion } from "@stapler/db";
 import { goalService } from "./goals.js";
 import { issueService } from "./issues.js";
+import {
+  getPastDecompositions,
+  seedDecompositionOutcome,
+} from "./decomposition-evaluator.js";
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = "gpt-4o-mini";
@@ -24,18 +28,31 @@ function buildDecomposePrompt(
   description: string | null,
   criteria: GoalAcceptanceCriterion[],
   maxIssues: number,
+  pastExamples: Array<{ goalTitleNorm: string; issueTitles: string[]; outcomeScore: number }> = [],
 ): string {
   const criteriaText =
     criteria.length > 0
       ? criteria.map((c, i) => `  ${i + 1}. ${c.text}`).join("\n")
       : "  (none specified)";
 
+  const examplesSection =
+    pastExamples.length > 0
+      ? `\nSUCCESSFUL DECOMPOSITION EXAMPLES (use these as inspiration, not templates):\n` +
+        pastExamples
+          .map(
+            (ex, i) =>
+              `  Example ${i + 1} (score ${Math.round(ex.outcomeScore * 100)}%):\n` +
+              ex.issueTitles.map((t) => `    - ${t}`).join("\n"),
+          )
+          .join("\n")
+      : "";
+
   return `You are a software project manager. Decompose the following goal into ${maxIssues} or fewer concrete, actionable implementation tasks.
 
 GOAL: ${title}
 DESCRIPTION: ${description ?? "(none)"}
 ACCEPTANCE CRITERIA:
-${criteriaText}
+${criteriaText}${examplesSection}
 
 Rules:
 - Each task must be a single concrete action (e.g. "Implement X", "Write tests for Y", "Configure Z").
@@ -51,6 +68,7 @@ async function decomposeWithOpenAI(
   description: string | null,
   criteria: GoalAcceptanceCriterion[],
   maxIssues: number,
+  pastExamples: Array<{ goalTitleNorm: string; issueTitles: string[]; outcomeScore: number }> = [],
 ): Promise<string[]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
@@ -61,7 +79,7 @@ async function decomposeWithOpenAI(
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: OPENAI_MODEL,
-        messages: [{ role: "user", content: buildDecomposePrompt(title, description, criteria, maxIssues) }],
+        messages: [{ role: "user", content: buildDecomposePrompt(title, description, criteria, maxIssues, pastExamples) }],
         temperature: 0.3,
         max_tokens: 512,
       }),
@@ -84,6 +102,7 @@ async function decomposeWithOllama(
   description: string | null,
   criteria: GoalAcceptanceCriterion[],
   maxIssues: number,
+  pastExamples: Array<{ goalTitleNorm: string; issueTitles: string[]; outcomeScore: number }> = [],
 ): Promise<string[]> {
   const host = process.env.STAPLER_OLLAMA_HOST ?? DEFAULT_OLLAMA_HOST;
   const model = process.env.STAPLER_OLLAMA_JUDGE_MODEL ?? DEFAULT_OLLAMA_MODEL;
@@ -94,7 +113,7 @@ async function decomposeWithOllama(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
-        messages: [{ role: "user", content: buildDecomposePrompt(title, description, criteria, maxIssues) }],
+        messages: [{ role: "user", content: buildDecomposePrompt(title, description, criteria, maxIssues, pastExamples) }],
         stream: false,
         options: { temperature: 0.3 },
       }),
@@ -159,10 +178,13 @@ export async function decomposeGoal(
 
   const criteria = Array.isArray(goal.acceptanceCriteria) ? goal.acceptanceCriteria : [];
 
+  // P6 — RAG-augmented decomposition: fetch past successful decompositions as examples
+  const pastExamples = await getPastDecompositions(db, companyId, 3).catch(() => []);
+
   // Generate task titles via LLM (cascade: OpenAI → Ollama → heuristic)
-  let taskTitles = await decomposeWithOpenAI(goal.title, goal.description, criteria, capped);
+  let taskTitles = await decomposeWithOpenAI(goal.title, goal.description, criteria, capped, pastExamples);
   if (taskTitles.length === 0) {
-    taskTitles = await decomposeWithOllama(goal.title, goal.description, criteria, capped);
+    taskTitles = await decomposeWithOllama(goal.title, goal.description, criteria, capped, pastExamples);
   }
   if (taskTitles.length === 0) {
     taskTitles = decomposeHeuristic(goal.title, criteria, capped);
@@ -182,6 +204,15 @@ export async function decomposeGoal(
       created.push({ id: issue.id, title: issue.title, identifier: issue.identifier ?? null });
     }
   }
+
+  // P6 — Seed decomposition outcome row for future learning
+  void seedDecompositionOutcome(
+    db,
+    goalId,
+    companyId,
+    goal.title,
+    created.map((i) => i.title),
+  ).catch(() => {});
 
   return { goalId, goalTitle: goal.title, issues: created };
 }

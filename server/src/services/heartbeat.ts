@@ -76,6 +76,7 @@ import { maybeLoadMemoriesForInjection } from "./memory-injection.js";
 import { maybeAutoExtractMemories } from "./memory-extractor.js";
 import { maybeScoreRun } from "./run-scorer.js";
 import { maybeSelfCritique } from "./self-critique.js";
+import { finalizeRoutingOutcome } from "./routing-suggester.js";
 import { logActivity } from "./activity-log.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -4116,6 +4117,19 @@ export function heartbeatService(db: Db) {
         void maybeScoreRun(db, agent, run.id, stdoutExcerpt).catch((err) => {
           logger.warn({ err, runId: run.id }, "run scoring failed");
         });
+      }
+
+      // P6 — Organizational Learning: finalize routing outcome when run ends
+      // (regardless of outcome) so the routing suggester learns win/loss.
+      {
+        const ctxIssueId = readNonEmptyString(
+          (run.contextSnapshot as Record<string, unknown> | null)?.issueId,
+        );
+        if (ctxIssueId) {
+          const scoreForOutcome =
+            outcome === "succeeded" ? 1 : outcome === "failed" ? 0 : null;
+          void finalizeRoutingOutcome(db, ctxIssueId, scoreForOutcome).catch(() => {});
+        }
       }
     } catch (err) {
       const message = redactRunLogCredentialsText(

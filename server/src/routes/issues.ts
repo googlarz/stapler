@@ -64,6 +64,10 @@ import {
 import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.js";
 import { runPostMortem } from "../services/post-mortem.js";
 import {
+  maybePostRoutingSuggestion,
+  recordRoutingOutcome,
+} from "../services/routing-suggester.js";
+import {
   applyIssueExecutionPolicyTransition,
   normalizeIssueExecutionPolicy,
   parseIssueExecutionState,
@@ -1636,6 +1640,20 @@ export function issueRoutes(
       requestedByActorType: actor.actorType,
       requestedByActorId: actor.actorId,
     });
+
+    // P6 — Organizational Learning: record routing outcome (if assigned) and
+    // fire a routing suggestion comment (if unassigned).
+    if (issue.assigneeAgentId) {
+      void recordRoutingOutcome(
+        db,
+        issue.id,
+        companyId,
+        issue.assigneeAgentId,
+        issue.title,
+      ).catch(() => {});
+    } else {
+      void maybePostRoutingSuggestion(db, issue.id, companyId, issue.title).catch(() => {});
+    }
 
     if (Array.isArray(req.body.blockedByIssueIds)) {
       const relations = await svc.getRelationSummaries(issue.id);
