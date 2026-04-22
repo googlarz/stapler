@@ -19,7 +19,7 @@
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { Db } from "@stapler/db";
-import { agentMemories } from "@stapler/db";
+import { agentMemories, projectMemories } from "@stapler/db";
 import type {
   AgentMemory,
   AgentMemorySearchResult,
@@ -621,3 +621,170 @@ export function agentMemoryService(db: Db) {
 // maybeLoadMemoriesForInjection lives in ./memory-injection.ts to avoid a
 // circular dependency: company-memories.ts already imports MemoryContentTooLargeError
 // from this file, so this file cannot import back from company-memories.ts.
+
+// ---------------------------------------------------------------------------
+// Project memory service
+// ---------------------------------------------------------------------------
+
+export interface SaveProjectMemoryInput {
+  companyId: string;
+  projectId: string;
+  content: string;
+  tags?: string[];
+  runId?: string | null;
+  expiresAt?: Date | null;
+}
+
+export interface SearchProjectMemoryInput {
+  projectId: string;
+  q: string;
+  tags?: string[];
+  limit?: number;
+}
+
+/** SQL predicate filtering out expired project memory rows. */
+const notExpiredProject = or(
+  isNull(projectMemories.expiresAt),
+  gt(projectMemories.expiresAt, sql`NOW()`),
+)!;
+
+function rowToProjectMemory(row: typeof projectMemories.$inferSelect) {
+  return {
+    id: row.id,
+    companyId: row.companyId,
+    projectId: row.projectId,
+    content: row.content,
+    contentHash: row.contentHash,
+    contentBytes: row.contentBytes,
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    createdInRunId: row.createdInRunId ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    expiresAt: row.expiresAt ?? null,
+  };
+}
+
+export function projectMemoryService(db: Db) {
+  return {
+    /**
+     * Save a project-scoped memory. Idempotent by (projectId, content_hash).
+     * Shared by all agents working on the project.
+     */
+    save: async (input: SaveProjectMemoryInput) => {
+      const trimmed = input.content.trim();
+      if (trimmed.length === 0) throw new Error("content cannot be empty after trimming");
+      const contentBytes = Buffer.byteLength(trimmed, "utf8");
+      const limits = getMemoryLimits();
+      if (contentBytes > limits.maxContentBytes) {
+        throw new MemoryContentTooLargeError(contentBytes, limits.maxContentBytes);
+      }
+      const contentHash = hashContent(trimmed);
+      const tags = normalizeTags(input.tags);
+      const embedding = await getEmbedding(trimmed);
+
+      const [row] = await db
+        .insert(projectMemories)
+        .values({
+          companyId: input.companyId,
+          projectId: input.projectId,
+          content: trimmed,
+          contentHash,
+          contentBytes,
+          tags,
+          createdInRunId: input.runId ?? null,
+          expiresAt: input.expiresAt ?? null,
+          embedding,
+        })
+        .onConflictDoUpdate({
+          target: [projectMemories.projectId, projectMemories.contentHash],
+          set: { updatedAt: sql`now()`, expiresAt: input.expiresAt ?? null },
+        })
+        .returning();
+
+      const deduped = row.createdAt.getTime() !== row.updatedAt.getTime();
+      return { memory: rowToProjectMemory(row), deduped };
+    },
+
+    /**
+     * Search project memories using the same semantic + pg_trgm strategy
+     * as agent memories.
+     */
+    search: async (input: SearchProjectMemoryInput) => {
+      const trimmedQ = input.q.trim();
+      if (trimmedQ.length === 0) return [];
+      const limits = getMemoryLimits();
+      const limit = Math.max(1, Math.min(input.limit ?? 10, 100));
+      const tagsFilter = normalizeTags(input.tags);
+
+      const queryEmbedding = await getEmbedding(trimmedQ);
+      if (queryEmbedding) {
+        const conditions = [eq(projectMemories.projectId, input.projectId), notExpiredProject];
+        if (tagsFilter.length > 0) {
+          conditions.push(sql`${projectMemories.tags} @> ${JSON.stringify(tagsFilter)}::jsonb`);
+        }
+        const allRows = await db
+          .select()
+          .from(projectMemories)
+          .where(and(...conditions))
+          .orderBy(desc(projectMemories.createdAt))
+          .limit(1000);
+
+        const threshold = getEmbeddingThreshold();
+        const scored = allRows
+          .filter((r): r is typeof r & { embedding: number[] } =>
+            Array.isArray(r.embedding) && (r.embedding as number[]).length === queryEmbedding.length,
+          )
+          .map((r) => ({ row: r, score: cosineSimilarity(queryEmbedding, r.embedding) }))
+          .filter((r) => r.score >= threshold)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, limit);
+
+        if (scored.length > 0) {
+          return scored.map(({ row, score }) => ({ ...rowToProjectMemory(row), score }));
+        }
+      }
+
+      // pg_trgm fallback
+      const conditions = [
+        eq(projectMemories.projectId, input.projectId),
+        notExpiredProject,
+        sql`similarity(${projectMemories.content}, ${trimmedQ}) >= ${limits.searchThreshold}`,
+      ];
+      if (tagsFilter.length > 0) {
+        conditions.push(sql`${projectMemories.tags} @> ${JSON.stringify(tagsFilter)}::jsonb`);
+      }
+
+      const rows = await db
+        .select({
+          row: projectMemories,
+          score: sql<number>`similarity(${projectMemories.content}, ${trimmedQ})`.as("score"),
+        })
+        .from(projectMemories)
+        .where(and(...conditions))
+        .orderBy(desc(sql`score`), desc(projectMemories.createdAt))
+        .limit(limit);
+
+      return rows.map((r) => ({ ...rowToProjectMemory(r.row), score: Number(r.score) || 0 }));
+    },
+
+    list: async (projectId: string, limit = 50, offset = 0) => {
+      const rows = await db
+        .select()
+        .from(projectMemories)
+        .where(and(eq(projectMemories.projectId, projectId), notExpiredProject))
+        .orderBy(desc(projectMemories.createdAt))
+        .limit(Math.min(limit, 100))
+        .offset(offset);
+      return rows.map(rowToProjectMemory);
+    },
+
+    remove: async (id: string, projectId: string) => {
+      const row = await db
+        .delete(projectMemories)
+        .where(and(eq(projectMemories.id, id), eq(projectMemories.projectId, projectId)))
+        .returning()
+        .then((rows) => rows[0] ?? null);
+      return row ? rowToProjectMemory(row) : null;
+    },
+  };
+}

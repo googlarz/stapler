@@ -10,8 +10,9 @@ import {
 import { trackProjectCreated } from "@stapler/shared/telemetry";
 import { validate } from "../middleware/validate.js";
 import { projectService, logActivity, secretService, workspaceOperationService } from "../services/index.js";
-import { conflict } from "../errors.js";
-import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { projectMemoryService } from "../services/agent-memories.js";
+import { conflict, notFound } from "../errors.js";
+import { assertCompanyAccess, assertAuthenticated, getActorInfo } from "./authz.js";
 import { startRuntimeServicesForWorkspaceControl, stopRuntimeServicesForProjectWorkspace } from "../services/workspace-runtime.js";
 import { getTelemetryClient } from "../telemetry.js";
 
@@ -457,6 +458,75 @@ export function projectRoutes(db: Db) {
     });
 
     res.json(project);
+  });
+
+  // ── Project memory routes ─────────────────────────────────────────────────
+
+  /**
+   * GET /projects/:id/memories
+   * List memories for a project. Any authenticated member with company access
+   * may read project memories; they are shared context, not sensitive.
+   */
+  router.get("/projects/:id/memories", async (req, res) => {
+    assertAuthenticated(req);
+    const project = await svc.getById(req.params.id as string);
+    if (!project) throw notFound("Project not found");
+    assertCompanyAccess(req, project.companyId);
+
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const memSvc = projectMemoryService(db);
+    const memories = await memSvc.list(project.id, limit, offset);
+    res.json(memories);
+  });
+
+  /**
+   * POST /projects/:id/memories
+   * Save a memory for a project. Idempotent — duplicate content is a no-op.
+   */
+  router.post("/projects/:id/memories", async (req, res) => {
+    assertAuthenticated(req);
+    const project = await svc.getById(req.params.id as string);
+    if (!project) throw notFound("Project not found");
+    assertCompanyAccess(req, project.companyId);
+
+    const body = req.body as { content?: string; tags?: string[]; expiresAt?: string };
+    if (!body.content || typeof body.content !== "string") {
+      res.status(400).json({ error: '"content" is required and must be a string' });
+      return;
+    }
+
+    const memSvc = projectMemoryService(db);
+    const actor = getActorInfo(req);
+    const result = await memSvc.save({
+      companyId: project.companyId,
+      projectId: project.id,
+      content: body.content,
+      tags: Array.isArray(body.tags) ? body.tags : undefined,
+      runId: actor.runId,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+    });
+
+    res.status(result.deduped ? 200 : 201).json(result.memory);
+  });
+
+  /**
+   * DELETE /projects/:id/memories/:memoryId
+   * Remove a specific project memory. Requires company access.
+   */
+  router.delete("/projects/:id/memories/:memoryId", async (req, res) => {
+    assertAuthenticated(req);
+    const project = await svc.getById(req.params.id as string);
+    if (!project) throw notFound("Project not found");
+    assertCompanyAccess(req, project.companyId);
+
+    const memSvc = projectMemoryService(db);
+    const deleted = await memSvc.remove(req.params.memoryId as string, project.id);
+    if (!deleted) {
+      res.status(404).json({ error: "Memory not found" });
+      return;
+    }
+    res.json(deleted);
   });
 
   return router;

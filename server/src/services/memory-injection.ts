@@ -21,7 +21,7 @@
  */
 import type { Db } from "@stapler/db";
 import type { InjectedMemory } from "@stapler/shared";
-import { agentMemoryService } from "./agent-memories.js";
+import { agentMemoryService, projectMemoryService } from "./agent-memories.js";
 import { companyMemoryService } from "./company-memories.js";
 import { logActivity } from "./activity-log.js";
 
@@ -180,7 +180,31 @@ export async function maybeLoadMemoriesForInjection(
     source: "agent" as const,
   }));
 
-  // ── Track 3: Company episodic memories (shared team knowledge) ───────────
+  // ── Track 3: Project episodic memories (shared project knowledge) ─────────
+  // Only injected when a projectId is available from the wakeup context.
+  // Agents working on the same project share learned constraints, decisions,
+  // and discovered context — project memories are the cross-agent scratchpad.
+  const projectId =
+    typeof wakeIssueObj?.projectId === "string" && wakeIssueObj.projectId.trim()
+      ? wakeIssueObj.projectId.trim()
+      : typeof context.projectId === "string" && context.projectId.trim()
+        ? context.projectId.trim()
+        : null;
+
+  let projectEpisodicInjected: InjectedMemory[] = [];
+  if (projectId) {
+    const projSvc = projectMemoryService(db);
+    const projectSearchResults = await projSvc.search({ projectId, q, limit });
+    projectEpisodicInjected = projectSearchResults.map((r) => ({
+      id: r.id,
+      content: r.content,
+      tags: r.tags,
+      score: r.score,
+      source: "company" as const, // "company" is the closest existing source tag for shared context
+    }));
+  }
+
+  // ── Track 4: Company episodic memories (shared team knowledge) ───────────
   // companySvc already instantiated above for wiki pages.
   const companyEpisodicResults = await companySvc.search({
     companyId: agent.companyId,
@@ -197,7 +221,12 @@ export async function maybeLoadMemoriesForInjection(
       source: "company" as const,
     }));
 
-  const result = [...wikiInjected, ...agentSearchInjected, ...companyEpisodicInjected];
+  const result = [
+    ...wikiInjected,
+    ...agentSearchInjected,
+    ...projectEpisodicInjected,
+    ...companyEpisodicInjected,
+  ];
 
   // ── Injection audit log (fire-and-forget) ────────────────────────────────
   // Record what was injected so operators can inspect "what context did this
@@ -219,7 +248,9 @@ export async function maybeLoadMemoriesForInjection(
         agentWiki: wikiInjected.filter((m) => m.source === "agent").length,
         companyWiki: wikiInjected.filter((m) => m.source === "company").length,
         agentEpisodic: agentSearchInjected.length,
+        projectEpisodic: projectEpisodicInjected.length,
         companyEpisodic: companyEpisodicInjected.length,
+        projectId: projectId ?? null,
         query: q || null,
       },
     }).catch(() => {

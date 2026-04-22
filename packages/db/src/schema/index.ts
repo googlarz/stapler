@@ -6,6 +6,7 @@ export { instanceUserRoles } from "./instance_user_roles.js";
 export { agents } from "./agents.js";
 export { agentMemories } from "./agent_memories.js";
 export { companyMemories } from "./company_memories.js";
+export { projectMemories } from "./project_memories.js";
 export { boardApiKeys } from "./board_api_keys.js";
 export { cliAuthChallenges } from "./cli_auth_challenges.js";
 export { companyMemberships } from "./company_memberships.js";
