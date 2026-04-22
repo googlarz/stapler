@@ -73,3 +73,4 @@ export { runScores } from "./run_scores.js";
 export { goldenRuns } from "./golden_runs.js";
 export { routingOutcomes } from "./routing_outcomes.js";
 export { decompositionOutcomes } from "./decomposition_outcomes.js";
+export { delegationEdges } from "./delegation_edges.js";

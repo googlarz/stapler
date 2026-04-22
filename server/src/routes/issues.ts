@@ -67,6 +67,7 @@ import {
   maybePostRoutingSuggestion,
   recordRoutingOutcome,
 } from "../services/routing-suggester.js";
+import { recordDelegationEdge } from "../services/collaboration-analyzer.js";
 import {
   applyIssueExecutionPolicyTransition,
   normalizeIssueExecutionPolicy,
@@ -1653,6 +1654,22 @@ export function issueRoutes(
       ).catch(() => {});
     } else {
       void maybePostRoutingSuggestion(db, issue.id, companyId, issue.title).catch(() => {});
+    }
+
+    // P7 — Collaboration Learning: record delegation edge when an agent
+    // creates an issue and assigns it to a different agent.
+    if (
+      actor.agentId &&
+      issue.assigneeAgentId &&
+      actor.agentId !== issue.assigneeAgentId
+    ) {
+      void recordDelegationEdge(
+        db,
+        companyId,
+        actor.agentId,
+        issue.assigneeAgentId,
+        issue.id,
+      ).catch(() => {});
     }
 
     if (Array.isArray(req.body.blockedByIssueIds)) {

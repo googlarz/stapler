@@ -14,6 +14,7 @@ import { assertBoard, assertCompanyAccess } from "./authz.js";
 import { notFound } from "../errors.js";
 import { runPostMortem } from "../services/post-mortem.js";
 import { getAgentQualityTrends } from "../services/quality-trends.js";
+import { getAgentCollabStats } from "../services/collaboration-analyzer.js";
 
 const WINDOW_DAYS = 30;
 
@@ -216,6 +217,20 @@ export function qualityRoutes(db: Db) {
       })
       .returning();
     res.status(201).json(row);
+  });
+
+  /**
+   * Agent collaboration stats: per-pair win rates and avg round-trip.
+   * Powers the "Who does this agent delegate to?" tab on AgentDetail.
+   */
+  router.get("/agents/:id/collab-stats", async (req, res) => {
+    const { id: agentId } = req.params as { id: string };
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    const agent = agentRows[0];
+    if (!agent) throw notFound("Agent not found");
+    assertCompanyAccess(req, agent.companyId);
+    const stats = await getAgentCollabStats(db, agentId, agent.companyId);
+    res.json({ items: stats });
   });
 
   /** Remove a golden run record. */
