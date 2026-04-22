@@ -15,6 +15,8 @@ import { notFound } from "../errors.js";
 import { runPostMortem } from "../services/post-mortem.js";
 import { getAgentQualityTrends } from "../services/quality-trends.js";
 import { getAgentCollabStats } from "../services/collaboration-analyzer.js";
+import { minePlaybooksForAgent } from "../services/playbook-miner.js";
+import { playbooks, playbookExperiments } from "@stapler/db";
 
 const WINDOW_DAYS = 30;
 
@@ -243,6 +245,65 @@ export function qualityRoutes(db: Db) {
     assertCompanyAccess(req, agent.companyId);
     await db.delete(goldenRuns).where(and(eq(goldenRuns.id, id), eq(goldenRuns.agentId, agentId)));
     res.status(204).send();
+  });
+
+  // ── Playbooks (Pillar 8) ───────────────────────────────────────────────────
+
+  /** List playbooks for an agent. */
+  router.get("/agents/:id/playbooks", async (req, res) => {
+    const { id: agentId } = req.params as { id: string };
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    const agent = agentRows[0];
+    if (!agent) throw notFound("Agent not found");
+    assertCompanyAccess(req, agent.companyId);
+    const rows = await db
+      .select()
+      .from(playbooks)
+      .where(eq(playbooks.agentId, agentId))
+      .orderBy(desc(playbooks.updatedAt));
+    res.json({ items: rows });
+  });
+
+  /** Manually trigger playbook mining for an agent. */
+  router.post("/agents/:id/playbooks/mine", async (req, res) => {
+    assertBoard(req);
+    const { id: agentId } = req.params as { id: string };
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    const agent = agentRows[0];
+    if (!agent) throw notFound("Agent not found");
+    assertCompanyAccess(req, agent.companyId);
+    const n = await minePlaybooksForAgent(db, agentId, agent.companyId);
+    res.json({ playbooksUpserted: n });
+  });
+
+  /** Update a playbook (disable/re-enable). */
+  router.patch("/agents/:agentId/playbooks/:id", async (req, res) => {
+    assertBoard(req);
+    const { agentId, id } = req.params as { agentId: string; id: string };
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    const agent = agentRows[0];
+    if (!agent) throw notFound("Agent not found");
+    assertCompanyAccess(req, agent.companyId);
+    const { active } = req.body as { active?: boolean };
+    const [updated] = await db
+      .update(playbooks)
+      .set({ active: active === false ? 0 : 1, updatedAt: new Date() })
+      .where(and(eq(playbooks.id, id), eq(playbooks.agentId, agentId)))
+      .returning();
+    if (!updated) throw notFound("Playbook not found");
+    res.json(updated);
+  });
+
+  /** List A/B experiments for a company. */
+  router.get("/companies/:companyId/playbook-experiments", async (req, res) => {
+    const { companyId } = req.params as { companyId: string };
+    assertCompanyAccess(req, companyId);
+    const rows = await db
+      .select()
+      .from(playbookExperiments)
+      .where(eq(playbookExperiments.companyId, companyId))
+      .orderBy(desc(playbookExperiments.createdAt));
+    res.json({ items: rows });
   });
 
   return router;

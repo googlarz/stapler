@@ -78,6 +78,7 @@ import { maybeScoreRun } from "./run-scorer.js";
 import { maybeSelfCritique } from "./self-critique.js";
 import { finalizeRoutingOutcome } from "./routing-suggester.js";
 import { finalizeDelegationEdge } from "./collaboration-analyzer.js";
+import { maybeInjectPlaybook, updatePlaybookWinRate } from "./playbook-injector.js";
 import { logActivity } from "./activity-log.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -3837,9 +3838,18 @@ export function heartbeatService(db: Db) {
         );
       }
       const injectedMemories = await maybeLoadMemoriesForInjection(db, agent, context);
-      if (injectedMemories.length > 0) {
+      // P8 — Workflow Learning: inject matching playbook steps alongside memories.
+      const playbookMemories = await maybeInjectPlaybook(
+        db,
+        agent.id,
+        agent.companyId,
+        { ...context, adapterConfig: agent.adapterConfig },
+        run.id,
+      ).catch(() => []);
+      const allInjectedMemories = [...injectedMemories, ...playbookMemories];
+      if (allInjectedMemories.length > 0) {
         logger.info(
-          { agentId: agent.id, runId: run.id, count: injectedMemories.length },
+          { agentId: agent.id, runId: run.id, count: allInjectedMemories.length, playbookCount: playbookMemories.length },
           "injected memories for agent run-start",
         );
       }
@@ -3862,7 +3872,7 @@ export function heartbeatService(db: Db) {
           });
         },
         authToken: authToken ?? undefined,
-        agentMemoriesForInjection: injectedMemories.length > 0 ? injectedMemories : undefined,
+        agentMemoriesForInjection: allInjectedMemories.length > 0 ? allInjectedMemories : undefined,
       });
       const adapterManagedRuntimeServices = adapterResult.runtimeServices
         ? await persistAdapterManagedRuntimeServices({
@@ -4123,10 +4133,10 @@ export function heartbeatService(db: Db) {
       // P6 — Organizational Learning: finalize routing outcome when run ends
       // (regardless of outcome) so the routing suggester learns win/loss.
       // P7 — Collaboration Learning: finalize delegation edge outcome.
+      // P8 — Workflow Learning: update playbook win rate.
       {
-        const ctxIssueId = readNonEmptyString(
-          (run.contextSnapshot as Record<string, unknown> | null)?.issueId,
-        );
+        const ctxSnapshot = run.contextSnapshot as Record<string, unknown> | null;
+        const ctxIssueId = readNonEmptyString(ctxSnapshot?.issueId);
         if (ctxIssueId) {
           const scoreForOutcome =
             outcome === "succeeded" ? 1 : outcome === "failed" ? 0 : null;
@@ -4136,6 +4146,22 @@ export function heartbeatService(db: Db) {
               : outcome === "cancelled" ? "cancelled"
                 : "failed";
           void finalizeDelegationEdge(db, ctxIssueId, delegationOutcome).catch(() => {});
+        }
+        // P8 — update playbook win rate if agent has playbooks enabled
+        const taskTitle =
+          readNonEmptyString(ctxSnapshot?.issueTitle) ??
+          readNonEmptyString(ctxSnapshot?.taskKey) ??
+          readNonEmptyString(ctxSnapshot?.task);
+        const playbookScore =
+          outcome === "succeeded" ? 1 : outcome === "failed" ? 0 : null;
+        if (taskTitle && playbookScore !== null) {
+          void updatePlaybookWinRate(
+            db,
+            agent.id,
+            agent.companyId,
+            playbookScore,
+            taskTitle,
+          ).catch(() => {});
         }
       }
     } catch (err) {

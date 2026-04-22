@@ -74,3 +74,5 @@ export { goldenRuns } from "./golden_runs.js";
 export { routingOutcomes } from "./routing_outcomes.js";
 export { decompositionOutcomes } from "./decomposition_outcomes.js";
 export { delegationEdges } from "./delegation_edges.js";
+export { playbooks } from "./playbooks.js";
+export { playbookExperiments } from "./playbook_experiments.js";
