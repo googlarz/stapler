@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import type { Db } from "@stapler/db";
-import { evalCaseResults, evalCases, evalRuns, evalSuites } from "@stapler/db";
+import { agents, evalCaseResults, evalCases, evalRuns, evalSuites } from "@stapler/db";
 import { createEvalCaseSchema, createEvalSuiteSchema, updateEvalSuiteSchema, triggerEvalRunSchema } from "@stapler/shared";
 import { validate } from "../middleware/validate.js";
 import { assertCompanyAccess } from "./authz.js";
@@ -42,6 +42,14 @@ export function evalRoutes(db: Db) {
         scheduleExpression?: string;
         alertThreshold?: number;
       };
+
+      // Verify the target agent belongs to this company (tenant isolation)
+      const agentRows = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.id, agentId), eq(agents.companyId, companyId)))
+        .limit(1);
+      if (!agentRows[0]) throw notFound("Agent not found");
 
       const [suite] = await db
         .insert(evalSuites)
@@ -159,7 +167,12 @@ export function evalRoutes(db: Db) {
     if (!suite) throw notFound("Eval suite not found");
     assertCompanyAccess(req, suite.companyId);
 
-    await db.delete(evalCases).where(eq(evalCases.id, caseId));
+    // Scope the delete to both caseId and suiteId to prevent cross-suite deletion
+    const deleted = await db
+      .delete(evalCases)
+      .where(and(eq(evalCases.id, caseId), eq(evalCases.suiteId, suiteId)))
+      .returning({ id: evalCases.id });
+    if (!deleted[0]) throw notFound("Eval case not found");
     res.status(204).send();
   });
 

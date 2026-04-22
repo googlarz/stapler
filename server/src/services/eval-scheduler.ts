@@ -11,7 +11,7 @@
  * starts so a slow run never causes a double-fire within the same minute.
  */
 
-import { and, isNotNull, lte, or, isNull } from "drizzle-orm";
+import { and, isNotNull, isNull, lt, or } from "drizzle-orm";
 import type { Db } from "@stapler/db";
 import { evalSuites, evalRuns } from "@stapler/db";
 import { eq } from "drizzle-orm";
@@ -40,14 +40,11 @@ function cronMatchesNow(expression: string, now: Date): boolean {
   }
 }
 
-/** Returns true if lastScheduledRunAt is null or more than 50 seconds ago (prevents double-fire). */
-function isEligibleToFire(lastScheduledRunAt: Date | null, now: Date): boolean {
-  if (!lastScheduledRunAt) return true;
-  return now.getTime() - lastScheduledRunAt.getTime() > 50_000;
-}
+/** 50-second cutoff: a suite is eligible to fire if it hasn't fired in the last 50 seconds. */
+const DEDUP_CUTOFF_MS = 50_000;
 
 export async function tickEvalScheduler(db: Db, now: Date = new Date()): Promise<void> {
-  // Load suites with a schedule expression
+  // Load suites with a schedule expression that match this minute
   const scheduledSuites = await db
     .select()
     .from(evalSuites)
@@ -56,13 +53,22 @@ export async function tickEvalScheduler(db: Db, now: Date = new Date()): Promise
   for (const suite of scheduledSuites) {
     if (!suite.scheduleExpression) continue;
     if (!cronMatchesNow(suite.scheduleExpression, now)) continue;
-    if (!isEligibleToFire(suite.lastScheduledRunAt, now)) continue;
 
-    // Mark as fired before triggering the run (prevents double-fire if tick runs twice)
-    await db
+    // Atomic CAS claim: only claim if last_scheduled_run_at is null or older than cutoff.
+    // Under concurrent app instances only one will see affectedRows > 0.
+    const cutoff = new Date(now.getTime() - DEDUP_CUTOFF_MS);
+    const claimed = await db
       .update(evalSuites)
       .set({ lastScheduledRunAt: now, updatedAt: now })
-      .where(eq(evalSuites.id, suite.id));
+      .where(
+        and(
+          eq(evalSuites.id, suite.id),
+          or(isNull(evalSuites.lastScheduledRunAt), lt(evalSuites.lastScheduledRunAt, cutoff)),
+        ),
+      )
+      .returning({ id: evalSuites.id });
+
+    if (!claimed[0]) continue; // another instance already claimed this slot
 
     // Create eval_run record
     const [run] = await db

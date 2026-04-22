@@ -5,7 +5,15 @@ export const createEvalSuiteSchema = z.object({
   name: z.string().trim().min(1, "name is required").max(255),
   description: z.string().trim().max(2000).optional(),
   /** Standard 5-field cron expression (UTC). Omit to disable scheduling. */
-  scheduleExpression: z.string().trim().max(100).optional(),
+  scheduleExpression: z
+    .string()
+    .trim()
+    .max(100)
+    .refine(
+      (val) => /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/.test(val),
+      "scheduleExpression must be a valid 5-field cron expression (e.g. \"0 * * * *\")",
+    )
+    .optional(),
   /** 0.0–1.0. Alert when a scheduled run's avgScore drops below this. */
   alertThreshold: z.number().min(0).max(1).optional(),
 });
@@ -13,7 +21,16 @@ export const createEvalSuiteSchema = z.object({
 export const updateEvalSuiteSchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
   description: z.string().trim().max(2000).nullable().optional(),
-  scheduleExpression: z.string().trim().max(100).nullable().optional(),
+  scheduleExpression: z
+    .string()
+    .trim()
+    .max(100)
+    .refine(
+      (val) => /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/.test(val),
+      "scheduleExpression must be a valid 5-field cron expression (e.g. \"0 * * * *\")",
+    )
+    .nullable()
+    .optional(),
   alertThreshold: z.number().min(0).max(1).nullable().optional(),
 });
 

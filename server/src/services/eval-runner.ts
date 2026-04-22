@@ -41,7 +41,12 @@ async function waitForRun(
       .limit(1);
     const row = rows[0];
     if (!row) return null;
-    if (row.status === "done" || row.status === "failed" || row.status === "cancelled") {
+    if (
+      row.status === "succeeded" ||
+      row.status === "failed" ||
+      row.status === "cancelled" ||
+      row.status === "timed_out"
+    ) {
       return row;
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
@@ -145,7 +150,7 @@ export async function runEvalSuite(db: Db, runId: string): Promise<void> {
       const finished = await waitForRun(db, heartbeatRun.id);
       const stdoutExcerpt = finished?.stdoutExcerpt ?? "";
 
-      if (!finished || finished.status !== "done") {
+      if (!finished || finished.status !== "succeeded") {
         await db
           .update(evalCaseResults)
           .set({
