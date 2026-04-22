@@ -20,6 +20,7 @@ import type { Db } from "@stapler/db";
 import { agents, runScores } from "@stapler/db";
 import { judgeOutput } from "./eval-judge.js";
 import { maybeRunPostMortemOnLowScore } from "./post-mortem.js";
+import { checkDrift } from "./quality-trends.js";
 
 const GENERIC_RUBRIC_VERSION = "generic-v1";
 
@@ -80,6 +81,13 @@ export async function scoreRun(
     if (row && judgement.score < 0.5) {
       void maybeRunPostMortemOnLowScore(db, input.runId, judgement.score).catch(() => {
         // Post-mortem failures must never crash the scorer.
+      });
+    }
+
+    // Pillar 5 — Quality drift detection.
+    if (row) {
+      void checkDrift(db, input.agentId, input.companyId).catch(() => {
+        // Drift check failures must never crash the scorer.
       });
     }
 

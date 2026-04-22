@@ -10,10 +10,10 @@ import { Router } from "express";
 import { and, avg, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "@stapler/db";
 import { agents, goldenRuns, heartbeatRuns, runScores } from "@stapler/db";
-import { assertCompanyAccess } from "./authz.js";
-import { assertBoard } from "./authz.js";
+import { assertBoard, assertCompanyAccess } from "./authz.js";
 import { notFound } from "../errors.js";
 import { runPostMortem } from "../services/post-mortem.js";
+import { getAgentQualityTrends } from "../services/quality-trends.js";
 
 const WINDOW_DAYS = 30;
 
@@ -132,6 +132,20 @@ export function qualityRoutes(db: Db) {
     const reason = (req.body as { reason?: string }).reason ?? null;
     void runPostMortem(db, runId, reason).catch(() => {});
     res.status(202).json({ runId, status: "post-mortem queued" });
+  });
+
+  /**
+   * Multi-window trend data for an agent: 7d / 30d / 90d rolling averages.
+   * Powers the Quality dashboard sparklines.
+   */
+  router.get("/agents/:id/quality/trends", async (req, res) => {
+    const { id: agentId } = req.params as { id: string };
+    const agentRows = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+    const agent = agentRows[0];
+    if (!agent) throw notFound("Agent not found");
+    assertCompanyAccess(req, agent.companyId);
+    const trends = await getAgentQualityTrends(db, agent.id, agent.companyId);
+    res.json(trends);
   });
 
   /** List recent scores across a company (for timelines + drill-down). */

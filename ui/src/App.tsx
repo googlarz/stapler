@@ -45,6 +45,7 @@ import { IssueChatUxLab } from "./pages/IssueChatUxLab";
 import { RunTranscriptUxLab } from "./pages/RunTranscriptUxLab";
 import { OrgChart } from "./pages/OrgChart";
 import { Evals } from "./pages/Evals";
+import { Quality } from "./pages/Quality";
 import { EvalSuiteDetail } from "./pages/EvalSuiteDetail";
 import { NewAgent } from "./pages/NewAgent";
 import { AuthPage } from "./pages/Auth";
@@ -180,6 +181,7 @@ function boardRoutes() {
       <Route path="goals/:goalId" element={<GoalDetail />} />
       <Route path="evals" element={<Evals />} />
       <Route path="evals/:suiteId" element={<EvalSuiteDetail />} />
+      <Route path="quality" element={<Quality />} />
       <Route path="outputs" element={<Outputs />} />
       <Route path="outputs/:outputId" element={<OutputDetail />} />
       <Route path="approvals" element={<Navigate to="/approvals/pending" replace />} />
