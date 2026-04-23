@@ -62,7 +62,7 @@ export type InvokeSkillOptions = {
   agentId: string;
   skillKey: string;
   args: Record<string, unknown>;
-  triggerCommentId: string;
+  triggerCommentId: string | null;
   requestedByActorType: string;
   requestedByActorId: string;
 };

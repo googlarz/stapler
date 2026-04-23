@@ -31,6 +31,37 @@ export type SkillCommandContext = {
 };
 
 /**
+ * Stamps `heartbeat_run_id` on the skill invocation row as early as possible —
+ * before any fallible setup work in `executeRun`. This ensures that even if
+ * workspace resolution, memory loading, or adapter startup fails before
+ * `loadSkillForRun` is reached, `finalizeSkillInvocation` can still resolve
+ * the invocation by `heartbeatRunId` and mark it failed instead of leaving
+ * it permanently stuck in "pending".
+ *
+ * No-ops if the wake reason is not "skill_command_invoked".
+ */
+export async function earlyStampSkillRunId(
+  db: Db,
+  runId: string,
+  context: Record<string, unknown>,
+): Promise<void> {
+  const wakeReason = typeof context.wakeReason === "string" ? context.wakeReason : null;
+  if (wakeReason !== "skill_command_invoked") return;
+
+  const invocationId = typeof context.skillInvocationId === "string" ? context.skillInvocationId : null;
+  if (!invocationId) return;
+
+  try {
+    await db
+      .update(skillInvocations)
+      .set({ heartbeatRunId: runId, updatedAt: new Date() })
+      .where(eq(skillInvocations.id, invocationId));
+  } catch (err) {
+    logger.warn({ err, invocationId, runId }, "earlyStampSkillRunId failed — invocation may not finalize on early error");
+  }
+}
+
+/**
  * Reads the skill command from context, loads its markdown, marks the
  * invocation row as "running", and injects `paperclipSkillCommand` into
  * the mutable context object passed to the adapter.

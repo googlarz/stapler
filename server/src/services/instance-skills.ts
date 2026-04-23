@@ -16,6 +16,7 @@ import type { Db } from "@stapler/db";
 import { instanceSkills } from "@stapler/db";
 import type { PaperclipSkillEntry } from "@stapler/adapter-utils/server-utils";
 import { unprocessable } from "../errors.js";
+import { logger } from "../middleware/logger.js";
 import { resolvePaperclipInstanceRoot } from "../home-paths.js";
 import {
   parseSkillImportSourceInput,
@@ -87,10 +88,13 @@ function resolveRuntimeSkillPath(skill: InstanceSkill): string {
 async function materializeSkillFiles(skill: InstanceSkill): Promise<string | null> {
   try {
     const skillDir = resolveRuntimeSkillPath(skill);
-    await fs.rm(skillDir, { recursive: true, force: true });
-    await fs.mkdir(skillDir, { recursive: true });
+    // Write into a temp directory first so active runs that already have symlinks
+    // into `skillDir` are never exposed to a partially-written or missing directory.
+    // Once all files are ready, atomically swap the temp dir into place.
+    const tmpDir = `${skillDir}.tmp-${Date.now()}`;
+    await fs.mkdir(tmpDir, { recursive: true });
     // Write SKILL.md from the stored markdown.
-    await fs.writeFile(path.resolve(skillDir, "SKILL.md"), skill.markdown, "utf8");
+    await fs.writeFile(path.resolve(tmpDir, "SKILL.md"), skill.markdown, "utf8");
     // Write any additional files from the inventory (stored inline in markdown for now).
     // For full_execution skills imported from disk, sourceLocator points to the real dir.
     if (skill.sourceLocator) {
@@ -101,15 +105,22 @@ async function materializeSkillFiles(skill: InstanceSkill): Promise<string | nul
             const relPath = typeof entry.path === "string" ? entry.path : null;
             if (!relPath || relPath === "SKILL.md") continue;
             const src = path.resolve(skill.sourceLocator, relPath);
-            const dst = path.resolve(skillDir, relPath);
+            const dst = path.resolve(tmpDir, relPath);
             await fs.mkdir(path.dirname(dst), { recursive: true });
             await fs.copyFile(src, dst).catch(() => undefined);
           }
         }
       } catch { /* sourceLocator doesn't exist — markdown-only is fine */ }
     }
+    // Swap: rename tmp → final. On Linux/macOS rename(2) is atomic so any concurrent
+    // reader either sees the old directory intact or the fully-written new one.
+    // fs.rename replaces a non-empty directory only on some platforms, so we
+    // remove the old directory first if it exists, keeping the window minimal.
+    await fs.rm(skillDir, { recursive: true, force: true });
+    await fs.rename(tmpDir, skillDir);
     return skillDir;
-  } catch {
+  } catch (err) {
+    logger.warn({ err, skillKey: skill.key }, "materializeSkillFiles failed");
     return null;
   }
 }
@@ -155,13 +166,47 @@ export function instanceSkillService(db: Db) {
     fileInventory: Array<Record<string, unknown>>;
     metadata: Record<string, unknown> | null;
   }): Promise<{ skill: InstanceSkill; action: "created" | "updated" }> {
-    const existing = await getByKey(input.key);
-    const now = new Date();
+    // Wrap the read-then-write in a transaction to prevent the TOCTOU race
+    // between concurrent imports of the same skill key.
+    const result = await db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(instanceSkills)
+        .where(eq(instanceSkills.key, input.key))
+        .then((rows) => (rows[0] ? toInstanceSkill(rows[0]) : null));
 
-    if (existing) {
-      await db
-        .update(instanceSkills)
-        .set({
+      const now = new Date();
+
+      if (existing) {
+        await tx
+          .update(instanceSkills)
+          .set({
+            slug: input.slug,
+            name: input.name,
+            description: input.description,
+            markdown: input.markdown,
+            sourceType: input.sourceType,
+            sourceLocator: input.sourceLocator,
+            sourceRef: input.sourceRef,
+            trustLevel: input.trustLevel,
+            compatibility: input.compatibility,
+            fileInventory: input.fileInventory,
+            metadata: input.metadata,
+            updatedAt: now,
+          })
+          .where(eq(instanceSkills.id, existing.id));
+        const updated = await tx
+          .select()
+          .from(instanceSkills)
+          .where(eq(instanceSkills.id, existing.id))
+          .then((rows) => (rows[0] ? toInstanceSkill(rows[0]) : existing));
+        return { skill: updated, action: "updated" as const, previous: existing };
+      }
+
+      const [row] = await tx
+        .insert(instanceSkills)
+        .values({
+          key: input.key,
           slug: input.slug,
           name: input.name,
           description: input.description,
@@ -172,32 +217,24 @@ export function instanceSkillService(db: Db) {
           trustLevel: input.trustLevel,
           compatibility: input.compatibility,
           fileInventory: input.fileInventory,
-          metadata: input.metadata,
-          updatedAt: now,
+          metadata: input.metadata ?? null,
         })
-        .where(eq(instanceSkills.id, existing.id));
-      const updated = await getById(existing.id);
-      return { skill: updated!, action: "updated" };
+        .returning();
+      return { skill: toInstanceSkill(row!), action: "created" as const, previous: null };
+    });
+
+    // Invalidate stale on-disk content outside the transaction so the next
+    // heartbeat re-materializes with fresh markdown. Rename rather than rm so
+    // active runs that hold open file descriptors into the old directory are
+    // not suddenly exposed to a missing path mid-run.
+    if (result.action === "updated" && result.previous) {
+      const stale = resolveRuntimeSkillPath(result.previous);
+      const staleMoved = `${stale}.stale-${Date.now()}`;
+      await fs.rename(stale, staleMoved).catch(() => undefined);
+      await fs.rm(staleMoved, { recursive: true, force: true }).catch(() => undefined);
     }
 
-    const [row] = await db
-      .insert(instanceSkills)
-      .values({
-        key: input.key,
-        slug: input.slug,
-        name: input.name,
-        description: input.description,
-        markdown: input.markdown,
-        sourceType: input.sourceType,
-        sourceLocator: input.sourceLocator,
-        sourceRef: input.sourceRef,
-        trustLevel: input.trustLevel,
-        compatibility: input.compatibility,
-        fileInventory: input.fileInventory,
-        metadata: input.metadata ?? null,
-      })
-      .returning();
-    return { skill: toInstanceSkill(row!), action: "created" };
+    return { skill: result.skill, action: result.action };
   }
 
   async function importFromSource(source: string): Promise<InstanceSkillImportResult> {
@@ -282,6 +319,15 @@ export function instanceSkillService(db: Db) {
       .update(instanceSkills)
       .set({ ...patch, updatedAt: new Date() })
       .where(eq(instanceSkills.id, id));
+
+    // Invalidate the on-disk materialized directory so the next heartbeat
+    // picks up the freshly written markdown instead of serving stale content.
+    // Rename first so active runs with open file descriptors into this directory
+    // aren't suddenly reading from a deleted path mid-execution.
+    const stale = resolveRuntimeSkillPath(skill);
+    const staleMoved = `${stale}.stale-${Date.now()}`;
+    await fs.rename(stale, staleMoved).catch(() => undefined);
+    await fs.rm(staleMoved, { recursive: true, force: true }).catch(() => undefined);
 
     return getById(id);
   }

@@ -79,7 +79,7 @@ import { maybeSelfCritique } from "./self-critique.js";
 import { finalizeRoutingOutcome } from "./routing-suggester.js";
 import { finalizeDelegationEdge } from "./collaboration-analyzer.js";
 import { maybeInjectPlaybook, updatePlaybookWinRate } from "./playbook-injector.js";
-import { loadSkillForRun, finalizeSkillInvocation } from "./skill-executor.js";
+import { earlyStampSkillRunId, loadSkillForRun, finalizeSkillInvocation } from "./skill-executor.js";
 import { logActivity } from "./activity-log.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -3215,6 +3215,12 @@ export function heartbeatService(db: Db) {
     activeRunExecutions.add(run.id);
 
     try {
+    // Stamp heartbeatRunId on any pending skill invocation immediately — before any
+    // fallible setup — so early failures (workspace, runtime, memory) can still
+    // resolve the invocation via finalizeSkillInvocation instead of leaving it stuck.
+    const earlyContext = parseObject(run.contextSnapshot);
+    await earlyStampSkillRunId(db, run.id, earlyContext);
+
     const agent = await getAgent(run.agentId);
     if (!agent) {
       await setRunStatus(runId, "failed", {
@@ -4296,6 +4302,14 @@ export function heartbeatService(db: Db) {
           // Ensure the agent is not left stuck in "running" if the inner catch handler's
           // DB calls threw (e.g. a transient DB error in finalizeAgentStatus).
           await finalizeAgentStatus(run.agentId, "failed").catch(() => undefined);
+          // Ensure any skill invocation is not left stuck in "running" on pre-execute failures.
+          // Use the real `message` computed above so SkillCommandChip shows an actionable error.
+          void finalizeSkillInvocation(db, {
+            runId: run.id,
+            outcome: "failed",
+            issueId: null,
+            errorMessage: message,
+          }).catch(() => undefined);
         } finally {
           await releaseRuntimeServicesForRun(run.id).catch(() => undefined);
           activeRunExecutions.delete(run.id);

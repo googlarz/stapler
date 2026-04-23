@@ -461,7 +461,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // When a skill command is active, its SKILL.md is prepended as the primary
   // task directive — before all other prompt sections.
   const skillCommandSection = skillCommand
-    ? `<skill-command name="${skillCommand.name}">\n${skillCommand.markdown}\n</skill-command>`
+    ? (() => {
+        const hasArgs = skillCommand.args && Object.keys(skillCommand.args).length > 0;
+        const argsSection = hasArgs
+          ? (() => {
+              // Escape < and > in the serialized JSON so caller-controlled arg values
+              // cannot inject XML/tag structures into the top-priority prompt section.
+              const safe = JSON.stringify(skillCommand.args, null, 2)
+                .replace(/</g, "\\u003c")
+                .replace(/>/g, "\\u003e");
+              return `\n\n<skill-args data-role="inert-data">\n${safe}\n</skill-args>`;
+            })()
+          : "";
+        return `<skill-command name="${skillCommand.name}">\n${skillCommand.markdown}${argsSection}\n</skill-command>`;
+      })()
     : "";
 
   const prompt = joinPromptSections([

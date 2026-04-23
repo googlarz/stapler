@@ -304,7 +304,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   if (skillCommand) {
     // Skill command takes over — inject its markdown at the top of the system prompt.
-    const skillSection = `<skill-command name="${skillCommand.name}">\n${skillCommand.markdown}\n</skill-command>`;
+    const hasArgs = skillCommand.args && Object.keys(skillCommand.args).length > 0;
+    const argsSection = hasArgs
+      ? (() => {
+          // Escape < and > in the serialized JSON so caller-controlled arg values
+          // cannot inject XML/tag structures into the top-priority prompt section.
+          const safe = JSON.stringify(skillCommand.args, null, 2)
+            .replace(/</g, "\\u003c")
+            .replace(/>/g, "\\u003e");
+          return `\n\n<skill-args data-role="inert-data">\n${safe}\n</skill-args>`;
+        })()
+      : "";
+    const skillSection = `<skill-command name="${skillCommand.name}">\n${skillCommand.markdown}${argsSection}\n</skill-command>`;
     systemPrompt = `${skillSection}\n\n${systemPrompt}`;
   } else {
     // Inject ambient company skills into the system prompt.

@@ -2995,6 +2995,13 @@ export function issueRoutes(
               }
             } catch (err) {
               logger.warn({ err, issueId: currentIssue.id, skillKey: slashCmd.skillKey }, "failed to invoke skill from slash command");
+              // Notify the user that the skill invocation setup failed, then fall through
+              // to the normal comment wakeup so the agent still sees the comment.
+              await svc.addComment(
+                currentIssue.id,
+                `> /${slashCmd.skillKey}\n\n⚠️ Skill invocation failed to start. The agent will still see this comment.`,
+                {},
+              ).catch(() => undefined);
             }
           }
         }
@@ -3423,13 +3430,32 @@ export function issueRoutes(
       return;
     }
 
+    const actor = getActorInfo(req);
+
+    // Agent callers may only target themselves — regardless of whether targetAgentId was
+    // explicit or resolved from issue.assigneeAgentId. This enforces the self-only invariant
+    // and prevents an agent key from waking a peer agent by omitting targetAgentId on an
+    // issue where it is not the assignee.
+    if (actor.actorType === "agent" && actor.agentId !== agentId) {
+      res.status(403).json({ error: "Agent callers may only invoke skills targeting themselves" });
+      return;
+    }
+
+    // Verify the resolved agent belongs to the same company as the issue to prevent
+    // cross-company escalation via an explicit targetAgentId.
+    if (typeof targetAgentId === "string") {
+      const targetAgent = await agentsSvc.getById(agentId);
+      if (!targetAgent || targetAgent.companyId !== issue.companyId) {
+        res.status(403).json({ error: "targetAgentId does not belong to this company" });
+        return;
+      }
+    }
+
     const skill = await skillsSvc.getByKey(skillKey.trim());
     if (!skill) {
       res.status(404).json({ error: `Skill '${skillKey}' not found in the skill registry` });
       return;
     }
-
-    const actor = getActorInfo(req);
     const parsedArgs =
       args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
 
