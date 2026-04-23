@@ -1,0 +1,129 @@
+name: CI
+
+# Runs on every direct push to main.
+# PRs have their own workflow (pr.yml) which includes the lockfile policy gate.
+# This workflow covers the gap: direct commits to main (release commits, merge
+# commits, automated chores) must still pass typecheck + tests + migrations.
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.sha }}
+  # Never cancel on main — let every push run to completion so the commit
+  # status is always reliable.
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Typecheck, test & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Run tests
+        run: pnpm test:run
+
+      - name: Build
+        run: pnpm build
+
+  migrations:
+    name: Migration correctness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: stapler
+          POSTGRES_PASSWORD: stapler
+          POSTGRES_DB: stapler_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run migrations against real Postgres
+        env:
+          DATABASE_URL: postgres://stapler:stapler@localhost:5432/stapler_test
+        run: pnpm --filter @stapler/db migrate
+
+      - name: Verify schema package compiles
+        run: pnpm --filter @stapler/db build
+
+  flywheel:
+    name: Quality flywheel tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run quality flywheel unit tests
+        # Scopes vitest to only the four flywheel test files so failures are
+        # clearly attributed to the flywheel rather than the broader suite.
+        run: >
+          pnpm test:run --
+          quality-flywheel
+          quality-routes
+          quality-adversarial
+          run-scorer

@@ -172,6 +172,40 @@ jobs:
       - name: Verify schema exports compile
         run: pnpm --filter @stapler/db build
 
+  flywheel:
+    name: Quality flywheel tests
+    needs: [policy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run quality flywheel unit tests
+        # Runs only the four flywheel test files so any regression is clearly
+        # attributed to flywheel code, independent of the full 3k-test suite.
+        run: >
+          pnpm test:run --
+          quality-flywheel
+          quality-routes
+          quality-adversarial
+          run-scorer
+
   e2e:
     needs: [policy]
     runs-on: ubuntu-latest
