@@ -3390,5 +3390,61 @@ export function issueRoutes(
     res.json({ ok: true });
   });
 
+  // POST /issues/:id/skill-invocations
+  // Direct skill invocation endpoint — used by stapler_invoke_skill MCP tool so agents
+  // can chain skills without posting a slash-command comment (which would be ignored by
+  // the comment handler's agent-actor guard).
+  router.post("/issues/:id/skill-invocations", async (req, res) => {
+    const id = req.params.id as string;
+    const { skillKey, args, targetAgentId } = req.body as {
+      skillKey?: unknown;
+      args?: unknown;
+      targetAgentId?: unknown;
+    };
+
+    if (typeof skillKey !== "string" || !skillKey.trim()) {
+      res.status(400).json({ error: "skillKey is required" });
+      return;
+    }
+
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+
+    const agentId = (typeof targetAgentId === "string" ? targetAgentId : null) ?? issue.assigneeAgentId;
+    if (!agentId) {
+      res.status(422).json({ error: "Issue has no assigned agent and no targetAgentId was provided" });
+      return;
+    }
+
+    const skill = await skillsSvc.getByKey(issue.companyId, skillKey.trim());
+    if (!skill) {
+      res.status(404).json({ error: `Skill '${skillKey}' not found in the skill registry` });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    const parsedArgs =
+      args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
+
+    const invocationId = await invokeSkill({
+      db,
+      heartbeatWakeup: heartbeat.wakeup,
+      companyId: issue.companyId,
+      issueId: issue.id,
+      agentId,
+      skillKey: skillKey.trim(),
+      args: parsedArgs,
+      triggerCommentId: typeof req.body.triggerCommentId === "string" ? req.body.triggerCommentId : null,
+      requestedByActorType: actor.actorType,
+      requestedByActorId: actor.actorId,
+    });
+
+    res.status(201).json({ invocationId, skillKey: skillKey.trim(), agentId, issueId: issue.id });
+  });
+
   return router;
 }

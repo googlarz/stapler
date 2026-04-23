@@ -876,37 +876,29 @@ export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[
       "stapler_invoke_skill",
       "Invoke a named skill on an issue. The skill will run asynchronously — the assigned agent " +
         "wakes up with the skill's SKILL.md as its primary task. Returns immediately with an " +
-        "invocationId you can use to poll the result. Use this to chain skills or delegate to a " +
-        "specialist skill without blocking the current run.\n\n" +
+        "invocationId you can poll via GET /skill-invocations/:id. Use this to chain skills or " +
+        "delegate to a specialist skill without blocking the current run.\n\n" +
         "Example: stapler_invoke_skill({ skillName: 'gsd:plan-phase', issueId: '<id>' })",
       invokeSkillSchema,
       async ({ skillName, issueId, args, targetAgentId }) => {
         const companyId = client.resolveCompanyId();
         const agentId = targetAgentId ?? client.resolveAgentId();
-        // Post a slash-command comment to trigger the skill invocation pipeline.
-        // The server-side comment handler will parse the slash command and invoke the skill.
-        const argStr = args && Object.keys(args).length > 0
-          ? " " + Object.entries(args).map(([k, v]) => `${k}=${String(v)}`).join(" ")
-          : "";
-        const body = `/${skillName}${argStr}`;
-        const comment = await client.requestJson<{ id: string }>("POST", `/issues/${encodeURIComponent(issueId)}/comments`, {
-          body: { body },
-        });
-        // Fetch the resulting invocation.
-        const invocations = await client.requestJson<Array<{ id: string; status: string }>>(
-          "GET",
+        // Call the dedicated invocation endpoint directly — avoids posting a slash-command
+        // comment that the server would ignore (agent-actor guard) and eliminates the
+        // race condition between comment creation and invocation row creation.
+        const result = await client.requestJson<{ invocationId: string; skillKey: string; agentId: string }>(
+          "POST",
           `/issues/${encodeURIComponent(issueId)}/skill-invocations`,
-        ).catch(() => [] as Array<{ id: string; status: string }>);
-        const latest = invocations[0];
+          { body: { skillKey: skillName, args: args ?? {}, targetAgentId } },
+        );
         return {
-          invocationId: latest?.id ?? null,
-          commentId: comment?.id ?? null,
+          invocationId: result?.invocationId ?? null,
           skillName,
           issueId,
           agentId,
           companyId,
-          status: latest?.status ?? "pending",
-          message: `Skill "${skillName}" invoked. Poll GET /skill-invocations/:id for status.`,
+          status: "pending",
+          message: `Skill "${skillName}" invoked. Poll GET /skill-invocations/${result?.invocationId ?? "<id>"} for status.`,
         };
       },
     ),
