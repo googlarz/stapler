@@ -2988,7 +2988,10 @@ export function issueRoutes(
                 return;
               } else {
                 // Skill not found — tell the user instead of silently doing nothing.
+                // Return early so the regular wakeup doesn't fire: the agent has nothing useful
+                // to do with a comment it can't act on as a skill command.
                 await svc.addComment(currentIssue.id, `> /${slashCmd.skillKey}\n\n⚠️ Unknown skill \`/${slashCmd.skillKey}\`. Check the skill registry and try again.`, {}).catch(() => undefined);
+                return;
               }
             } catch (err) {
               logger.warn({ err, issueId: currentIssue.id, skillKey: slashCmd.skillKey }, "failed to invoke skill from slash command");
