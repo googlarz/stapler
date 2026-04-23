@@ -15,6 +15,12 @@ import {
 import { DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MAX_HISTORY_TURNS, DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_TIMEOUT_SEC } from "../index.js";
 import { resolveOllamaDesiredSkillNames } from "./skills.js";
 import {
+  acquireLlmSlot,
+  getLlmQueueStats,
+  LlmQueueFullError,
+  type LlmPriority,
+} from "./llm-queue.js";
+import {
   STAPLER_TOOLS,
   buildStaplerApiContext,
   executeStaplerTool,
@@ -218,10 +224,232 @@ export async function resolveSystemPrompt(
   }
 }
 
+/**
+ * Checks whether an error from `fetch` is a transient Ollama connectivity
+ * failure — i.e. the process is up but temporarily unreachable (mid-restart,
+ * busy loading a model, prior request still running).
+ */
+function isOllamaConnectionError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("ECONNREFUSED") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("fetch failed") ||
+    msg.includes("connect EREFUSED") ||
+    msg.includes("Failed to fetch") ||
+    msg.includes("socket hang up") ||
+    msg.includes("UND_ERR_SOCKET") ||
+    msg.includes("UND_ERR_CONNECT_TIMEOUT")
+  );
+}
+
+/**
+ * Fetch wrapper that retries on transient Ollama connection errors with
+ * exponential backoff. Only retries for connection failures — HTTP errors
+ * from a live Ollama (e.g. 400, 404) are returned immediately.
+ *
+ * @param baseUrl   Ollama base URL (used only for log messages).
+ * @param url       Full endpoint URL to fetch.
+ * @param init      RequestInit passed to fetch.
+ * @param onLog     Adapter log emitter — retries are logged to stderr.
+ * @param signal    AbortSignal from the run timeout controller.
+ * @param maxWaitMs Maximum total time to spend retrying (default 10 min).
+ */
+async function fetchOllamaWithRetry(
+  baseUrl: string,
+  url: string,
+  init: RequestInit,
+  onLog: AdapterExecutionContext["onLog"],
+  signal: AbortSignal,
+  maxWaitMs = 10 * 60 * 1000,
+): Promise<Response> {
+  const startedAt = Date.now();
+  let attempt = 0;
+  // Backoff sequence (ms): 3s, 6s, 12s, 24s, 48s … capped at 60s per step.
+  const backoffMs = (n: number) => Math.min(3_000 * 2 ** n, 60_000);
+
+  while (true) {
+    try {
+      // Merge the run's abort signal with our own so the fetch is cancelled if
+      // the run times out while we're waiting between retries.
+      const res = await fetch(url, { ...init, signal });
+      return res;
+    } catch (err) {
+      if (signal.aborted) throw err; // run timed out — propagate immediately
+
+      if (!isOllamaConnectionError(err)) throw err; // non-transient — propagate
+
+      const elapsed = Date.now() - startedAt;
+      const wait = backoffMs(attempt);
+
+      if (elapsed + wait > maxWaitMs) {
+        // Giving up — surface as the original connection error so the normal
+        // error path can emit the "ollama_not_running" message.
+        throw err;
+      }
+
+      attempt++;
+      const waitSec = Math.round(wait / 1000);
+      const logLine: OllamaErrorLine = {
+        type: "error",
+        message: `Ollama unreachable (attempt ${attempt}); retrying in ${waitSec}s…`,
+      };
+      await onLog("stderr", JSON.stringify(logLine) + "\n");
+
+      // Wait for the backoff period, but bail early if the run is aborted.
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, wait);
+        signal.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Level 4 — Multi-endpoint routing
+// ---------------------------------------------------------------------------
+
+interface OllamaEndpointConfig {
+  url: string;
+  /** If set, only use this endpoint when the requested model is listed here. */
+  models?: string[];
+  /** Override concurrency limit for this endpoint specifically. */
+  concurrencyLimit?: number;
+}
+
+/**
+ * Parse `config.ollamaEndpoints` into a list of endpoint descriptors.
+ * Falls back to the single `config.baseUrl` if not set.
+ */
+function parseOllamaEndpoints(
+  config: Record<string, unknown>,
+  fallbackBaseUrl: string,
+): OllamaEndpointConfig[] {
+  const raw = config.ollamaEndpoints;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return [{ url: fallbackBaseUrl }];
+  }
+  const parsed: OllamaEndpointConfig[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const obj = item as Record<string, unknown>;
+    const url = typeof obj.url === "string" ? obj.url.replace(/\/$/, "") : null;
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    parsed.push({
+      url,
+      models: Array.isArray(obj.models) ? (obj.models as string[]) : undefined,
+      concurrencyLimit: typeof obj.concurrencyLimit === "number" ? obj.concurrencyLimit : undefined,
+    });
+  }
+  return parsed.length > 0 ? parsed : [{ url: fallbackBaseUrl }];
+}
+
+/**
+ * Check whether an Ollama endpoint has a model already loaded in VRAM.
+ * A warm model means the first token comes back fast with no load delay.
+ * Returns `null` if the endpoint is unreachable.
+ */
+async function checkModelWarmth(
+  endpointUrl: string,
+  modelName: string,
+): Promise<"warm" | "cold" | null> {
+  try {
+    const res = await fetch(`${endpointUrl}/api/tags`, {
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!res.ok) return "cold";
+    const data = (await res.json()) as { models?: Array<{ name: string }> };
+    const names = (data.models ?? []).map((m) => m.name.toLowerCase());
+    // Match on name prefix (e.g. "gemma4:27b" satisfies a request for "gemma4").
+    const warm = names.some(
+      (n) => n === modelName.toLowerCase() || n.startsWith(modelName.toLowerCase() + ":"),
+    );
+    return warm ? "warm" : "cold";
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Select the best Ollama endpoint for a given model and priority level.
+ *
+ * Selection criteria (in order):
+ *   1. Endpoint must be reachable (`/api/tags` returns 200 within 3s)
+ *   2. Prefer endpoints where the model is already warm (loaded in VRAM)
+ *   3. Among equally-warm endpoints, prefer the one with fewest running slots
+ *
+ * Falls back to the first reachable endpoint if none have the model warm.
+ * Returns `null` if all endpoints are unreachable.
+ */
+async function selectBestEndpoint(
+  endpoints: OllamaEndpointConfig[],
+  modelName: string,
+): Promise<OllamaEndpointConfig | null> {
+  if (endpoints.length === 1) return endpoints[0]!;
+
+  // Filter by model allowlist, if specified
+  const candidates = endpoints.filter(
+    (e) => !e.models || e.models.some((m) => modelName.toLowerCase().startsWith(m.toLowerCase())),
+  );
+  if (candidates.length === 0) return endpoints[0] ?? null;
+  if (candidates.length === 1) return candidates[0]!;
+
+  // Check warmth in parallel (3s timeout each)
+  const warmthResults = await Promise.all(
+    candidates.map(async (ep) => ({
+      ep,
+      warmth: await checkModelWarmth(ep.url, modelName),
+    })),
+  );
+
+  // Partition: warm reachable vs cold reachable vs unreachable
+  const warm = warmthResults.filter((r) => r.warmth === "warm");
+  const cold = warmthResults.filter((r) => r.warmth === "cold");
+  const pool = warm.length > 0 ? warm : cold;
+
+  if (pool.length === 0) return null; // all unreachable
+
+  // Within the chosen pool, pick the endpoint with the fewest running slots
+  const stats = pool.map((r) => ({
+    ...r,
+    running: getLlmQueueStats(r.ep.url).running,
+  }));
+  stats.sort((a, b) => a.running - b.running);
+  return stats[0]!.ep;
+}
+
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
   const { runId, agent, runtime, config, context, onLog, onMeta } = ctx;
 
-  const baseUrl = asString(config.baseUrl, DEFAULT_OLLAMA_BASE_URL).replace(/\/$/, "");
+  // ---------------------------------------------------------------------------
+  // Level 4 — resolve base URL (single endpoint or best of multiple)
+  // ---------------------------------------------------------------------------
+  const configuredBaseUrl = asString(config.baseUrl, DEFAULT_OLLAMA_BASE_URL).replace(/\/$/, "");
+  const rawModel = asString(config.model, DEFAULT_OLLAMA_MODEL).trim();
+
+  const endpoints = parseOllamaEndpoints(config, configuredBaseUrl);
+  let baseUrl: string;
+  let llmConcurrency: number;
+
+  if (endpoints.length > 1) {
+    const best = await selectBestEndpoint(endpoints, rawModel);
+    if (!best) {
+      return {
+        exitCode: 1,
+        signal: null,
+        timedOut: false,
+        errorMessage: `All configured Ollama endpoints are unreachable.`,
+        provider: "ollama",
+        model: rawModel,
+      };
+    }
+    baseUrl = best.url;
+    llmConcurrency = best.concurrencyLimit ?? asNumber(config.llmConcurrency, 1);
+  } else {
+    baseUrl = configuredBaseUrl;
+    llmConcurrency = asNumber(config.llmConcurrency, 1);
+  }
+
   if (!/^https?:\/\//i.test(baseUrl)) {
     return {
       exitCode: 1,
@@ -229,10 +457,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       timedOut: false,
       errorMessage: `Invalid Ollama base URL: "${baseUrl}". Only http:// and https:// are allowed.`,
       provider: "ollama",
-      model: asString(config.model, DEFAULT_OLLAMA_MODEL),
+      model: rawModel,
     };
   }
-  const rawModel = asString(config.model, DEFAULT_OLLAMA_MODEL).trim();
   const timeoutSec = asNumber(config.timeoutSec, DEFAULT_OLLAMA_TIMEOUT_SEC);
   const temperature =
     typeof config.temperature === "number" && Number.isFinite(config.temperature)
@@ -438,6 +665,69 @@ Complete this task in full in your response. Do not defer to a future turn.`,
   const maxToolIterations = asNumber(config.maxToolIterations, 10);
   const apiContext = buildStaplerApiContext(agent, ctx.authToken);
 
+  // ---------------------------------------------------------------------------
+  // Level 2 — Priority-aware queue acquisition
+  //
+  // Priority derives from two signals:
+  //   • skill command active → high (2): this run coordinates other agents
+  //   • CEO/orchestrator role → high (2): orchestration runs must not starve
+  //   • everything else → normal (1)
+  //
+  // `llmConcurrency` was already resolved above (either from per-endpoint
+  // config or the global `config.llmConcurrency` field).
+  // ---------------------------------------------------------------------------
+  const llmPriority: LlmPriority =
+    skillCommand !== null || agent.role === "ceo" ? 2 : 1;
+
+  {
+    const stats = getLlmQueueStats(baseUrl);
+    if (stats.queued > 0 || stats.running >= stats.concurrency) {
+      const priorityLabel = llmPriority === 2 ? "high" : "normal";
+      const waitLine: OllamaErrorLine = {
+        type: "error",
+        message:
+          `Waiting for Ollama slot at ${baseUrl} ` +
+          `(${stats.running}/${stats.concurrency} running, ${stats.queued} queued, ` +
+          `this run: priority=${priorityLabel})…`,
+      };
+      await onLog("stderr", JSON.stringify(waitLine) + "\n");
+    }
+  }
+
+  let releaseLlmSlot: (() => void) | null = null;
+  try {
+    releaseLlmSlot = await acquireLlmSlot(baseUrl, {
+      concurrency: llmConcurrency,
+      priority: llmPriority,
+      agentId: agent.id,
+      signal: controller.signal,
+      maxQueuedPerAgent: asNumber(config.maxQueuedPerAgent, 2),
+    });
+  } catch (err) {
+    if (err instanceof LlmQueueFullError) {
+      // Per-agent cap exceeded — log and fail fast rather than queuing forever.
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      return {
+        exitCode: 1,
+        signal: null,
+        timedOut: false,
+        errorMessage: `LLM queue full for this agent: ${err.message}`,
+        provider: "ollama",
+        model,
+      };
+    }
+    // Aborted (run timed out) while waiting in queue.
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    return {
+      exitCode: null,
+      signal: null,
+      timedOut: true,
+      errorMessage: `Timed out after ${timeoutSec}s waiting for an Ollama inference slot`,
+      provider: "ollama",
+      model,
+    };
+  }
+
   let assistantContent = "";
   let promptEvalCount = 0;
   let evalCount = 0;
@@ -475,12 +765,17 @@ Complete this task in full in your response. Do not defer to a future turn.`,
         };
         if (temperature !== undefined) reqBody.options = { temperature };
 
-        const res = await fetch(`${baseUrl}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(reqBody),
-          signal: controller.signal,
-        });
+        const res = await fetchOllamaWithRetry(
+          baseUrl,
+          `${baseUrl}/api/chat`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(reqBody),
+          },
+          onLog,
+          controller.signal,
+        );
 
         if (!res.ok) {
           const bodyText = await res.text().catch(() => "");
@@ -620,12 +915,17 @@ Complete this task in full in your response. Do not defer to a future turn.`,
       requestBody.options = { temperature };
     }
 
-    const response = await fetch(`${baseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
+    const response = await fetchOllamaWithRetry(
+      baseUrl,
+      `${baseUrl}/api/chat`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      },
+      onLog,
+      controller.signal,
+    );
 
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "");
@@ -774,6 +1074,7 @@ Complete this task in full in your response. Do not defer to a future turn.`,
     };
   } finally {
     if (timeoutHandle) clearTimeout(timeoutHandle);
+    releaseLlmSlot?.();
   }
 
   // Guard against race where timeout fires just as the stream finishes

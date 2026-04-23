@@ -85,8 +85,24 @@ export interface PlaybookExperiment {
   concludedAt: string | null;
 }
 
+export interface LlmQueueStats {
+  baseUrl: string;
+  running: number;
+  concurrency: number;
+  queued: number;
+  queueByPriority: { high: number; normal: number; low: number };
+  queueByAgent: Record<string, number>;
+  oldestWaitMs: number | null;
+}
+
+export interface LlmQueueOverview {
+  endpoints: LlmQueueStats[];
+  dbRunning: number;
+}
+
 export const qualityApi = {
   runScore: (runId: string) => api.get<RunScoreRow>(`/runs/${runId}/score`),
+  llmQueueStats: () => api.get<LlmQueueOverview>(`/llm-queue/stats`),
   agentTrend: (agentId: string, limit = 20) =>
     api.get<AgentQualityTrend>(`/agents/${agentId}/quality/trend?limit=${limit}`),
   agentTrends: (agentId: string) =>

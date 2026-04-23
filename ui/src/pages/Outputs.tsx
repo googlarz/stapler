@@ -107,8 +107,11 @@ export function Outputs() {
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-4">
                     {output.latestVersionNumber > 0 && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground tabular-nums">
                         v{output.latestVersionNumber}
+                        {output.latestVersionReleasedAt && (
+                          <> &middot; {new Date(output.latestVersionReleasedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</>
+                        )}
                       </span>
                     )}
                     <Badge variant={badge.variant}>{badge.label}</Badge>

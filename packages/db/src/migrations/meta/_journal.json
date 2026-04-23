@@ -450,20 +450,117 @@
       "tag": "0063_scheduled_for",
       "breakpoints": true
     },
-    { "idx": 64, "version": "7", "when": 1776278400000, "tag": "0064_wiki_slugs", "breakpoints": true },
-    { "idx": 65, "version": "7", "when": 1776364800000, "tag": "0065_company_wiki_slug", "breakpoints": true },
-    { "idx": 66, "version": "7", "when": 1776451200000, "tag": "0066_memory_expires_at", "breakpoints": true },
-    { "idx": 67, "version": "7", "when": 1776537600000, "tag": "0067_memory_embeddings", "breakpoints": true },
-    { "idx": 68, "version": "7", "when": 1776624000000, "tag": "0068_project_memories", "breakpoints": true },
-    { "idx": 69, "version": "7", "when": 1776710400000, "tag": "0069_evals", "breakpoints": true },
-    { "idx": 70, "version": "7", "when": 1776796800000, "tag": "0070_eval_schedule", "breakpoints": true },
-    { "idx": 71, "version": "7", "when": 1776883200000, "tag": "0071_run_scores", "breakpoints": true },
-    { "idx": 72, "version": "7", "when": 1776969600000, "tag": "0072_self_critique", "breakpoints": true },
-    { "idx": 73, "version": "7", "when": 1777056000000, "tag": "0073_config_gate", "breakpoints": true },
-    { "idx": 74, "version": "7", "when": 1777142400000, "tag": "0074_org_learning", "breakpoints": true },
-    { "idx": 75, "version": "7", "when": 1777228800000, "tag": "0075_collab_learning", "breakpoints": true },
-    { "idx": 76, "version": "7", "when": 1777315200000, "tag": "0076_workflow_learning", "breakpoints": true },
-    { "idx": 77, "version": "7", "when": 1777401600000, "tag": "0077_skill_invocations", "breakpoints": true },
-    { "idx": 78, "version": "7", "when": 1777488000000, "tag": "0078_instance_skills", "breakpoints": true }
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1776278400000,
+      "tag": "0064_wiki_slugs",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1776364800000,
+      "tag": "0065_company_wiki_slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1776451200000,
+      "tag": "0066_memory_expires_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1776537600000,
+      "tag": "0067_memory_embeddings",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1776624000000,
+      "tag": "0068_project_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1776710400000,
+      "tag": "0069_evals",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1776796800000,
+      "tag": "0070_eval_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1776883200000,
+      "tag": "0071_run_scores",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1776969600000,
+      "tag": "0072_self_critique",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1777056000000,
+      "tag": "0073_config_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1777142400000,
+      "tag": "0074_org_learning",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1777228800000,
+      "tag": "0075_collab_learning",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1777315200000,
+      "tag": "0076_workflow_learning",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1777401600000,
+      "tag": "0077_skill_invocations",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1777488000000,
+      "tag": "0078_instance_skills",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1777574400000,
+      "tag": "0079_output_version_timestamp",
+      "breakpoints": true
+    }
   ]
 }

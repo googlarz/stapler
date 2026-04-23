@@ -21,6 +21,7 @@ import { Bot, Plus, List, GitBranch, SlidersHorizontal } from "lucide-react";
 import { AGENT_ROLE_LABELS, type Agent } from "@stapler/shared";
 
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
+import { LlmQueueWidget } from "../components/LlmQueueWidget";
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
@@ -192,6 +193,7 @@ export function Agents() {
               </button>
             </div>
           )}
+          <LlmQueueWidget />
           <Button size="sm" variant="outline" onClick={openNewAgent}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             New Agent

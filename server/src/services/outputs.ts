@@ -88,9 +88,10 @@ export function outputService(db: Db) {
         })
         .returning();
 
+      const now = new Date();
       await db
         .update(outputs)
-        .set({ latestVersionNumber: nextVersion, updatedAt: new Date() })
+        .set({ latestVersionNumber: nextVersion, latestVersionReleasedAt: now, updatedAt: now })
         .where(eq(outputs.id, id));
 
       return version;

@@ -11,6 +11,7 @@ export interface Output {
   approvedByAgentId: string | null;
   approvalIssueId: string | null;
   latestVersionNumber: number;
+  latestVersionReleasedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

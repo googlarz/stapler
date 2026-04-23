@@ -17,6 +17,7 @@ import { getAgentQualityTrends } from "../services/quality-trends.js";
 import { getAgentCollabStats } from "../services/collaboration-analyzer.js";
 import { minePlaybooksForAgent } from "../services/playbook-miner.js";
 import { playbooks, playbookExperiments } from "@stapler/db";
+import { getLlmQueueStats, getLlmQueueBaseUrls } from "@stapler/adapter-ollama-local/server";
 
 const WINDOW_DAYS = 30;
 
@@ -304,6 +305,52 @@ export function qualityRoutes(db: Db) {
       .where(eq(playbookExperiments.companyId, companyId))
       .orderBy(desc(playbookExperiments.createdAt));
     res.json({ items: rows });
+  });
+
+  // ── LLM Queue stats (Level 3) ──────────────────────────────────────────────
+
+  /**
+   * GET /llm-queue/stats
+   *
+   * Returns in-process queue state for all known Ollama endpoints, plus a count
+   * of heartbeat_runs currently in "running" status per company (as a cross-check).
+   * No auth required beyond being logged in — this is diagnostic data.
+   *
+   * Response: { endpoints: LlmQueueStats[], dbRunning: number }
+   */
+  router.get("/llm-queue/stats", async (_req, res) => {
+    const knownUrls = getLlmQueueBaseUrls();
+    // Also include the default URL even if no slots have been acquired yet
+    const defaultUrl = "http://localhost:11434";
+    const urlSet = new Set([...knownUrls, defaultUrl]);
+    const endpoints = [...urlSet].map((url) => getLlmQueueStats(url));
+
+    // Count how many heartbeat_runs are currently running (cross-check vs in-process)
+    const [dbRow] = await db
+      .select({ count: count() })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.status, "running"));
+    const dbRunning = Number(dbRow?.count ?? 0);
+
+    res.json({ endpoints, dbRunning });
+  });
+
+  /**
+   * GET /llm-queue/stats/:encodedUrl
+   *
+   * Returns queue stats for a specific Ollama endpoint URL.
+   * URL must be base64-encoded to avoid routing ambiguity.
+   */
+  router.get("/llm-queue/stats/:encodedUrl", (req, res) => {
+    const { encodedUrl } = req.params as { encodedUrl: string };
+    let baseUrl: string;
+    try {
+      baseUrl = Buffer.from(encodedUrl, "base64").toString("utf8");
+    } catch {
+      res.status(400).json({ error: "Invalid base64 URL encoding" });
+      return;
+    }
+    res.json(getLlmQueueStats(baseUrl));
   });
 
   return router;

@@ -38,6 +38,8 @@ export const outputs = pgTable(
     }),
     /** Latest released version number (0 = no version released yet) */
     latestVersionNumber: integer("latest_version_number").notNull().default(0),
+    /** Timestamp of the most recent version release (null until first release) */
+    latestVersionReleasedAt: timestamp("latest_version_released_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
