@@ -198,7 +198,7 @@ describe("resolvePaperclipDesiredSkillNames — canonicalization", () => {
     });
 
     it("resolves reference by exact key — case insensitive", () => {
-      const config = { paperclipSkillSync: { desiredSkills: ["PAPERCLIPAI/PAPERCLIP/EXTRA"] } };
+      const config = { paperclipSkillSync: { desiredSkills: ["STAPLER/STAPLER/EXTRA"] } };
       const result = resolvePaperclipDesiredSkillNames(config, entries);
       expect(result).toContain("stapler/stapler/extra");
     });
