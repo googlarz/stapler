@@ -101,9 +101,9 @@ export async function finalizeSkillInvocation(
 ): Promise<void> {
   const { runId, outcome, issueId, errorMessage } = opts;
 
-  // Find the invocation for this run.
+  // Find the invocation for this run (also select issueId as a fallback for callers that don't have it).
   const invocation = await db
-    .select({ id: skillInvocations.id })
+    .select({ id: skillInvocations.id, issueId: skillInvocations.issueId })
     .from(skillInvocations)
     .where(eq(skillInvocations.heartbeatRunId, runId))
     .limit(1)
@@ -111,17 +111,20 @@ export async function finalizeSkillInvocation(
 
   if (!invocation) return;
 
+  // Use caller-supplied issueId if available, fall back to the stored one.
+  const resolvedIssueId = issueId ?? invocation.issueId;
+
   try {
     if (outcome === "succeeded") {
       // Find the last comment posted by this run in the issue thread.
       let resultCommentId: string | null = null;
-      if (issueId) {
+      if (resolvedIssueId) {
         const lastComment = await db
           .select({ id: issueComments.id })
           .from(issueComments)
           .where(
             and(
-              eq(issueComments.issueId, issueId),
+              eq(issueComments.issueId, resolvedIssueId),
               eq(issueComments.createdByRunId, runId),
             ),
           )

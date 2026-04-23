@@ -193,6 +193,12 @@ const invokeSkillSchema = z.object({
 const skillProgressSchema = z.object({
   issueId: issueIdSchema,
   message: z.string().trim().min(1).max(10000, "message must be at most 10000 characters"),
+  /**
+   * Pass the commentId returned by the previous stapler_skill_progress call to
+   * edit that comment in-place rather than posting a new one. This keeps the
+   * thread clean during multi-step skills.
+   */
+  lastProgressCommentId: z.string().uuid().optional(),
 });
 
 export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[] {
@@ -906,18 +912,40 @@ export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[
     ),
     makeTool(
       "stapler_skill_progress",
-      "Post a progress update comment to the current issue thread, attributed to this skill run. " +
-        "Use during multi-step skill execution to keep humans informed without blocking. " +
-        "Returns the created comment id.\n\n" +
-        "Example: stapler_skill_progress({ issueId: '<id>', message: 'Step 1/3: analyzing codebase...' })",
+      "Post or update a progress comment in the issue thread during a multi-step skill execution.\n\n" +
+        "On the first call: omit lastProgressCommentId — a new comment is created.\n" +
+        "On subsequent calls: pass the commentId returned by the previous call to edit it in-place " +
+        "rather than spamming new comments.\n\n" +
+        "Example (first update):\n" +
+        "  const { commentId } = await stapler_skill_progress({ issueId, message: 'Step 1/3…' })\n" +
+        "Example (later update):\n" +
+        "  await stapler_skill_progress({ issueId, message: 'Step 2/3…', lastProgressCommentId: commentId })",
       skillProgressSchema,
-      async ({ issueId, message }) => {
+      async ({ issueId, message, lastProgressCommentId }) => {
+        if (lastProgressCommentId) {
+          // Edit the existing progress comment in-place.
+          const updated = await client.requestJson<{ id: string }>(
+            "PATCH",
+            `/issues/${encodeURIComponent(issueId)}/comments/${encodeURIComponent(lastProgressCommentId)}`,
+            { body: { body: message } },
+          ).catch(() => null);
+          if (updated) {
+            return {
+              commentId: lastProgressCommentId,
+              issueId,
+              edited: true,
+              message: "Progress comment updated in-place.",
+            };
+          }
+          // Fall through to create a new comment if the PATCH fails (e.g. comment deleted).
+        }
         const comment = await client.requestJson<{ id: string }>("POST", `/issues/${encodeURIComponent(issueId)}/comments`, {
           body: { body: message },
         });
         return {
           commentId: comment?.id ?? null,
           issueId,
+          edited: false,
           message: "Progress comment posted.",
         };
       },

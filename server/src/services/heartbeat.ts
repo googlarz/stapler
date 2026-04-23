@@ -2727,6 +2727,14 @@ export function heartbeatService(db: Db) {
       });
 
       await finalizeAgentStatus(run.agentId, "failed");
+      // Finalize any skill invocation that was left in "running" state by this reaped run.
+      // Pass issueId: null — finalizeSkillInvocation resolves it from the invocation row.
+      void finalizeSkillInvocation(db, {
+        runId: run.id,
+        outcome: "failed",
+        issueId: null,
+        errorMessage: "Run was reaped (process lost or stuck)",
+      });
       await startNextQueuedRunForAgent(run.agentId);
       runningProcesses.delete(run.id);
       reaped.push(run.id);

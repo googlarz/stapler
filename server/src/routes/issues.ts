@@ -2661,6 +2661,44 @@ export function issueRoutes(
     res.json(comment);
   });
 
+  // PATCH /issues/:id/comments/:commentId — edit a comment body in-place.
+  // Used by stapler_skill_progress to update progress comments rather than spamming new ones.
+  // Only the comment's original author (agent or user) may edit it.
+  router.patch("/issues/:id/comments/:commentId", async (req, res) => {
+    const id = req.params.id as string;
+    const commentId = req.params.commentId as string;
+    const body = typeof req.body.body === "string" ? req.body.body.trim() : null;
+    if (!body) {
+      res.status(400).json({ error: "body is required" });
+      return;
+    }
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    const comment = await svc.getComment(commentId);
+    if (!comment || comment.issueId !== id) {
+      res.status(404).json({ error: "Comment not found" });
+      return;
+    }
+    const actor = getActorInfo(req);
+    const actorOwnsComment =
+      actor.actorType === "agent"
+        ? comment.authorAgentId === actor.agentId
+        : actor.actorType === "user" && comment.authorUserId === actor.actorId;
+    if (!actorOwnsComment) {
+      res.status(403).json({ error: "Only the comment author may edit it" });
+      return;
+    }
+    await db
+      .update(issueComments)
+      .set({ body, updatedAt: new Date() })
+      .where(eq(issueComments.id, commentId));
+    res.json({ id: commentId, body });
+  });
+
   router.delete("/issues/:id/comments/:commentId", async (req, res) => {
     const id = req.params.id as string;
     const commentId = req.params.commentId as string;
@@ -2923,27 +2961,39 @@ export function issueRoutes(
     // We fire-and-forget so a skill lookup failure never blocks the comment response.
     void (async () => {
       const slashCmd = parseSlashCommand(req.body.body);
-      if (slashCmd && currentIssue.assigneeAgentId) {
-        try {
-          const skill = await skillsSvc.getByKey(currentIssue.companyId, slashCmd.skillKey);
-          if (skill) {
-            await invokeSkill({
-              db,
-              heartbeatWakeup: heartbeat.wakeup,
-              companyId: currentIssue.companyId,
-              issueId: currentIssue.id,
-              agentId: currentIssue.assigneeAgentId,
-              skillKey: slashCmd.skillKey,
-              args: slashCmd.args,
-              triggerCommentId: comment.id,
-              requestedByActorType: actor.actorType,
-              requestedByActorId: actor.actorId,
-            });
-            // Skill invocation handles its own wakeup — return early.
-            return;
+      if (slashCmd) {
+        // Don't process slash commands posted by agents — avoids an infinite loop
+        // when stapler_invoke_skill posts the slash command as a comment trigger.
+        if (actor.actorType !== "agent") {
+          if (!currentIssue.assigneeAgentId) {
+            // No agent to handle it — post a brief error so the user knows.
+            await svc.addComment(currentIssue.id, `> /${slashCmd.skillKey}\n\n⚠️ Skill command ignored: this issue has no assigned agent.`, {}).catch(() => undefined);
+          } else {
+            try {
+              const skill = await skillsSvc.getByKey(currentIssue.companyId, slashCmd.skillKey);
+              if (skill) {
+                await invokeSkill({
+                  db,
+                  heartbeatWakeup: heartbeat.wakeup,
+                  companyId: currentIssue.companyId,
+                  issueId: currentIssue.id,
+                  agentId: currentIssue.assigneeAgentId,
+                  skillKey: slashCmd.skillKey,
+                  args: slashCmd.args,
+                  triggerCommentId: comment.id,
+                  requestedByActorType: actor.actorType,
+                  requestedByActorId: actor.actorId,
+                });
+                // Skill invocation handles its own wakeup — return early.
+                return;
+              } else {
+                // Skill not found — tell the user instead of silently doing nothing.
+                await svc.addComment(currentIssue.id, `> /${slashCmd.skillKey}\n\n⚠️ Unknown skill \`/${slashCmd.skillKey}\`. Check the skill registry and try again.`, {}).catch(() => undefined);
+              }
+            } catch (err) {
+              logger.warn({ err, issueId: currentIssue.id, skillKey: slashCmd.skillKey }, "failed to invoke skill from slash command");
+            }
           }
-        } catch (err) {
-          logger.warn({ err, issueId: currentIssue.id, skillKey: slashCmd.skillKey }, "failed to invoke skill from slash command");
         }
       }
 
