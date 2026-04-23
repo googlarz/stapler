@@ -79,6 +79,7 @@ import { maybeSelfCritique } from "./self-critique.js";
 import { finalizeRoutingOutcome } from "./routing-suggester.js";
 import { finalizeDelegationEdge } from "./collaboration-analyzer.js";
 import { maybeInjectPlaybook, updatePlaybookWinRate } from "./playbook-injector.js";
+import { loadSkillForRun, finalizeSkillInvocation } from "./skill-executor.js";
 import { logActivity } from "./activity-log.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -3853,6 +3854,11 @@ export function heartbeatService(db: Db) {
           "injected memories for agent run-start",
         );
       }
+
+      // Skill slash command — inject paperclipSkillCommand into context if this
+      // run was triggered by a skill invocation.
+      await loadSkillForRun(db, agent.companyId, run.id, context);
+
       const adapterResult = await adapter.execute({
         runId: run.id,
         agent,
@@ -4130,6 +4136,16 @@ export function heartbeatService(db: Db) {
         });
       }
 
+      // Skill invocation finalization — update skill_invocations row with outcome.
+      void finalizeSkillInvocation(db, {
+        runId: run.id,
+        outcome: outcome === "succeeded" ? "succeeded" : "failed",
+        issueId,
+        errorMessage: outcome !== "succeeded" ? (run.error ?? "Run did not succeed") : null,
+      }).catch((err) => {
+        logger.warn({ err, runId: run.id }, "skill invocation finalization failed");
+      });
+
       // P6/P7 routing and delegation finalization has been moved to the issue
       // status-transition path in routes/issues.ts. That fires when the issue
       // itself reaches "done" or "cancelled", which is the correct semantic
@@ -4224,6 +4240,18 @@ export function heartbeatService(db: Db) {
       }
 
       await finalizeAgentStatus(agent.id, "failed");
+
+      // Skill invocation finalization for adapter errors.
+      if (failedRun) {
+        void finalizeSkillInvocation(db, {
+          runId: failedRun.id,
+          outcome: "failed",
+          issueId,
+          errorMessage: message,
+        }).catch((err) => {
+          logger.warn({ err, runId: failedRun.id }, "skill invocation finalization failed on error");
+        });
+      }
     }
     } catch (outerErr) {
           // Setup code before adapter.execute threw (e.g. ensureRuntimeState, resolveWorkspaceForRun).

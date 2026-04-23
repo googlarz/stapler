@@ -340,6 +340,24 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const billingType = resolveClaudeBillingType(effectiveEnv);
   const claudeSkillEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
   const desiredSkillNames = new Set(resolveClaudeDesiredSkillNames(config, claudeSkillEntries));
+
+  // When a skill slash command is active, it takes over as the primary task.
+  // Suppress ambient skill injection so the dedicated SKILL.md is the sole focus.
+  const skillCommand = (() => {
+    const cmd = context.paperclipSkillCommand;
+    if (
+      cmd &&
+      typeof cmd === "object" &&
+      typeof (cmd as Record<string, unknown>).markdown === "string"
+    ) {
+      return cmd as { name: string; markdown: string; args: Record<string, unknown>; invocationId: string };
+    }
+    return null;
+  })();
+  const effectiveSkillEntries = skillCommand
+    ? [] // Suppress ambient skills — the invoked SKILL.md is the primary task
+    : claudeSkillEntries.filter((entry) => desiredSkillNames.has(entry.key));
+
   // When instructionsFilePath is configured, build a stable content-addressed
   // file that includes both the file content and the path directive, so we only
   // need --append-system-prompt-file (Claude CLI forbids using both flags together).
@@ -363,7 +381,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   }
   const promptBundle = await prepareClaudePromptBundle({
     companyId: agent.companyId,
-    skills: claudeSkillEntries.filter((entry) => desiredSkillNames.has(entry.key)),
+    skills: effectiveSkillEntries,
     instructionsContents: combinedInstructionsContents,
     onLog,
   });
@@ -440,7 +458,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     return sections.join("\n\n");
   })();
 
+  // When a skill command is active, its SKILL.md is prepended as the primary
+  // task directive — before all other prompt sections.
+  const skillCommandSection = skillCommand
+    ? `<skill-command name="${skillCommand.name}">\n${skillCommand.markdown}\n</skill-command>`
+    : "";
+
   const prompt = joinPromptSections([
+    skillCommandSection,
     renderedBootstrapPrompt,
     wakePrompt,
     sessionHandoffNote,
@@ -449,6 +474,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   ]);
   const promptMetrics = {
     promptChars: prompt.length,
+    skillCommandChars: skillCommandSection.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
     wakePromptChars: wakePrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,

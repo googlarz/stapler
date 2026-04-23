@@ -76,3 +76,4 @@ export { decompositionOutcomes } from "./decomposition_outcomes.js";
 export { delegationEdges } from "./delegation_edges.js";
 export { playbooks } from "./playbooks.js";
 export { playbookExperiments } from "./playbook_experiments.js";
+export { skillInvocations } from "./skill_invocations.js";

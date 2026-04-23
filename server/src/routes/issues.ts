@@ -33,6 +33,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  companySkillService,
   executionWorkspaceService,
   feedbackService,
   goalService,
@@ -74,6 +75,7 @@ import {
   normalizeIssueExecutionPolicy,
   parseIssueExecutionState,
 } from "../services/issue-execution-policy.js";
+import { parseSlashCommand, invokeSkill } from "../services/skill-invoker.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
 const UUID_QUERY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -368,6 +370,7 @@ export function issueRoutes(
   const documentsSvc = documentService(db);
   const routinesSvc = routineService(db);
   const feedbackExportService = opts?.feedbackExportService;
+  const skillsSvc = companySkillService(db);
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1 },
@@ -2916,8 +2919,35 @@ export function issueRoutes(
       },
     });
 
-    // Merge all wakeups from this comment into one enqueue per agent to avoid duplicate runs.
+    // Detect slash commands and create skill invocations.
+    // We fire-and-forget so a skill lookup failure never blocks the comment response.
     void (async () => {
+      const slashCmd = parseSlashCommand(req.body.body);
+      if (slashCmd && currentIssue.assigneeAgentId) {
+        try {
+          const skill = await skillsSvc.getByKey(currentIssue.companyId, slashCmd.skillKey);
+          if (skill) {
+            await invokeSkill({
+              db,
+              heartbeatWakeup: heartbeat.wakeup,
+              companyId: currentIssue.companyId,
+              issueId: currentIssue.id,
+              agentId: currentIssue.assigneeAgentId,
+              skillKey: slashCmd.skillKey,
+              args: slashCmd.args,
+              triggerCommentId: comment.id,
+              requestedByActorType: actor.actorType,
+              requestedByActorId: actor.actorId,
+            });
+            // Skill invocation handles its own wakeup — return early.
+            return;
+          }
+        } catch (err) {
+          logger.warn({ err, issueId: currentIssue.id, skillKey: slashCmd.skillKey }, "failed to invoke skill from slash command");
+        }
+      }
+
+      // Merge all wakeups from this comment into one enqueue per agent to avoid duplicate runs.
       const wakeups = new Map<string, Parameters<typeof heartbeat.wakeup>[1]>();
       const assigneeId = currentIssue.assigneeAgentId;
       const actorIsAgent = actor.actorType === "agent";

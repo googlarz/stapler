@@ -287,19 +287,40 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     ].join("\n\n");
   }
 
-  // Inject company skills into the system prompt.
-  const skillEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
-  const desiredSkillNames = new Set(resolveOllamaDesiredSkillNames(config, skillEntries));
-  if (desiredSkillNames.size > 0) {
-    const skillMarkdowns = (
-      await Promise.all(
-        skillEntries
-          .filter((e) => desiredSkillNames.has(e.key))
-          .map((e) => readPaperclipSkillMarkdown(__moduleDir, e.key)),
-      )
-    ).filter((md): md is string => md !== null);
-    if (skillMarkdowns.length > 0) {
-      systemPrompt = `${systemPrompt}\n\n${skillMarkdowns.join("\n\n---\n\n")}`;
+  // When a skill slash command is active, it becomes the primary task.
+  // Prepend its SKILL.md content at the top of the system prompt and suppress
+  // ambient skill injection so the invoked skill is the sole focus.
+  const skillCommand = (() => {
+    const cmd = context.paperclipSkillCommand;
+    if (
+      cmd &&
+      typeof cmd === "object" &&
+      typeof (cmd as Record<string, unknown>).markdown === "string"
+    ) {
+      return cmd as { name: string; markdown: string; args: Record<string, unknown>; invocationId: string };
+    }
+    return null;
+  })();
+
+  if (skillCommand) {
+    // Skill command takes over — inject its markdown at the top of the system prompt.
+    const skillSection = `<skill-command name="${skillCommand.name}">\n${skillCommand.markdown}\n</skill-command>`;
+    systemPrompt = `${skillSection}\n\n${systemPrompt}`;
+  } else {
+    // Inject ambient company skills into the system prompt.
+    const skillEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
+    const desiredSkillNames = new Set(resolveOllamaDesiredSkillNames(config, skillEntries));
+    if (desiredSkillNames.size > 0) {
+      const skillMarkdowns = (
+        await Promise.all(
+          skillEntries
+            .filter((e) => desiredSkillNames.has(e.key))
+            .map((e) => readPaperclipSkillMarkdown(__moduleDir, e.key)),
+        )
+      ).filter((md): md is string => md !== null);
+      if (skillMarkdowns.length > 0) {
+        systemPrompt = `${systemPrompt}\n\n${skillMarkdowns.join("\n\n---\n\n")}`;
+      }
     }
   }
 

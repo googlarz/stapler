@@ -4,6 +4,8 @@ import { Link, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
 import { approvalsApi } from "../api/approvals";
+import { skillInvocationsApi } from "../api/skills";
+import { SkillCommandChip } from "../components/SkillCommandChip";
 import { activityApi, type RunForIssue } from "../api/activity";
 import { heartbeatsApi } from "../api/heartbeats";
 import { instanceSettingsApi } from "../api/instanceSettings";
@@ -567,6 +569,19 @@ export function IssueDetail() {
     queryFn: () => issuesApi.listFeedbackVotes(issueId!),
     enabled: !!issueId && !!currentUserId,
   });
+  const { data: skillInvocations = [] } = useQuery({
+    queryKey: queryKeys.issues.skillInvocations(issueId!),
+    queryFn: () => skillInvocationsApi.listForIssue(issueId!),
+    enabled: !!issueId,
+    refetchInterval: (query) => {
+      // Poll while any invocation is in-flight.
+      const data = query.state.data;
+      const hasActive = Array.isArray(data) && data.some(
+        (inv) => inv.status === "pending" || inv.status === "running",
+      );
+      return hasActive ? 2000 : false;
+    },
+  });
   const { data: instanceGeneralSettings } = useQuery({
     queryKey: queryKeys.instance.generalSettings,
     queryFn: () => instanceSettingsApi.getGeneral(),
@@ -1056,6 +1071,8 @@ export function IssueDetail() {
     },
     onSettled: (_result, _error, variables) => {
       invalidateIssueThreadLazily();
+      // Refresh skill invocations in case the comment was a slash command.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.issues.skillInvocations(issueId!) });
       if (variables.interrupt) {
         invalidateIssueRunState();
       }
@@ -2186,6 +2203,20 @@ export function IssueDetail() {
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
+                </div>
+              )}
+              {skillInvocations.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-1 pb-1">
+                  {skillInvocations.map((inv) => (
+                    <SkillCommandChip
+                      key={inv.id}
+                      invocation={inv}
+                      onResultClick={(commentId) => {
+                        const el = document.getElementById(`comment-${commentId}`);
+                        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }}
+                    />
+                  ))}
                 </div>
               )}
               <IssueChatThread

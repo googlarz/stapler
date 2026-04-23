@@ -183,6 +183,18 @@ const checkDelegationSchema = z.object({
   delegationId: z.string().min(1, "delegationId is required"),
 });
 
+const invokeSkillSchema = z.object({
+  skillName: z.string().trim().min(1).max(200, "skillName must be at most 200 characters"),
+  issueId: issueIdSchema,
+  args: z.record(z.unknown()).optional(),
+  targetAgentId: z.string().uuid().optional().nullable(),
+});
+
+const skillProgressSchema = z.object({
+  issueId: issueIdSchema,
+  message: z.string().trim().min(1).max(10000, "message must be at most 10000 characters"),
+});
+
 export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[] {
   return [
     makeTool(
@@ -851,6 +863,62 @@ export function createToolDefinitions(client: StaplerApiClient): ToolDefinition[
           result: latest?.body ?? latest?.content ?? null,
           issueStatus,
           commentCount: agentComments.length,
+        };
+      },
+    ),
+    makeTool(
+      "stapler_invoke_skill",
+      "Invoke a named skill on an issue. The skill will run asynchronously — the assigned agent " +
+        "wakes up with the skill's SKILL.md as its primary task. Returns immediately with an " +
+        "invocationId you can use to poll the result. Use this to chain skills or delegate to a " +
+        "specialist skill without blocking the current run.\n\n" +
+        "Example: stapler_invoke_skill({ skillName: 'gsd:plan-phase', issueId: '<id>' })",
+      invokeSkillSchema,
+      async ({ skillName, issueId, args, targetAgentId }) => {
+        const companyId = client.resolveCompanyId();
+        const agentId = targetAgentId ?? client.resolveAgentId();
+        // Post a slash-command comment to trigger the skill invocation pipeline.
+        // The server-side comment handler will parse the slash command and invoke the skill.
+        const argStr = args && Object.keys(args).length > 0
+          ? " " + Object.entries(args).map(([k, v]) => `${k}=${String(v)}`).join(" ")
+          : "";
+        const body = `/${skillName}${argStr}`;
+        const comment = await client.requestJson<{ id: string }>("POST", `/issues/${encodeURIComponent(issueId)}/comments`, {
+          body: { body },
+        });
+        // Fetch the resulting invocation.
+        const invocations = await client.requestJson<Array<{ id: string; status: string }>>(
+          "GET",
+          `/issues/${encodeURIComponent(issueId)}/skill-invocations`,
+        ).catch(() => [] as Array<{ id: string; status: string }>);
+        const latest = invocations[0];
+        return {
+          invocationId: latest?.id ?? null,
+          commentId: comment?.id ?? null,
+          skillName,
+          issueId,
+          agentId,
+          companyId,
+          status: latest?.status ?? "pending",
+          message: `Skill "${skillName}" invoked. Poll GET /skill-invocations/:id for status.`,
+        };
+      },
+    ),
+    makeTool(
+      "stapler_skill_progress",
+      "Post a progress update comment to the current issue thread, attributed to this skill run. " +
+        "Use during multi-step skill execution to keep humans informed without blocking. " +
+        "Returns the created comment id.\n\n" +
+        "Example: stapler_skill_progress({ issueId: '<id>', message: 'Step 1/3: analyzing codebase...' })",
+      skillProgressSchema,
+      async ({ issueId, message }) => {
+        const comment = await client.requestJson<{ id: string }>("POST", `/issues/${encodeURIComponent(issueId)}/comments`, {
+          body: { body: message },
+        });
+        return {
+          commentId: comment?.id ?? null,
+          issueId,
+          message: "Progress comment posted.",
         };
       },
     ),

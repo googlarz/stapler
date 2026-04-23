@@ -462,6 +462,7 @@
     { "idx": 73, "version": "7", "when": 1777056000000, "tag": "0073_config_gate", "breakpoints": true },
     { "idx": 74, "version": "7", "when": 1777142400000, "tag": "0074_org_learning", "breakpoints": true },
     { "idx": 75, "version": "7", "when": 1777228800000, "tag": "0075_collab_learning", "breakpoints": true },
-    { "idx": 76, "version": "7", "when": 1777315200000, "tag": "0076_workflow_learning", "breakpoints": true }
+    { "idx": 76, "version": "7", "when": 1777315200000, "tag": "0076_workflow_learning", "breakpoints": true },
+    { "idx": 77, "version": "7", "when": 1777401600000, "tag": "0077_skill_invocations", "breakpoints": true }
   ]
 }
