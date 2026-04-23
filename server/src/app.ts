@@ -36,6 +36,7 @@ import { pluginRoutes } from "./routes/plugins.js";
 import { evalRoutes } from "./routes/evals.js";
 import { qualityRoutes } from "./routes/quality.js";
 import { skillInvocationRoutes } from "./routes/skill-invocations.js";
+import { instanceSkillRoutes } from "./routes/instance-skills.js";
 import { createEvalScheduler } from "./services/eval-scheduler.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
@@ -194,6 +195,7 @@ export async function createApp(
   api.use(evalRoutes(db));
   api.use(qualityRoutes(db));
   api.use(skillInvocationRoutes(db));
+  api.use(instanceSkillRoutes(db));
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();
   const pluginRegistry = pluginRegistryService(db);

@@ -231,7 +231,7 @@ function uniqueImportedSkillKey(companyId: string, baseSlug: string, usedKeys: S
   return candidate;
 }
 
-function buildSkillRuntimeName(key: string, slug: string) {
+export function buildSkillRuntimeName(key: string, slug: string) {
   if (key.startsWith("stapler/stapler/")) return slug;
   return `${slug}--${hashSkillValue(key)}`;
 }
@@ -252,7 +252,7 @@ function readCanonicalSkillKey(frontmatter: Record<string, unknown>, metadata: R
   );
 }
 
-function deriveCanonicalSkillKey(
+export function deriveCanonicalSkillKey(
   companyId: string,
   input: Pick<ImportedSkill, "slug" | "sourceType" | "sourceLocator" | "metadata">,
 ) {
@@ -904,7 +904,7 @@ export async function discoverProjectWorkspaceSkillDirectories(target: ProjectSk
     .sort((left, right) => left.skillDir.localeCompare(right.skillDir));
 }
 
-async function readLocalSkillImports(companyId: string, sourcePath: string): Promise<ImportedSkill[]> {
+export async function readLocalSkillImports(companyId: string, sourcePath: string): Promise<ImportedSkill[]> {
   const resolvedPath = path.resolve(sourcePath);
   const stat = await fs.stat(resolvedPath).catch(() => null);
   if (!stat) {
@@ -977,7 +977,7 @@ async function readLocalSkillImports(companyId: string, sourcePath: string): Pro
   return imports;
 }
 
-async function readUrlSkillImports(
+export async function readUrlSkillImports(
   companyId: string,
   sourceUrl: string,
   requestedSkillSlug: string | null = null,

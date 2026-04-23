@@ -1,8 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { buildSkillMentionHref } from "@stapler/shared";
-import { companySkillsApi } from "../api/companySkills";
-import { useCompany } from "./CompanyContext";
+import { instanceSkillsApi } from "../api/skills";
 import { queryKeys } from "../lib/queryKeys";
 
 export interface SkillCommandOption {
@@ -26,17 +25,13 @@ const EditorAutocompleteContext = createContext<EditorAutocompleteContextValue>(
 });
 
 export function EditorAutocompleteProvider({ children }: { children: ReactNode }) {
-  const { selectedCompanyId } = useCompany();
-  const { data: companySkills = [] } = useQuery({
-    queryKey: selectedCompanyId
-      ? queryKeys.companySkills.list(selectedCompanyId)
-      : ["company-skills", "__none__"],
-    queryFn: () => companySkillsApi.list(selectedCompanyId!),
-    enabled: Boolean(selectedCompanyId),
+  const { data: skills = [] } = useQuery({
+    queryKey: queryKeys.instanceSkills.list,
+    queryFn: () => instanceSkillsApi.list(),
   });
 
   const value = useMemo<EditorAutocompleteContextValue>(() => ({
-    slashCommands: companySkills.map((skill) => ({
+    slashCommands: skills.map((skill) => ({
       id: `skill:${skill.id}`,
       kind: "skill",
       skillId: skill.id,
@@ -47,7 +42,7 @@ export function EditorAutocompleteProvider({ children }: { children: ReactNode }
       href: buildSkillMentionHref(skill.id, skill.slug),
       aliases: [skill.slug, skill.name, skill.key],
     })),
-  }), [companySkills]);
+  }), [skills]);
 
   return (
     <EditorAutocompleteContext.Provider value={value}>

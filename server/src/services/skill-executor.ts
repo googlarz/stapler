@@ -7,7 +7,7 @@
  *    Called before adapter.execute(). If the run has `wakeReason:
  *    "skill_command_invoked"` in its contextSnapshot, this function:
  *    - Marks the skill_invocations row as "running"
- *    - Loads the skill markdown from companySkillService
+ *    - Loads the skill markdown from the instance skill registry
  *    - Injects `context.paperclipSkillCommand` so the adapter can use it
  *
  * 2. `finalizeSkillInvocation(db, run, outcome, issueId)`
@@ -19,7 +19,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "@stapler/db";
 import { issueComments, skillInvocations } from "@stapler/db";
-import { companySkillService } from "./company-skills.js";
+import { instanceSkillService } from "./instance-skills.js";
 import { logger } from "../middleware/logger.js";
 
 /** The shape injected into context.paperclipSkillCommand */
@@ -39,7 +39,7 @@ export type SkillCommandContext = {
  */
 export async function loadSkillForRun(
   db: Db,
-  companyId: string,
+  _companyId: string,
   runId: string,
   context: Record<string, unknown>,
 ): Promise<void> {
@@ -58,11 +58,11 @@ export async function loadSkillForRun(
       .set({ status: "running", heartbeatRunId: runId, updatedAt: new Date() })
       .where(eq(skillInvocations.id, invocationId));
 
-    // Load skill markdown.
-    const skillsSvc = companySkillService(db);
-    const skill = await skillsSvc.getByKey(companyId, skillKey);
+    // Load skill markdown from the instance-level registry.
+    const skillsSvc = instanceSkillService(db);
+    const skill = await skillsSvc.getByKey(skillKey);
     if (!skill) {
-      logger.warn({ invocationId, skillKey, companyId }, "skill not found for invocation — proceeding without markdown");
+      logger.warn({ invocationId, skillKey }, "skill not found in instance registry — proceeding without markdown");
       return;
     }
 

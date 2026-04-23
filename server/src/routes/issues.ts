@@ -33,7 +33,6 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
-  companySkillService,
   executionWorkspaceService,
   feedbackService,
   goalService,
@@ -76,6 +75,7 @@ import {
   parseIssueExecutionState,
 } from "../services/issue-execution-policy.js";
 import { parseSlashCommand, invokeSkill } from "../services/skill-invoker.js";
+import { instanceSkillService } from "../services/instance-skills.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
 const UUID_QUERY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -370,7 +370,7 @@ export function issueRoutes(
   const documentsSvc = documentService(db);
   const routinesSvc = routineService(db);
   const feedbackExportService = opts?.feedbackExportService;
-  const skillsSvc = companySkillService(db);
+  const skillsSvc = instanceSkillService(db);
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1 },
@@ -2970,7 +2970,7 @@ export function issueRoutes(
             await svc.addComment(currentIssue.id, `> /${slashCmd.skillKey}\n\n⚠️ Skill command ignored: this issue has no assigned agent.`, {}).catch(() => undefined);
           } else {
             try {
-              const skill = await skillsSvc.getByKey(currentIssue.companyId, slashCmd.skillKey);
+              const skill = await skillsSvc.getByKey(slashCmd.skillKey);
               if (skill) {
                 await invokeSkill({
                   db,
@@ -3423,7 +3423,7 @@ export function issueRoutes(
       return;
     }
 
-    const skill = await skillsSvc.getByKey(issue.companyId, skillKey.trim());
+    const skill = await skillsSvc.getByKey(skillKey.trim());
     if (!skill) {
       res.status(404).json({ error: `Skill '${skillKey}' not found in the skill registry` });
       return;
