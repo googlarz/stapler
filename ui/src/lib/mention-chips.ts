@@ -23,6 +23,11 @@ export type ParsedMentionChip =
 const iconMaskCache = new Map<string, string>();
 
 export function parseMentionChipHref(href: string): ParsedMentionChip | null {
+  if (/^https?:\/\//i.test(href.trim())) {
+    return null;
+  }
+
+
   const agent = parseAgentMentionHref(href);
   if (agent) {
     return {
