@@ -104,6 +104,7 @@ jobs:
       - name: Publish canary
         env:
           GITHUB_ACTIONS: "true"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: ./scripts/release.sh canary --skip-verify
 
       - name: Push canary tag
@@ -234,6 +235,7 @@ jobs:
       - name: Publish stable
         env:
           GITHUB_ACTIONS: "true"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           args=(stable --skip-verify)
           if [ -n "${{ inputs.stable_date }}" ]; then
