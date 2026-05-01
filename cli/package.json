@@ -1,5 +1,5 @@
 {
-  "name": "stapler",
+  "name": "@googlarz/stapler",
   "version": "0.3.1",
   "description": "Stapler CLI — orchestrate AI agent teams to run a business",
   "type": "module",
