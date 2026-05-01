@@ -728,14 +728,24 @@ export async function executeStaplerTool(
       if (!issueId) return { error: "Failed to create delegation issue", detail: issue };
       // Include issueId in payload so the woken agent's run is bound to this issue
       // and picks up the correct context rather than starting unrelated work.
-      await paperclipFetch(`${base}/api/agents/${encodeURIComponent(targetAgentId)}/wakeup`, {
+      const wakeResult = await paperclipFetch(`${base}/api/agents/${encodeURIComponent(targetAgentId)}/wakeup`, {
         method: "POST",
         body: JSON.stringify({
           reason: `Delegated task: ${task.slice(0, 100)}`,
           payload: { issueId },
         }),
         authToken,
-      });
+      }) as Record<string, unknown>;
+      if (wakeResult?.error) {
+        // Issue was created but wakeup failed — surface this as a partial failure
+        // so the caller knows the issue exists but the agent was not started.
+        return {
+          delegationId: issueId,
+          issueUrl: `/issues/${issueId}`,
+          status: "partial_failure",
+          message: `Issue created (${issueId}) but failed to wake target agent: ${String(wakeResult.error)}. The issue exists and can be resumed manually.`,
+        };
+      }
       return {
         delegationId: issueId,
         issueUrl: `/issues/${issueId}`,

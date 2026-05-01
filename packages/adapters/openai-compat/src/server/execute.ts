@@ -552,12 +552,17 @@ Complete this task in full in your response. Do not defer to a future turn.`,
 
         if (!res.ok) {
           const bodyText = await res.text().catch(() => "");
-          // Graceful degradation: model/proxy doesn't support tools → text path
+          // Graceful degradation: the model/proxy explicitly reports no tool support.
+          // Only match well-known capability-error phrases; do NOT fall through on
+          // generic 400s (proxy validation errors, bad requests, etc.) because that
+          // would coerce real failures into successful-looking text runs.
+          const lowerBody = bodyText.toLowerCase();
           if (
             res.status === 400 &&
-            (bodyText.toLowerCase().includes("does not support tools") ||
-              bodyText.toLowerCase().includes("tool") ||
-              bodyText.toLowerCase().includes("function"))
+            (lowerBody.includes("does not support tools") ||
+              lowerBody.includes("does not support function") ||
+              lowerBody.includes("tool_use is not supported") ||
+              lowerBody.includes("tools are not supported"))
           ) {
             toolsSupported = false;
             break;
@@ -671,8 +676,9 @@ Complete this task in full in your response. Do not defer to a future turn.`,
         // The agent applied partial side effects but never finished — this is a
         // real failure, not a success. Surface it explicitly so the run can be
         // retried or reviewed rather than silently recorded as succeeded.
-        if (timeoutHandle) clearTimeout(timeoutHandle);
+        // Release before return so the finally block doesn't double-release.
         releaseSlot?.();
+        releaseSlot = null;
         return {
           exitCode: 1,
           signal: null,
