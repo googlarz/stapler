@@ -888,9 +888,18 @@ Complete this task in full in your response. Do not defer to a future turn.`,
         // Model doesn't support tools → fall through to the streaming path.
         toolsUsed = false;
       } else if (exitCode !== 0 && !timedOut) {
-        // Max iterations hit without a clean text response — treat as success with whatever we have.
-        exitCode = 0;
-        toolsUsed = true;
+        // Max iterations hit without a final assistant text response — fail explicitly.
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        releaseLlmSlot?.();
+        return {
+          exitCode: 1,
+          signal: null,
+          timedOut: false,
+          errorMessage: "Max tool iterations reached without a final assistant response",
+          errorCode: "max_tool_iterations_exceeded",
+          provider: "ollama",
+          model,
+        };
       }
     }
 

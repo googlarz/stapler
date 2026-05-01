@@ -107,30 +107,38 @@ export async function invokeSkill(opts: InvokeSkillOptions): Promise<string> {
 
   const invocationId = invocation.id;
 
-  // Wake the agent.
-  await heartbeatWakeup(agentId, {
-    source: "automation",
-    triggerDetail: "system",
-    reason: "skill_command_invoked",
-    payload: {
-      issueId,
-      skillKey,
-      skillInvocationId: invocationId,
-    },
-    requestedByActorType,
-    requestedByActorId,
-    contextSnapshot: {
-      issueId,
-      taskId: issueId,
-      wakeReason: "skill_command_invoked",
-      skillCommandName: skillKey,
-      skillInvocationId: invocationId,
-      skillArgs: args,
-      source: "skill.slash_command",
-    },
-  }).catch((err) => {
-    logger.warn({ err, invocationId, agentId, skillKey }, "failed to wake agent for skill invocation");
-  });
+  // Wake the agent.  If the wakeup fails, mark the invocation as failed
+  // so it does not stay stuck in "pending" forever.
+  try {
+    await heartbeatWakeup(agentId, {
+      source: "automation",
+      triggerDetail: "system",
+      reason: "skill_command_invoked",
+      payload: {
+        issueId,
+        skillKey,
+        skillInvocationId: invocationId,
+      },
+      requestedByActorType,
+      requestedByActorId,
+      contextSnapshot: {
+        issueId,
+        taskId: issueId,
+        wakeReason: "skill_command_invoked",
+        skillCommandName: skillKey,
+        skillInvocationId: invocationId,
+        skillArgs: args,
+        source: "skill.slash_command",
+      },
+    });
+  } catch (err) {
+    logger.warn({ err, invocationId, agentId, skillKey }, "failed to wake agent for skill invocation — marking invocation failed");
+    await db
+      .update(skillInvocations)
+      .set({ status: "failed", updatedAt: new Date() })
+      .where(eq(skillInvocations.id, invocationId));
+    throw err;
+  }
 
   logger.info({ invocationId, agentId, skillKey, issueId }, "skill invocation created");
   return invocationId;

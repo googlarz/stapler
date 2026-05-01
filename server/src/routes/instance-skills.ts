@@ -10,7 +10,7 @@
 
 import { Router } from "express";
 import type { Db } from "@stapler/db";
-import { assertInstanceAdmin } from "./authz.js";
+import { assertInstanceAdmin, assertBoard } from "./authz.js";
 import { notFound } from "../errors.js";
 import { instanceSkillService } from "../services/instance-skills.js";
 
@@ -19,13 +19,15 @@ export function instanceSkillRoutes(db: Db) {
   const svc = instanceSkillService(db);
 
   /** List all instance skills. */
-  router.get("/instance/skills", async (_req, res) => {
+  router.get("/instance/skills", async (req, res) => {
+    assertBoard(req);
     const skills = await svc.list();
     res.json(skills);
   });
 
   /** Get a single instance skill by id. */
   router.get("/instance/skills/:id", async (req, res) => {
+    assertBoard(req);
     const { id } = req.params as { id: string };
     const skill = await svc.getById(id);
     if (!skill) throw notFound("Instance skill not found");
