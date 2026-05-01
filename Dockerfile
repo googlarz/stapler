@@ -35,6 +35,7 @@ COPY packages/adapters/gemini-local/package.json packages/adapters/gemini-local/
 COPY packages/adapters/openclaw-gateway/package.json packages/adapters/openclaw-gateway/
 COPY packages/adapters/ollama-local/package.json packages/adapters/ollama-local/
 COPY packages/adapters/opencode-local/package.json packages/adapters/opencode-local/
+COPY packages/adapters/openai-compat/package.json packages/adapters/openai-compat/
 COPY packages/adapters/pi-local/package.json packages/adapters/pi-local/
 COPY packages/plugins/sdk/package.json packages/plugins/sdk/
 COPY patches/ patches/
@@ -45,6 +46,7 @@ FROM base AS build
 WORKDIR /app
 COPY --from=deps /app /app
 COPY . .
+RUN pnpm --filter @stapler/adapter-utils build
 RUN pnpm --filter @stapler/ui build
 RUN pnpm --filter @stapler/plugin-sdk build
 RUN pnpm --filter @stapler/server build

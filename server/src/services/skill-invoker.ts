@@ -137,7 +137,7 @@ export async function invokeSkill(opts: InvokeSkillOptions): Promise<string> {
       .update(skillInvocations)
       .set({ status: "failed", updatedAt: new Date() })
       .where(eq(skillInvocations.id, invocationId));
-    throw err;
+    // Do not rethrow — the invocation row captures the failure; callers get a resolved promise.
   }
 
   logger.info({ invocationId, agentId, skillKey, issueId }, "skill invocation created");

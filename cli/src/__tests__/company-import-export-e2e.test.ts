@@ -187,7 +187,7 @@ async function runCliJson<T>(args: string[], opts: { apiBase: string; configPath
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const result = await execFileAsync(
     "pnpm",
-    ["--silent", "paperclipai", ...args, "--api-base", opts.apiBase, "--config", opts.configPath, "--json"],
+    ["--silent", "stapler", ...args, "--api-base", opts.apiBase, "--config", opts.configPath, "--json"],
     {
       cwd: repoRoot,
       env: createCliEnv(),
@@ -253,7 +253,7 @@ describeEmbeddedPostgres("stapler company import/export e2e", () => {
     const output = { stdout: [] as string[], stderr: [] as string[] };
     const child = spawn(
       "pnpm",
-      ["paperclipai", "run", "--config", configPath],
+      ["stapler", "run", "--config", configPath],
       {
         cwd: repoRoot,
         env: createServerEnv(configPath, port, tempDb.connectionString),
