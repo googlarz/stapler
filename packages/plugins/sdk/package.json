@@ -122,5 +122,6 @@
     "react": {
       "optional": true
     }
-  }
+  },
+  "private": true
 }
