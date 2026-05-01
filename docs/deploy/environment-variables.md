@@ -18,6 +18,7 @@ All environment variables that Paperclip uses for server configuration.
 | `STAPLER_INSTANCE_ID` | `default` | Instance identifier (for multiple local instances) |
 | `STAPLER_DEPLOYMENT_MODE` | `local_trusted` | Runtime mode override |
 | `STAPLER_DEPLOYMENT_EXPOSURE` | `private` | Exposure policy when deployment mode is `authenticated` |
+| `STAPLER_API_URL` | (auto-derived) | Stapler API base URL. When set externally (e.g., via Kubernetes ConfigMap, load balancer, or reverse proxy), the server preserves the value instead of deriving it from the listen host and port. Useful for deployments where the public-facing URL differs from the local bind address. |
 
 ## Secrets
 
@@ -35,7 +36,7 @@ These are set automatically by the server when invoking agents:
 |----------|-------------|
 | `STAPLER_AGENT_ID` | Agent's unique ID |
 | `STAPLER_COMPANY_ID` | Company ID |
-| `STAPLER_API_URL` | Paperclip API base URL |
+| `STAPLER_API_URL` | Stapler API base URL (inherits the server-level value; see Server Configuration above) |
 | `STAPLER_API_KEY` | Short-lived JWT for API auth |
 | `STAPLER_RUN_ID` | Current heartbeat run ID |
 | `STAPLER_TASK_ID` | Issue that triggered this wake |

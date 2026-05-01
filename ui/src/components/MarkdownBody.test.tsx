@@ -136,14 +136,54 @@ describe("MarkdownBody", () => {
     expect(html).toContain(">PAP-1271<");
   });
 
-  it("rewrites full issue URLs to internal issue links", () => {
-    const html = renderMarkdown("See http://localhost:3100/PAP/issues/PAP-1179.", [
+  it("preserves absolute issue URLs as external links", () => {
+    const url = "http://remote.example.test:3103/PAPA/issues/PAPA-115#comment-850083f3-24de-43e7-a8cd-bc01f7cc9f0d";
+    const html = renderMarkdown(`See ${url}.`, [
+      { identifier: "PAPA-115", status: "blocked" },
+    ]);
+
+    expect(html).toContain(`href="${url}"`);
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain("lucide-external-link");
+    expect(html).not.toContain('href="/issues/PAPA-115"');
+    expect(html).not.toContain("paperclip-markdown-issue-ref");
+  });
+
+  it("linkifies plain internal issue paths in markdown text", () => {
+    const html = renderMarkdown("See /issues/PAP-1179 and /PAP/issues/pap-1180 for context.", [
       { identifier: "PAP-1179", status: "blocked" },
+      { identifier: "PAP-1180", status: "done" },
     ]);
 
     expect(html).toContain('href="/issues/PAP-1179"');
+    expect(html).toContain('href="/issues/PAP-1180"');
+    expect(html).toContain(">/issues/PAP-1179<");
+    expect(html).toContain(">/PAP/issues/pap-1180<");
     expect(html).toContain("text-red-600");
-    expect(html).toContain(">http://localhost:3100/PAP/issues/PAP-1179<");
+    expect(html).toContain("text-green-600");
+  });
+
+  it("does not auto-link non-issue internal route paths", () => {
+    const html = renderMarkdown("Use /issues/new for the creation form, /issues/PAP-42extra as text, and /api/issues for data.");
+
+    expect(html).toContain("Use /issues/new for the creation form, /issues/PAP-42extra as text, and /api/issues for data.");
+    expect(html).not.toContain('href="/issues/new"');
+    expect(html).not.toContain('href="/issues/PAP-42"');
+    expect(html).not.toContain('data-mention-kind="issue"');
+  });
+
+  it("rewrites issue scheme links to internal issue links", () => {
+    const html = renderMarkdown("See issue://PAP-1310 and issue://:PAP-1311.", [
+      { identifier: "PAP-1310", status: "done" },
+      { identifier: "PAP-1311", status: "blocked" },
+    ]);
+
+    expect(html).toContain('href="/issues/PAP-1310"');
+    expect(html).toContain('href="/issues/PAP-1311"');
+    expect(html).toContain(">issue://PAP-1310<");
+    expect(html).toContain(">issue://:PAP-1311<");
+    expect(html).toContain("text-green-600");
+    expect(html).toContain("text-red-600");
   });
 
   it("linkifies issue identifiers inside inline code spans", () => {

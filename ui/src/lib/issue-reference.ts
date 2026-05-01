@@ -6,25 +6,22 @@ type MarkdownNode = {
 };
 
 const BARE_ISSUE_IDENTIFIER_RE = /^[A-Z][A-Z0-9]+-\d+$/i;
-const ISSUE_REFERENCE_TOKEN_RE = /https?:\/\/[^\s<>()]+|\b[A-Z][A-Z0-9]+-\d+\b/gi;
+const ISSUE_REFERENCE_TOKEN_RE =
+  /https?:\/\/[^\s<>()]+|issue:\/\/:?[^\s<>()]+|\/[A-Z][A-Z0-9]*\/issues\/[^\s<>()]+|\/issues\/[^\s<>()]+|\b[A-Z][A-Z0-9]+-\d+\b/gi;
 
 export function parseIssuePathIdFromPath(pathOrUrl: string | null | undefined): string | null {
   if (!pathOrUrl) return null;
-  let pathname = pathOrUrl.trim();
+  const pathname = pathOrUrl.trim();
   if (!pathname) return null;
-
-  if (/^https?:\/\//i.test(pathname)) {
-    try {
-      pathname = new URL(pathname).pathname;
-    } catch {
-      return null;
-    }
-  }
+  if (/^https?:\/\//i.test(pathname)) return null;
 
   const segments = pathname.split("/").filter(Boolean);
   const issueIndex = segments.findIndex((segment) => segment === "issues");
   if (issueIndex === -1 || issueIndex === segments.length - 1) return null;
-  return decodeURIComponent(segments[issueIndex + 1] ?? "");
+  const candidate = decodeURIComponent(segments[issueIndex + 1] ?? "").toUpperCase();
+  // Reject route placeholders like :id and non-identifier segments.
+  if (!BARE_ISSUE_IDENTIFIER_RE.test(candidate)) return null;
+  return candidate;
 }
 
 export function parseIssueReferenceFromHref(href: string | null | undefined) {
@@ -34,6 +31,16 @@ export function parseIssueReferenceFromHref(href: string | null | undefined) {
     return {
       issuePathId: pathId,
       href: `/issues/${encodeURIComponent(pathId)}`,
+    };
+  }
+
+  // Handle issue:// scheme: issue://PAP-1310  or  issue://:PAP-1310
+  const issueSchemeMatch = href.trim().match(/^issue:\/\/:?([A-Z][A-Z0-9]+-\d+)$/i);
+  if (issueSchemeMatch) {
+    const normalized = issueSchemeMatch[1]!.toUpperCase();
+    return {
+      issuePathId: normalized,
+      href: `/issues/${encodeURIComponent(normalized)}`,
     };
   }
 

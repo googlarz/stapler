@@ -1,4 +1,5 @@
 import { isValidElement, useEffect, useId, useState, type ReactNode } from "react";
+import { ExternalLink } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import Markdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -180,6 +181,15 @@ export function MarkdownBody({
             style={mentionChipInlineStyle(parsed)}
           >
             {linkChildren}
+          </a>
+        );
+      }
+      const isExternal = typeof href === "string" && /^https?:\/\//i.test(href);
+      if (isExternal) {
+        return (
+          <a href={href} rel="noreferrer" target="_blank" className="inline-flex items-center gap-0.5">
+            {linkChildren}
+            <ExternalLink className="lucide-external-link inline-block" size={12} />
           </a>
         );
       }

@@ -554,7 +554,9 @@ export async function startServer(): Promise<StartedServer> {
       : runtimeListenHost;
   process.env.STAPLER_LISTEN_HOST = runtimeListenHost;
   process.env.STAPLER_LISTEN_PORT = String(listenPort);
-  process.env.STAPLER_API_URL = `http://${runtimeApiHost}:${listenPort}`;
+  if (!process.env.STAPLER_API_URL) {
+    process.env.STAPLER_API_URL = `http://${runtimeApiHost}:${listenPort}`;
+  }
   
   setupLiveEventsWebSocketServer(server, db as any, {
     deploymentMode: config.deploymentMode,
@@ -751,7 +753,7 @@ export async function startServer(): Promise<StartedServer> {
     server,
     host: config.host,
     listenPort,
-    apiUrl: process.env.STAPLER_API_URL ?? `http://${runtimeApiHost}:${listenPort}`,
+    apiUrl: process.env.STAPLER_API_URL!,
     databaseUrl: activeDatabaseConnectionString,
   };
 }
