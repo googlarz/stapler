@@ -1,0 +1,49 @@
+{
+  "name": "@stapler/adapter-openai-compat",
+  "version": "0.1.0",
+  "license": "MIT",
+  "homepage": "https://github.com/googlarz/stapler",
+  "bugs": {
+    "url": "https://github.com/googlarz/stapler/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/googlarz/stapler",
+    "directory": "packages/adapters/openai-compat"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./server": {
+        "types": "./dist/server/index.d.ts",
+        "import": "./dist/server/index.js"
+      }
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@stapler/adapter-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "typescript": "^5.7.3"
+  }
+}

@@ -51,6 +51,7 @@
     "@stapler/adapter-openclaw-gateway": "workspace:*",
     "@stapler/adapter-opencode-local": "workspace:*",
     "@stapler/adapter-ollama-local": "workspace:*",
+    "@stapler/adapter-openai-compat": "workspace:*",
     "@stapler/adapter-pi-local": "workspace:*",
     "@stapler/adapter-utils": "workspace:*",
     "@stapler/db": "workspace:*",

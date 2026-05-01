@@ -90,6 +90,16 @@ import {
   agentConfigurationDoc as ollamaAgentConfigurationDoc,
   models as ollamaModels,
 } from "@stapler/adapter-ollama-local";
+import {
+  execute as openAiCompatExecute,
+  testEnvironment as openAiCompatTestEnvironment,
+  sessionCodec as openAiCompatSessionCodec,
+  listOpenAiCompatModels,
+} from "@stapler/adapter-openai-compat/server";
+import {
+  agentConfigurationDoc as openAiCompatAgentConfigurationDoc,
+  models as openAiCompatModels,
+} from "@stapler/adapter-openai-compat";
 import { BUILTIN_ADAPTER_TYPES } from "./builtin-adapter-types.js";
 import { buildExternalAdapters } from "./plugin-loader.js";
 import { getDisabledAdapterTypes } from "../services/adapter-plugin-store.js";
@@ -288,6 +298,19 @@ const ollamaLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: ollamaAgentConfigurationDoc,
 };
 
+const openAiCompatAdapter: ServerAdapterModule = {
+  type: "openai_compat",
+  execute: openAiCompatExecute,
+  testEnvironment: openAiCompatTestEnvironment,
+  sessionCodec: openAiCompatSessionCodec,
+  sessionManagement: getAdapterSessionManagement("openai_compat") ?? undefined,
+  models: openAiCompatModels,
+  listModels: () => listOpenAiCompatModels(),
+  supportsLocalAgentJwt: true,
+  supportsInstructionsBundle: true,
+  agentConfigurationDoc: openAiCompatAgentConfigurationDoc,
+};
+
 const adaptersByType = new Map<string, ServerAdapterModule>();
 
 // For builtin types that are overridden by an external adapter, we keep the
@@ -310,6 +333,7 @@ function registerBuiltInAdapters() {
     openclawGatewayAdapter,
     hermesLocalAdapter,
     ollamaLocalAdapter,
+    openAiCompatAdapter,
     processAdapter,
     httpAdapter,
   ]) {
