@@ -4663,8 +4663,21 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         failureReason: finalizedRun.error ?? undefined,
       });
 
+      // Guard: skip process-loss retry if the issue is already in a terminal status.
+      // Retrying into a done/cancelled issue would silently re-open it via the queued run.
+      const retryIssueId = readNonEmptyString(parseObject(run.contextSnapshot).issueId);
+      const retryIssueStatus = retryIssueId
+        ? await db
+            .select({ status: issues.status })
+            .from(issues)
+            .where(and(eq(issues.id, retryIssueId), eq(issues.companyId, run.companyId)))
+            .then((rows) => rows[0]?.status ?? null)
+        : null;
+      const issueIsTerminal =
+        retryIssueStatus === "done" || retryIssueStatus === "cancelled";
+
       let retriedRun: typeof heartbeatRuns.$inferSelect | null = null;
-      if (shouldRetry) {
+      if (shouldRetry && !issueIsTerminal) {
         const agent = await getAgent(run.agentId);
         if (agent) {
           retriedRun = await enqueueProcessLossRetry(finalizedRun, agent, now);
