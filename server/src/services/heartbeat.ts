@@ -6347,6 +6347,32 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
 
         const deferredPayload = parseObject(deferred.payload);
         const deferredContextSeed = parseObject(deferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
+
+        // Re-check dependency readiness at promotion time. A deferred run might
+        // have been queued while an interaction-allowed run was active; once that
+        // run finishes we must not promote a non-interaction deferred run if the
+        // issue's blockers are still unresolved.
+        if (!allowsIssueInteractionWake(deferredContextSeed)) {
+          const deferredDependencyReadiness = await issuesSvc.listDependencyReadiness(
+            issue.companyId,
+            [issue.id],
+            tx,
+          ).then((rows) => rows.get(issue.id) ?? null);
+          if (deferredDependencyReadiness && !deferredDependencyReadiness.isDependencyReady) {
+            await tx
+              .update(agentWakeupRequests)
+              .set({
+                status: "skipped",
+                reason: "issue_dependencies_blocked",
+                finishedAt: new Date(),
+                error: "Deferred wake skipped: issue dependencies still unresolved at promotion time",
+                updatedAt: new Date(),
+              })
+              .where(eq(agentWakeupRequests.id, deferred.id));
+            continue;
+          }
+        }
+
         const activePauseHold = await treeControlSvc.getActivePauseHoldGate(issue.companyId, issue.id);
         const treeHoldInteractionWake = activePauseHold && await isVerifiedIssueTreeControlInteractionWake(tx, {
           companyId: issue.companyId,
