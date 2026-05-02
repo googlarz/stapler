@@ -94,6 +94,7 @@ import {
 import {
   getIssueContinuationSummaryDocument,
   refreshIssueContinuationSummary,
+  ISSUE_CONTINUATION_SUMMARY_MAX_BODY_CHARS,
 } from "./issue-continuation-summary.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
@@ -3975,11 +3976,17 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
 
+    const rawMaxChars = asNumber(heartbeat.continuationSummaryMaxChars, ISSUE_CONTINUATION_SUMMARY_MAX_BODY_CHARS);
+    const continuationSummaryMaxChars = Number.isFinite(rawMaxChars) && rawMaxChars > 0
+      ? Math.min(rawMaxChars, ISSUE_CONTINUATION_SUMMARY_MAX_BODY_CHARS)
+      : ISSUE_CONTINUATION_SUMMARY_MAX_BODY_CHARS;
+
     return {
       enabled: asBoolean(heartbeat.enabled, false),
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
+      continuationSummaryMaxChars,
     };
   }
 
@@ -4991,6 +4998,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     }
 
     const runtime = await ensureRuntimeState(agent);
+    const policy = parseHeartbeatPolicy(agent);
     const context = parseObject(run.contextSnapshot);
     const taskKey = deriveTaskKeyWithHeartbeatFallback(context, null);
     const sessionCodec = getAdapterSessionCodec(agent.adapterType);
@@ -5109,10 +5117,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       ? await getIssueContinuationSummaryDocument(db, issueRef.id)
       : null;
     if (continuationSummary) {
+      const maxChars = policy.continuationSummaryMaxChars;
+      const body = continuationSummary.body.length > maxChars
+        ? continuationSummary.body.slice(0, maxChars)
+        : continuationSummary.body;
       context.paperclipContinuationSummary = {
         key: continuationSummary.key,
         title: continuationSummary.title,
-        body: continuationSummary.body,
+        body,
+        bodyTruncated: continuationSummary.body.length > maxChars,
         updatedAt: continuationSummary.updatedAt.toISOString(),
       };
     } else {
