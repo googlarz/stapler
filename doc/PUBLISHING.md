@@ -115,38 +115,6 @@ If the first real publish returns npm `E404`, check npm-side prerequisites befor
 - The initial publish must include `--access public` for a public scoped package.
 - npm also requires either account 2FA for publishing or a granular token that is allowed to bypass 2FA.
 
-### Manual first publish for `@stapler/mcp-server`
-
-If you need to publish only the MCP server package once by hand, use:
-
-- `@stapler/mcp-server`
-
-Recommended flow from the repo root:
-
-```bash
-# optional sanity check: this 404s until the first publish exists
-npm view @stapler/mcp-server version
-
-# make sure the build output is fresh
-pnpm --filter @stapler/mcp-server build
-
-# confirm your local npm auth before the real publish
-npm whoami
-
-# safe preview of the exact publish payload
-cd packages/mcp-server
-pnpm publish --dry-run --no-git-checks --access public
-
-# real publish
-pnpm publish --no-git-checks --access public
-```
-
-Notes:
-
-- Publish from `packages/mcp-server/`, not the repo root.
-- If `npm view @stapler/mcp-server version` already returns the same version that is in [`packages/mcp-server/package.json`](../packages/mcp-server/package.json), do not republish. Bump the version or use the normal repo-wide release flow in [`scripts/release.sh`](../scripts/release.sh).
-- The same npm-side prerequisites apply as above: valid npm auth, permission to publish to the `@paperclipai` scope, `--access public`, and the required publish auth/2FA policy.
-
 ## Version formats
 
 Paperclip uses calendar versions:
@@ -174,6 +142,13 @@ This keeps the default install path unchanged while allowing explicit installs w
 ```bash
 npx paperclipai@canary onboard
 ```
+
+The release script now verifies two things after a canary publish:
+
+- the `canary` dist-tag resolves to the version that was just published
+- every published internal `@stapler/*` dependency referenced by that manifest exists on npm
+
+It also treats `latest -> canary` as a failure by default, because npm metadata can otherwise leave the default install path pointing at an unreleased canary dependency graph. Only pass `./scripts/release.sh canary --allow-canary-latest` when that `latest` behavior is explicitly intended.
 
 ### Stable
 

@@ -14,8 +14,7 @@ import type {
 import { companySkillsApi } from "../api/companySkills";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { useToast } from "../context/ToastContext";
-import { copyTextToClipboard } from "../lib/clipboard";
+import { useToastActions } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
 import { MarkdownBody } from "../components/MarkdownBody";
@@ -531,7 +530,7 @@ function SkillPane({
   onSave: () => void;
   savePending: boolean;
 }) {
-  const { pushToast } = useToast();
+  const { pushToast } = useToastActions();
 
   if (!detail) {
     if (loading) {
@@ -604,7 +603,7 @@ function SkillPane({
                   <button
                     className="truncate hover:text-foreground text-muted-foreground transition-colors cursor-pointer"
                     onClick={() => {
-                      void copyTextToClipboard(detail.sourcePath!);
+                      navigator.clipboard.writeText(detail.sourcePath!);
                       pushToast({ title: "Copied path to workspace" });
                     }}
                   >
@@ -760,7 +759,7 @@ export function CompanySkills() {
   const queryClient = useQueryClient();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const { pushToast } = useToast();
+  const { pushToast } = useToastActions();
   const [skillFilter, setSkillFilter] = useState("");
   const [source, setSource] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -1028,7 +1027,7 @@ export function CompanySkills() {
 
   const deleteSkill = useMutation({
     mutationFn: () => companySkillsApi.delete(selectedCompanyId!, deleteTargetSkillId!),
-    onSuccess: async () => {
+    onSuccess: async (skill) => {
       closeDeleteDialog(false);
       setDisplayedDetail(null);
       setDisplayedFile(null);
@@ -1052,7 +1051,7 @@ export function CompanySkills() {
       pushToast({
         tone: "success",
         title: "Skill removed",
-        body: `Skill was removed from the company skill library.`,
+        body: `${skill.name} was removed from the company skill library.`,
       });
     },
     onError: (error) => {

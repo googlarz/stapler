@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0",
+    "@stapler/adapter-acpx-local": "workspace:*",
     "@stapler/adapter-claude-local": "workspace:*",
     "@stapler/adapter-codex-local": "workspace:*",
     "@stapler/adapter-cursor-local": "workspace:*",

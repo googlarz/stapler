@@ -1,5 +1,6 @@
 {
   "name": "@stapler/server",
+  "private": true,
   "version": "0.3.1",
   "license": "MIT",
   "homepage": "https://github.com/googlarz/stapler",
@@ -40,18 +41,17 @@
     "postpack": "rm -rf ui-dist",
     "clean": "rm -rf dist",
     "start": "node dist/index.js",
-    "typecheck": "pnpm --filter @stapler/plugin-sdk build && tsc --noEmit"
+    "typecheck": "pnpm --filter @stapler/plugin-sdk ensure-build-deps && tsc --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
+    "@stapler/adapter-acpx-local": "workspace:*",
     "@stapler/adapter-claude-local": "workspace:*",
     "@stapler/adapter-codex-local": "workspace:*",
     "@stapler/adapter-cursor-local": "workspace:*",
     "@stapler/adapter-gemini-local": "workspace:*",
     "@stapler/adapter-openclaw-gateway": "workspace:*",
     "@stapler/adapter-opencode-local": "workspace:*",
-    "@stapler/adapter-ollama-local": "workspace:*",
-    "@stapler/adapter-openai-compat": "workspace:*",
     "@stapler/adapter-pi-local": "workspace:*",
     "@stapler/adapter-utils": "workspace:*",
     "@stapler/db": "workspace:*",
@@ -93,6 +93,5 @@
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vitest": "^3.0.5"
-  },
-  "private": true
+  }
 }

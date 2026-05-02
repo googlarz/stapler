@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Cpu, Plus, Power, Trash2, FolderOpen, Package, RefreshCw, Download, Gauge } from "lucide-react";
+import { AlertTriangle, Cpu, Plus, Power, Trash2, FolderOpen, Package, RefreshCw, Download } from "lucide-react";
 import { useCompany } from "@/context/CompanyContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { adaptersApi } from "@/api/adapters";
@@ -27,12 +27,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useToast } from "@/context/ToastContext";
+import { useToastActions } from "@/context/ToastContext";
 import { cn } from "@/lib/utils";
 import { ChoosePathButton } from "@/components/PathInstructionsModal";
 import { invalidateDynamicParser } from "@/adapters/dynamic-loader";
 import { invalidateConfigSchemaCache } from "@/adapters/schema-config-fields";
-import { Link } from "@/lib/router";
 
 function AdapterRow({
   adapter,
@@ -256,7 +255,7 @@ export function AdapterManager() {
   const { selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
-  const { pushToast } = useToast();
+  const { pushToast } = useToastActions();
 
   const [installPackage, setInstallPackage] = useState("");
   const [installVersion, setInstallVersion] = useState("");
@@ -405,15 +404,7 @@ export function AdapterManager() {
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            to="/instance/settings/ollama-benchmark"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-          >
-            <Gauge className="h-3.5 w-3.5" />
-            Benchmark Models
-          </Link>
-          <Dialog open={installDialogOpen} onOpenChange={setInstallDialogOpen}>
+        <Dialog open={installDialogOpen} onOpenChange={setInstallDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-2">
               <Plus className="h-4 w-4" />
@@ -517,7 +508,6 @@ export function AdapterManager() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        </div>
       </div>
 
       {/* Alpha notice */}
@@ -625,6 +615,7 @@ export function AdapterManager() {
                     supportsSkills: false,
                     supportsLocalAgentJwt: false,
                     requiresMaterializedRuntimeSkills: false,
+                    supportsModelProfiles: false,
                   },
                 }}
                 canRemove={false}

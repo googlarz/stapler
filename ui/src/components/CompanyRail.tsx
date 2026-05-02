@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { Paperclip, Plus } from "lucide-react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   DndContext,
   closestCenter,
@@ -17,11 +17,13 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useCompany } from "../context/CompanyContext";
-import { useDialog } from "../context/DialogContext";
+import { useDialogActions } from "../context/DialogContext";
 import { cn } from "../lib/utils";
 import { queryKeys } from "../lib/queryKeys";
 import { sidebarBadgesApi } from "../api/sidebarBadges";
 import { heartbeatsApi } from "../api/heartbeats";
+import { authApi } from "../api/auth";
+import { useCompanyOrder } from "../hooks/useCompanyOrder";
 import { useLocation, useNavigate } from "@/lib/router";
 import {
   Tooltip,
@@ -30,42 +32,6 @@ import {
 } from "@/components/ui/tooltip";
 import type { Company } from "@stapler/shared";
 import { CompanyPatternIcon } from "./CompanyPatternIcon";
-
-const ORDER_STORAGE_KEY = "paperclip.companyOrder";
-
-function getStoredOrder(): string[] {
-  try {
-    const raw = localStorage.getItem(ORDER_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return [];
-}
-
-function saveOrder(ids: string[]) {
-  localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(ids));
-}
-
-/** Sort companies by stored order, appending any new ones at the end. */
-function sortByStoredOrder(companies: Company[]): Company[] {
-  const order = getStoredOrder();
-  if (order.length === 0) return companies;
-
-  const byId = new Map(companies.map((c) => [c.id, c]));
-  const sorted: Company[] = [];
-
-  for (const id of order) {
-    const c = byId.get(id);
-    if (c) {
-      sorted.push(c);
-      byId.delete(id);
-    }
-  }
-  // Append any companies not in stored order
-  for (const c of byId.values()) {
-    sorted.push(c);
-  }
-  return sorted;
-}
 
 function SortableCompanyItem({
   company,
@@ -103,6 +69,10 @@ function SortableCompanyItem({
           <a
             href={`/${company.issuePrefix}/dashboard`}
             onClick={(e) => {
+              if (isDragging) {
+                e.preventDefault();
+                return;
+              }
               e.preventDefault();
               onSelect();
             }}
@@ -155,7 +125,7 @@ function SortableCompanyItem({
 
 export function CompanyRail() {
   const { companies, selectedCompanyId, setSelectedCompanyId } = useCompany();
-  const { openOnboarding } = useDialog();
+  const { openOnboarding } = useDialogActions();
   const navigate = useNavigate();
   const location = useLocation();
   const isInstanceRoute = location.pathname.startsWith("/instance/");
@@ -164,6 +134,11 @@ export function CompanyRail() {
     () => companies.filter((company) => company.status !== "archived"),
     [companies],
   );
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+  });
+  const currentUserId = session?.user?.id ?? session?.session?.userId ?? null;
   const companyIds = useMemo(() => sidebarCompanies.map((company) => company.id), [sidebarCompanies]);
 
   const liveRunsQueries = useQueries({
@@ -195,52 +170,10 @@ export function CompanyRail() {
     return result;
   }, [companyIds, sidebarBadgeQueries]);
 
-  // Maintain sorted order in local state, synced from companies + localStorage
-  const [orderedIds, setOrderedIds] = useState<string[]>(() =>
-    sortByStoredOrder(sidebarCompanies).map((c) => c.id)
-  );
-
-  // Re-sync orderedIds from localStorage whenever companies changes.
-  // Handles initial data load (companies starts as [] before query resolves)
-  // and subsequent refetches triggered by live updates.
-  useEffect(() => {
-    if (sidebarCompanies.length === 0) {
-      setOrderedIds([]);
-      return;
-    }
-    setOrderedIds(sortByStoredOrder(sidebarCompanies).map((c) => c.id));
-  }, [sidebarCompanies]);
-
-  // Sync order across tabs via the native storage event
-  useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key !== ORDER_STORAGE_KEY) return;
-      try {
-        const ids: string[] = e.newValue ? JSON.parse(e.newValue) : [];
-        setOrderedIds(ids);
-      } catch { /* ignore malformed data */ }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
-
-  // Re-derive when companies change (new company added/removed)
-  const orderedCompanies = useMemo(() => {
-    const byId = new Map(sidebarCompanies.map((c) => [c.id, c]));
-    const result: Company[] = [];
-    for (const id of orderedIds) {
-      const c = byId.get(id);
-      if (c) {
-        result.push(c);
-        byId.delete(id);
-      }
-    }
-    // Append any new companies not yet in our order
-    for (const c of byId.values()) {
-      result.push(c);
-    }
-    return result;
-  }, [sidebarCompanies, orderedIds]);
+  const { orderedCompanies, persistOrder } = useCompanyOrder({
+    companies: sidebarCompanies,
+    userId: currentUserId,
+  });
 
   // Require 8px of movement before starting a drag to avoid interfering with clicks
   const sensors = useSensors(
@@ -260,40 +193,16 @@ export function CompanyRail() {
       const newIndex = ids.indexOf(over.id as string);
       if (oldIndex === -1 || newIndex === -1) return;
 
-      const newIds = arrayMove(ids, oldIndex, newIndex);
-      setOrderedIds(newIds);
-      saveOrder(newIds);
+      persistOrder(arrayMove(ids, oldIndex, newIndex));
     },
-    [orderedCompanies]
+    [orderedCompanies, persistOrder]
   );
 
   return (
     <div className="flex flex-col items-center w-[72px] shrink-0 h-full bg-background border-r border-border">
-      {/* Stapler icon - aligned with top sections (implied line, no visible border) */}
+      {/* Paperclip icon - aligned with top sections (implied line, no visible border) */}
       <div className="flex items-center justify-center h-12 w-full shrink-0">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 512 512"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-5 w-5"
-        >
-          {/* Base */}
-          <path stroke="currentColor" strokeWidth="26" strokeLinejoin="round"
-            d="M24 388 L24 432 Q24 458 54 458 L462 458 Q494 458 494 434 L478 388 Z"/>
-          {/* Arm */}
-          <path stroke="currentColor" strokeWidth="26" strokeLinejoin="round"
-            d="M46 292 L46 138 Q46 66 140 66 L428 66 Q490 66 490 130 L490 292 Z"/>
-          {/* Interior ceiling line */}
-          <line stroke="currentColor" strokeWidth="24" x1="148" y1="108" x2="466" y2="108"/>
-          {/* Interior diagonal */}
-          <line stroke="currentColor" strokeWidth="24" x1="140" y1="292" x2="468" y2="262"/>
-          {/* Hinge outer */}
-          <circle stroke="currentColor" strokeWidth="26" cx="72" cy="338" r="54"/>
-          {/* Hinge inner */}
-          <circle stroke="currentColor" strokeWidth="26" cx="72" cy="338" r="22"/>
-        </svg>
+        <Paperclip className="h-5 w-5 text-foreground" />
       </div>
 
       {/* Company list */}

@@ -1,5 +1,14 @@
-import type { ServerAdapterModule } from "./types.js";
+import type { AdapterModelProfileDefinition, ServerAdapterModule } from "./types.js";
 import { getAdapterSessionManagement } from "@stapler/adapter-utils";
+import {
+  execute as acpxExecute,
+  testEnvironment as acpxTestEnvironment,
+  sessionCodec as acpxSessionCodec,
+  getConfigSchema as getAcpxConfigSchema,
+  listAcpxSkills,
+  syncAcpxSkills,
+} from "@stapler/adapter-acpx-local/server";
+import { agentConfigurationDoc as acpxAgentConfigurationDoc } from "@stapler/adapter-acpx-local";
 import {
   execute as claudeExecute,
   listClaudeSkills,
@@ -9,7 +18,11 @@ import {
   sessionCodec as claudeSessionCodec,
   getQuotaWindows as claudeGetQuotaWindows,
 } from "@stapler/adapter-claude-local/server";
-import { agentConfigurationDoc as claudeAgentConfigurationDoc, models as claudeModels } from "@stapler/adapter-claude-local";
+import {
+  agentConfigurationDoc as claudeAgentConfigurationDoc,
+  models as claudeModels,
+  modelProfiles as claudeModelProfiles,
+} from "@stapler/adapter-claude-local";
 import {
   execute as codexExecute,
   listCodexSkills,
@@ -18,7 +31,11 @@ import {
   sessionCodec as codexSessionCodec,
   getQuotaWindows as codexGetQuotaWindows,
 } from "@stapler/adapter-codex-local/server";
-import { agentConfigurationDoc as codexAgentConfigurationDoc, models as codexModels } from "@stapler/adapter-codex-local";
+import {
+  agentConfigurationDoc as codexAgentConfigurationDoc,
+  models as codexModels,
+  modelProfiles as codexModelProfiles,
+} from "@stapler/adapter-codex-local";
 import {
   execute as cursorExecute,
   listCursorSkills,
@@ -26,7 +43,11 @@ import {
   testEnvironment as cursorTestEnvironment,
   sessionCodec as cursorSessionCodec,
 } from "@stapler/adapter-cursor-local/server";
-import { agentConfigurationDoc as cursorAgentConfigurationDoc, models as cursorModels } from "@stapler/adapter-cursor-local";
+import {
+  agentConfigurationDoc as cursorAgentConfigurationDoc,
+  models as cursorModels,
+  modelProfiles as cursorModelProfiles,
+} from "@stapler/adapter-cursor-local";
 import {
   execute as geminiExecute,
   listGeminiSkills,
@@ -34,7 +55,11 @@ import {
   testEnvironment as geminiTestEnvironment,
   sessionCodec as geminiSessionCodec,
 } from "@stapler/adapter-gemini-local/server";
-import { agentConfigurationDoc as geminiAgentConfigurationDoc, models as geminiModels } from "@stapler/adapter-gemini-local";
+import {
+  agentConfigurationDoc as geminiAgentConfigurationDoc,
+  models as geminiModels,
+  modelProfiles as geminiModelProfiles,
+} from "@stapler/adapter-gemini-local";
 import {
   execute as openCodeExecute,
   listOpenCodeSkills,
@@ -46,6 +71,7 @@ import {
 import {
   agentConfigurationDoc as openCodeAgentConfigurationDoc,
   models as openCodeModels,
+  modelProfiles as openCodeModelProfiles,
 } from "@stapler/adapter-opencode-local";
 import {
   execute as openclawGatewayExecute,
@@ -55,7 +81,7 @@ import {
   agentConfigurationDoc as openclawGatewayAgentConfigurationDoc,
   models as openclawGatewayModels,
 } from "@stapler/adapter-openclaw-gateway";
-import { listCodexModels } from "./codex-models.js";
+import { listCodexModels, refreshCodexModels } from "./codex-models.js";
 import { listCursorModels } from "./cursor-models.js";
 import {
   execute as piExecute,
@@ -67,6 +93,7 @@ import {
 } from "@stapler/adapter-pi-local/server";
 import {
   agentConfigurationDoc as piAgentConfigurationDoc,
+  modelProfiles as piModelProfiles,
 } from "@stapler/adapter-pi-local";
 import {
   execute as hermesExecute,
@@ -80,31 +107,42 @@ import {
   agentConfigurationDoc as hermesAgentConfigurationDoc,
   models as hermesModels,
 } from "hermes-paperclip-adapter";
-import {
-  execute as ollamaExecute,
-  testEnvironment as ollamaTestEnvironment,
-  sessionCodec as ollamaSessionCodec,
-  listOllamaModels,
-} from "@stapler/adapter-ollama-local/server";
-import {
-  agentConfigurationDoc as ollamaAgentConfigurationDoc,
-  models as ollamaModels,
-} from "@stapler/adapter-ollama-local";
-import {
-  execute as openAiCompatExecute,
-  testEnvironment as openAiCompatTestEnvironment,
-  sessionCodec as openAiCompatSessionCodec,
-  listOpenAiCompatModels,
-} from "@stapler/adapter-openai-compat/server";
-import {
-  agentConfigurationDoc as openAiCompatAgentConfigurationDoc,
-  models as openAiCompatModels,
-} from "@stapler/adapter-openai-compat";
 import { BUILTIN_ADAPTER_TYPES } from "./builtin-adapter-types.js";
 import { buildExternalAdapters } from "./plugin-loader.js";
 import { getDisabledAdapterTypes } from "../services/adapter-plugin-store.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
+
+function normalizeHermesConfig<T extends { config?: unknown; agent?: unknown }>(ctx: T): T {
+  const config =
+    ctx && typeof ctx === "object" && "config" in ctx && ctx.config && typeof ctx.config === "object"
+      ? (ctx.config as Record<string, unknown>)
+      : null;
+  const agent =
+    ctx && typeof ctx === "object" && "agent" in ctx && ctx.agent && typeof ctx.agent === "object"
+      ? (ctx.agent as Record<string, unknown>)
+      : null;
+  const agentAdapterConfig =
+    agent?.adapterConfig && typeof agent.adapterConfig === "object"
+      ? (agent.adapterConfig as Record<string, unknown>)
+      : null;
+
+  const configCommand =
+    typeof config?.command === "string" && config.command.length > 0 ? config.command : undefined;
+  const agentCommand =
+    typeof agentAdapterConfig?.command === "string" && agentAdapterConfig.command.length > 0
+      ? agentAdapterConfig.command
+      : undefined;
+
+  if (config && !config.hermesCommand && configCommand) {
+    config.hermesCommand = configCommand;
+  }
+  if (agentAdapterConfig && !agentAdapterConfig.hermesCommand && agentCommand) {
+    agentAdapterConfig.hermesCommand = agentCommand;
+  }
+
+  return ctx;
+}
 
 const claudeLocalAdapter: ServerAdapterModule = {
   type: "claude_local",
@@ -115,6 +153,7 @@ const claudeLocalAdapter: ServerAdapterModule = {
   sessionCodec: claudeSessionCodec,
   sessionManagement: getAdapterSessionManagement("claude_local") ?? undefined,
   models: claudeModels,
+  modelProfiles: claudeModelProfiles,
   listModels: listClaudeModels,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
@@ -122,6 +161,22 @@ const claudeLocalAdapter: ServerAdapterModule = {
   requiresMaterializedRuntimeSkills: false,
   agentConfigurationDoc: claudeAgentConfigurationDoc,
   getQuotaWindows: claudeGetQuotaWindows,
+};
+
+const acpxLocalAdapter: ServerAdapterModule = {
+  type: "acpx_local",
+  execute: acpxExecute,
+  testEnvironment: acpxTestEnvironment,
+  listSkills: listAcpxSkills,
+  syncSkills: syncAcpxSkills,
+  sessionCodec: acpxSessionCodec,
+  sessionManagement: getAdapterSessionManagement("acpx_local") ?? undefined,
+  supportsLocalAgentJwt: true,
+  supportsInstructionsBundle: true,
+  instructionsPathKey: "instructionsFilePath",
+  requiresMaterializedRuntimeSkills: false,
+  agentConfigurationDoc: acpxAgentConfigurationDoc,
+  getConfigSchema: getAcpxConfigSchema,
 };
 
 const codexLocalAdapter: ServerAdapterModule = {
@@ -133,7 +188,9 @@ const codexLocalAdapter: ServerAdapterModule = {
   sessionCodec: codexSessionCodec,
   sessionManagement: getAdapterSessionManagement("codex_local") ?? undefined,
   models: codexModels,
+  modelProfiles: codexModelProfiles,
   listModels: listCodexModels,
+  refreshModels: refreshCodexModels,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
@@ -151,6 +208,7 @@ const cursorLocalAdapter: ServerAdapterModule = {
   sessionCodec: cursorSessionCodec,
   sessionManagement: getAdapterSessionManagement("cursor") ?? undefined,
   models: cursorModels,
+  modelProfiles: cursorModelProfiles,
   listModels: listCursorModels,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
@@ -168,6 +226,7 @@ const geminiLocalAdapter: ServerAdapterModule = {
   sessionCodec: geminiSessionCodec,
   sessionManagement: getAdapterSessionManagement("gemini_local") ?? undefined,
   models: geminiModels,
+  modelProfiles: geminiModelProfiles,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
@@ -194,6 +253,7 @@ const openCodeLocalAdapter: ServerAdapterModule = {
   syncSkills: syncOpenCodeSkills,
   sessionCodec: openCodeSessionCodec,
   models: openCodeModels,
+  modelProfiles: openCodeModelProfiles,
   sessionManagement: getAdapterSessionManagement("opencode_local") ?? undefined,
   listModels: listOpenCodeModels,
   supportsLocalAgentJwt: true,
@@ -212,6 +272,7 @@ const piLocalAdapter: ServerAdapterModule = {
   sessionCodec: piSessionCodec,
   sessionManagement: getAdapterSessionManagement("pi_local") ?? undefined,
   models: [],
+  modelProfiles: piModelProfiles,
   listModels: listPiModels,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
@@ -227,9 +288,10 @@ const executeHermesLocal = hermesExecute as unknown as ServerAdapterModule["exec
 const hermesLocalAdapter: ServerAdapterModule = {
   type: "hermes_local",
   execute: async (ctx) => {
-    if (!ctx.authToken) return executeHermesLocal(ctx);
+    const normalizedCtx = normalizeHermesConfig(ctx);
+    if (!normalizedCtx.authToken) return executeHermesLocal(normalizedCtx);
 
-    const existingConfig = (ctx.agent.adapterConfig ?? {}) as Record<string, unknown>;
+    const existingConfig = (normalizedCtx.agent.adapterConfig ?? {}) as Record<string, unknown>;
     const existingEnv =
       typeof existingConfig.env === "object" && existingConfig.env !== null && !Array.isArray(existingConfig.env)
         ? (existingConfig.env as Record<string, string>)
@@ -243,7 +305,7 @@ const hermesLocalAdapter: ServerAdapterModule = {
     const authGuardPrompt = [
       "Paperclip API safety rule:",
       "Use Authorization: Bearer $STAPLER_API_KEY on every Paperclip API request.",
-      "Use X-Stapler-Run-Id: $STAPLER_RUN_ID on every Stapler API request that writes or mutates data, including comments and issue updates.",
+      "Use X-Paperclip-Run-Id: $STAPLER_RUN_ID on every Paperclip API request that writes or mutates data, including comments and issue updates.",
       "Never use a board, browser, or local-board session for Paperclip API writes.",
     ].join("\n");
 
@@ -251,8 +313,8 @@ const hermesLocalAdapter: ServerAdapterModule = {
       ...existingConfig,
       env: {
         ...existingEnv,
-        ...(!explicitApiKey ? { STAPLER_API_KEY: ctx.authToken } : {}),
-        STAPLER_RUN_ID: ctx.runId,
+        ...(!explicitApiKey ? { STAPLER_API_KEY: normalizedCtx.authToken } : {}),
+        STAPLER_RUN_ID: normalizedCtx.runId,
       },
     };
 
@@ -264,16 +326,16 @@ const hermesLocalAdapter: ServerAdapterModule = {
     }
 
     const patchedCtx = {
-      ...ctx,
+      ...normalizedCtx,
       agent: {
-        ...ctx.agent,
+        ...normalizedCtx.agent,
         adapterConfig: patchedConfig,
       },
     };
 
     return executeHermesLocal(patchedCtx);
   },
-  testEnvironment: hermesTestEnvironment,
+  testEnvironment: (ctx) => hermesTestEnvironment(normalizeHermesConfig(ctx) as never),
   sessionCodec: hermesSessionCodec,
   listSkills: hermesListSkills,
   syncSkills: hermesSyncSkills,
@@ -283,32 +345,6 @@ const hermesLocalAdapter: ServerAdapterModule = {
   requiresMaterializedRuntimeSkills: false,
   agentConfigurationDoc: hermesAgentConfigurationDoc,
   detectModel: () => detectModelFromHermes(),
-};
-
-const ollamaLocalAdapter: ServerAdapterModule = {
-  type: "ollama_local",
-  execute: ollamaExecute,
-  testEnvironment: ollamaTestEnvironment,
-  sessionCodec: ollamaSessionCodec,
-  sessionManagement: getAdapterSessionManagement("ollama_local") ?? undefined,
-  models: ollamaModels,
-  listModels: listOllamaModels,
-  supportsLocalAgentJwt: true,
-  supportsInstructionsBundle: true,
-  agentConfigurationDoc: ollamaAgentConfigurationDoc,
-};
-
-const openAiCompatAdapter: ServerAdapterModule = {
-  type: "openai_compat",
-  execute: openAiCompatExecute,
-  testEnvironment: openAiCompatTestEnvironment,
-  sessionCodec: openAiCompatSessionCodec,
-  sessionManagement: getAdapterSessionManagement("openai_compat") ?? undefined,
-  models: openAiCompatModels,
-  listModels: () => listOpenAiCompatModels(),
-  supportsLocalAgentJwt: true,
-  supportsInstructionsBundle: true,
-  agentConfigurationDoc: openAiCompatAgentConfigurationDoc,
 };
 
 const adaptersByType = new Map<string, ServerAdapterModule>();
@@ -324,6 +360,7 @@ const pausedOverrides = new Set<string>();
 
 function registerBuiltInAdapters() {
   for (const adapter of [
+    acpxLocalAdapter,
     claudeLocalAdapter,
     codexLocalAdapter,
     openCodeLocalAdapter,
@@ -332,8 +369,6 @@ function registerBuiltInAdapters() {
     geminiLocalAdapter,
     openclawGatewayAdapter,
     hermesLocalAdapter,
-    ollamaLocalAdapter,
-    openAiCompatAdapter,
     processAdapter,
     httpAdapter,
   ]) {
@@ -347,12 +382,43 @@ registerBuiltInAdapters();
 // Load external adapter plugins (e.g. droid_local)
 //
 // External adapter packages export createServerAdapter() which returns a
-// ServerAdapterModule. The host fills in sessionManagement.
+// ServerAdapterModule. When the module provides its own sessionManagement
+// it is preserved; otherwise the host falls back to the built-in registry
+// lookup (so externals that override a built-in type inherit the builtin's
+// policy). This brings init-time registration to at-least-as-good behavior
+// as the hot-install path (routes/adapters.ts:179 -> registerServerAdapter):
+// both preserve module-provided sessionManagement, and init-time additionally
+// applies the registry fallback for externals overriding a built-in type.
 // ---------------------------------------------------------------------------
 
 /** Cached sync wrapper — the store is a simple JSON file read, safe to call frequently. */
 function getDisabledAdapterTypesFromStore(): string[] {
   return getDisabledAdapterTypes();
+}
+
+/**
+ * Merge an external adapter module with host-provided session management.
+ *
+ * Module-provided `sessionManagement` takes precedence. When absent, fall
+ * back to the hardcoded registry keyed by adapter type (so externals that
+ * override a built-in — same `type` — inherit the builtin's policy). If
+ * neither is available, `sessionManagement` remains `undefined`.
+ *
+ * Used by both the init-time IIFE below (external-adapter load pass on
+ * server start) and the hot-install path in `routes/adapters.ts`
+ * (`registerWithSessionManagement`), so the two load paths resolve
+ * `sessionManagement` identically.
+ */
+export function resolveExternalAdapterRegistration(
+  externalAdapter: ServerAdapterModule,
+): ServerAdapterModule {
+  return {
+    ...externalAdapter,
+    sessionManagement:
+      externalAdapter.sessionManagement
+        ?? getAdapterSessionManagement(externalAdapter.type)
+        ?? undefined,
+  };
 }
 
 /**
@@ -368,7 +434,7 @@ const externalAdaptersReady: Promise<void> = (async () => {
       const overriding = BUILTIN_ADAPTER_TYPES.has(externalAdapter.type);
       if (overriding) {
         console.log(
-          `[stapler] External adapter "${externalAdapter.type}" overrides built-in adapter`,
+          `[paperclip] External adapter "${externalAdapter.type}" overrides built-in adapter`,
         );
         // Save the original builtin for later restoration.
         const existing = adaptersByType.get(externalAdapter.type);
@@ -378,14 +444,11 @@ const externalAdaptersReady: Promise<void> = (async () => {
       }
       adaptersByType.set(
         externalAdapter.type,
-        {
-          ...externalAdapter,
-          sessionManagement: getAdapterSessionManagement(externalAdapter.type) ?? undefined,
-        },
+        resolveExternalAdapterRegistration(externalAdapter),
       );
     }
   } catch (err) {
-    console.error("[stapler] Failed to load external adapters:", err);
+    console.error("[paperclip] Failed to load external adapters:", err);
   }
 })();
 
@@ -447,6 +510,30 @@ export async function listAdapterModels(type: string): Promise<{ id: string; lab
   return adapter.models ?? [];
 }
 
+export async function refreshAdapterModels(type: string): Promise<{ id: string; label: string }[]> {
+  const adapter = findActiveServerAdapter(type);
+  if (!adapter) return [];
+  if (adapter.refreshModels) {
+    const refreshed = await adapter.refreshModels();
+    if (refreshed.length > 0) return refreshed;
+  }
+  if (adapter.listModels) {
+    const discovered = await adapter.listModels();
+    if (discovered.length > 0) return discovered;
+  }
+  return adapter.models ?? [];
+}
+
+export async function listAdapterModelProfiles(type: string): Promise<AdapterModelProfileDefinition[]> {
+  const adapter = findActiveServerAdapter(type);
+  if (!adapter) return [];
+  if (adapter.listModelProfiles) {
+    const discovered = await adapter.listModelProfiles();
+    if (discovered.length > 0) return discovered;
+  }
+  return adapter.modelProfiles ?? [];
+}
+
 export function listServerAdapters(): ServerAdapterModule[] {
   return Array.from(adaptersByType.values());
 }
@@ -501,12 +588,12 @@ export function setOverridePaused(type: string, paused: boolean): boolean {
   const wasPaused = pausedOverrides.has(type);
   if (paused && !wasPaused) {
     pausedOverrides.add(type);
-    console.log(`[stapler] Override paused for "${type}" — builtin adapter restored`);
+    console.log(`[paperclip] Override paused for "${type}" — builtin adapter restored`);
     return true;
   }
   if (!paused && wasPaused) {
     pausedOverrides.delete(type);
-    console.log(`[stapler] Override resumed for "${type}" — external adapter active`);
+    console.log(`[paperclip] Override resumed for "${type}" — external adapter active`);
     return true;
   }
   return false;

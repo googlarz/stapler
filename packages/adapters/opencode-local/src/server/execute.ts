@@ -4,21 +4,39 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { inferOpenAiCompatibleBiller, type AdapterExecutionContext, type AdapterExecutionResult } from "@stapler/adapter-utils";
 import {
+  adapterExecutionTargetIsRemote,
+  adapterExecutionTargetPaperclipApiUrl,
+  adapterExecutionTargetRemoteCwd,
+  adapterExecutionTargetSessionIdentity,
+  adapterExecutionTargetSessionMatches,
+  adapterExecutionTargetUsesManagedHome,
+  adapterExecutionTargetUsesPaperclipBridge,
+  describeAdapterExecutionTarget,
+  ensureAdapterExecutionTargetCommandResolvable,
+  prepareAdapterExecutionTargetRuntime,
+  readAdapterExecutionTarget,
+  readAdapterExecutionTargetHomeDir,
+  resolveAdapterExecutionTargetCommandForLogs,
+  runAdapterExecutionTargetProcess,
+  runAdapterExecutionTargetShellCommand,
+  startAdapterExecutionTargetPaperclipBridge,
+} from "@stapler/adapter-utils/execution-target";
+import {
   asString,
   asNumber,
   asStringArray,
   parseObject,
+  applyPaperclipWorkspaceEnv,
   buildPaperclipEnv,
   joinPromptSections,
   buildInvocationEnvForLogs,
   ensureAbsoluteDirectory,
-  ensureCommandResolvable,
   ensurePaperclipSkillSymlink,
   ensurePathInEnv,
-  resolveCommandForLogs,
   renderTemplate,
   renderPaperclipWakePrompt,
   stringifyPaperclipWakePayload,
+  DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE,
   runChildProcess,
   readPaperclipRuntimeSkillEntries,
   resolvePaperclipDesiredSkillNames,
@@ -70,7 +88,7 @@ async function ensureOpenCodeSkillsInjected(
   for (const skillName of removedSkills) {
     await onLog(
       "stderr",
-      `[stapler] Removed maintainer-only OpenCode skill "${skillName}" from ${skillsHome}\n`,
+      `[paperclip] Removed maintainer-only OpenCode skill "${skillName}" from ${skillsHome}\n`,
     );
   }
   for (const entry of selectedEntries) {
@@ -81,23 +99,41 @@ async function ensureOpenCodeSkillsInjected(
       if (result === "skipped") continue;
       await onLog(
         "stderr",
-        `[stapler] ${result === "repaired" ? "Repaired" : "Injected"} OpenCode skill "${entry.key}" into ${skillsHome}\n`,
+        `[paperclip] ${result === "repaired" ? "Repaired" : "Injected"} OpenCode skill "${entry.key}" into ${skillsHome}\n`,
       );
     } catch (err) {
       await onLog(
         "stderr",
-        `[stapler] Failed to inject OpenCode skill "${entry.key}" into ${skillsHome}: ${err instanceof Error ? err.message : String(err)}\n`,
+        `[paperclip] Failed to inject OpenCode skill "${entry.key}" into ${skillsHome}: ${err instanceof Error ? err.message : String(err)}\n`,
       );
     }
   }
 }
 
+async function buildOpenCodeSkillsDir(config: Record<string, unknown>): Promise<string> {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-opencode-skills-"));
+  const target = path.join(tmp, "skills");
+  await fs.mkdir(target, { recursive: true });
+  const availableEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
+  const desiredNames = new Set(resolvePaperclipDesiredSkillNames(config, availableEntries));
+  for (const entry of availableEntries) {
+    if (!desiredNames.has(entry.key)) continue;
+    await fs.symlink(entry.source, path.join(target, entry.runtimeName));
+  }
+  return target;
+}
+
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
   const { runId, agent, runtime, config, context, onLog, onMeta, onSpawn, authToken } = ctx;
+  const executionTarget = readAdapterExecutionTarget({
+    executionTarget: ctx.executionTarget,
+    legacyRemoteExecution: ctx.executionTransport?.remoteExecution,
+  });
+  const executionTargetIsRemote = adapterExecutionTargetIsRemote(executionTarget);
 
   const promptTemplate = asString(
     config.promptTemplate,
-    "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
+    DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE,
   );
   const command = asString(config.command, "opencode");
   const model = asString(config.model, "").trim();
@@ -122,11 +158,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
   const openCodeSkillEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
   const desiredOpenCodeSkillNames = resolvePaperclipDesiredSkillNames(config, openCodeSkillEntries);
-  await ensureOpenCodeSkillsInjected(
-    onLog,
-    openCodeSkillEntries,
-    desiredOpenCodeSkillNames,
-  );
+  if (!executionTargetIsRemote) {
+    await ensureOpenCodeSkillsInjected(
+      onLog,
+      openCodeSkillEntries,
+      desiredOpenCodeSkillNames,
+    );
+  }
 
   const envConfig = parseObject(config.env);
   const hasExplicitApiKey =
@@ -164,13 +202,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (approvalStatus) env.STAPLER_APPROVAL_STATUS = approvalStatus;
   if (linkedIssueIds.length > 0) env.STAPLER_LINKED_ISSUE_IDS = linkedIssueIds.join(",");
   if (wakePayloadJson) env.STAPLER_WAKE_PAYLOAD_JSON = wakePayloadJson;
-  if (effectiveWorkspaceCwd) env.STAPLER_WORKSPACE_CWD = effectiveWorkspaceCwd;
-  if (workspaceSource) env.STAPLER_WORKSPACE_SOURCE = workspaceSource;
-  if (workspaceId) env.STAPLER_WORKSPACE_ID = workspaceId;
-  if (workspaceRepoUrl) env.STAPLER_WORKSPACE_REPO_URL = workspaceRepoUrl;
-  if (workspaceRepoRef) env.STAPLER_WORKSPACE_REPO_REF = workspaceRepoRef;
-  if (agentHome) env.AGENT_HOME = agentHome;
+  applyPaperclipWorkspaceEnv(env, {
+    workspaceCwd: effectiveWorkspaceCwd,
+    workspaceSource,
+    workspaceId,
+    workspaceRepoUrl,
+    workspaceRepoRef,
+    agentHome,
+  });
   if (workspaceHints.length > 0) env.STAPLER_WORKSPACES_JSON = JSON.stringify(workspaceHints);
+  const targetPaperclipApiUrl = adapterExecutionTargetPaperclipApiUrl(executionTarget);
+  if (targetPaperclipApiUrl) env.STAPLER_API_URL = targetPaperclipApiUrl;
 
   for (const [key, value] of Object.entries(envConfig)) {
     if (typeof value === "string") env[key] = value;
@@ -184,26 +226,30 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     env.STAPLER_API_KEY = authToken;
   }
   const preparedRuntimeConfig = await prepareOpenCodeRuntimeConfig({ env, config });
+  const localRuntimeConfigHome =
+    preparedRuntimeConfig.notes.length > 0 ? preparedRuntimeConfig.env.XDG_CONFIG_HOME : "";
   try {
     const runtimeEnv = Object.fromEntries(
       Object.entries(ensurePathInEnv({ ...process.env, ...preparedRuntimeConfig.env })).filter(
         (entry): entry is [string, string] => typeof entry[1] === "string",
       ),
     );
-    await ensureCommandResolvable(command, cwd, runtimeEnv);
-    const resolvedCommand = await resolveCommandForLogs(command, cwd, runtimeEnv);
-    const loggedEnv = buildInvocationEnvForLogs(preparedRuntimeConfig.env, {
+    await ensureAdapterExecutionTargetCommandResolvable(command, executionTarget, cwd, runtimeEnv);
+    const resolvedCommand = await resolveAdapterExecutionTargetCommandForLogs(command, executionTarget, cwd, runtimeEnv);
+    let loggedEnv = buildInvocationEnvForLogs(preparedRuntimeConfig.env, {
       runtimeEnv,
       includeRuntimeKeys: ["HOME"],
       resolvedCommand,
     });
 
-    await ensureOpenCodeModelConfiguredAndAvailable({
-      model,
-      command,
-      cwd,
-      env: runtimeEnv,
-    });
+    if (!executionTargetIsRemote) {
+      await ensureOpenCodeModelConfiguredAndAvailable({
+        model,
+        command,
+        cwd,
+        env: runtimeEnv,
+      });
+    }
 
     const timeoutSec = asNumber(config.timeoutSec, 0);
     const graceSec = asNumber(config.graceSec, 20);
@@ -212,18 +258,105 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       if (fromExtraArgs.length > 0) return fromExtraArgs;
       return asStringArray(config.args);
     })();
+    const effectiveExecutionCwd = adapterExecutionTargetRemoteCwd(executionTarget, cwd);
+    let restoreRemoteWorkspace: (() => Promise<void>) | null = null;
+    let localSkillsDir: string | null = null;
+    let remoteRuntimeRootDir: string | null = null;
+    let paperclipBridge: Awaited<ReturnType<typeof startAdapterExecutionTargetPaperclipBridge>> = null;
+
+    if (executionTargetIsRemote) {
+      localSkillsDir = await buildOpenCodeSkillsDir(config);
+      await onLog(
+        "stdout",
+        `[paperclip] Syncing workspace and OpenCode runtime assets to ${describeAdapterExecutionTarget(executionTarget)}.\n`,
+      );
+      const preparedExecutionTargetRuntime = await prepareAdapterExecutionTargetRuntime({
+        target: executionTarget,
+        adapterKey: "opencode",
+        workspaceLocalDir: cwd,
+        assets: [
+          {
+            key: "skills",
+            localDir: localSkillsDir,
+            followSymlinks: true,
+          },
+          ...(localRuntimeConfigHome
+            ? [{
+              key: "xdgConfig",
+              localDir: localRuntimeConfigHome,
+            }]
+            : []),
+        ],
+      });
+      restoreRemoteWorkspace = () => preparedExecutionTargetRuntime.restoreWorkspace();
+      remoteRuntimeRootDir = preparedExecutionTargetRuntime.runtimeRootDir;
+      const managedHome = adapterExecutionTargetUsesManagedHome(executionTarget);
+      if (managedHome && preparedExecutionTargetRuntime.runtimeRootDir) {
+        preparedRuntimeConfig.env.HOME = preparedExecutionTargetRuntime.runtimeRootDir;
+      }
+      if (localRuntimeConfigHome && preparedExecutionTargetRuntime.assetDirs.xdgConfig) {
+        preparedRuntimeConfig.env.XDG_CONFIG_HOME = preparedExecutionTargetRuntime.assetDirs.xdgConfig;
+      }
+      const remoteHomeDir = managedHome && preparedExecutionTargetRuntime.runtimeRootDir
+        ? preparedExecutionTargetRuntime.runtimeRootDir
+        : await readAdapterExecutionTargetHomeDir(runId, executionTarget, {
+            cwd,
+            env: preparedRuntimeConfig.env,
+            timeoutSec,
+            graceSec,
+            onLog,
+          });
+      if (remoteHomeDir && preparedExecutionTargetRuntime.assetDirs.skills) {
+        const remoteSkillsDir = path.posix.join(remoteHomeDir, ".claude", "skills");
+        await runAdapterExecutionTargetShellCommand(
+          runId,
+          executionTarget,
+          `mkdir -p ${JSON.stringify(path.posix.dirname(remoteSkillsDir))} && rm -rf ${JSON.stringify(remoteSkillsDir)} && cp -a ${JSON.stringify(preparedExecutionTargetRuntime.assetDirs.skills)} ${JSON.stringify(remoteSkillsDir)}`,
+          { cwd, env: preparedRuntimeConfig.env, timeoutSec, graceSec, onLog },
+        );
+      }
+    }
+    if (executionTargetIsRemote && adapterExecutionTargetUsesPaperclipBridge(executionTarget)) {
+      paperclipBridge = await startAdapterExecutionTargetPaperclipBridge({
+        runId,
+        target: executionTarget,
+        runtimeRootDir: remoteRuntimeRootDir,
+        adapterKey: "opencode",
+        hostApiToken: preparedRuntimeConfig.env.STAPLER_API_KEY,
+        onLog,
+      });
+      if (paperclipBridge) {
+        Object.assign(preparedRuntimeConfig.env, paperclipBridge.env);
+        loggedEnv = buildInvocationEnvForLogs(preparedRuntimeConfig.env, {
+          runtimeEnv: Object.fromEntries(
+            Object.entries(ensurePathInEnv({ ...process.env, ...preparedRuntimeConfig.env })).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string",
+            ),
+          ),
+          includeRuntimeKeys: ["HOME"],
+          resolvedCommand,
+        });
+      }
+    }
 
     const runtimeSessionParams = parseObject(runtime.sessionParams);
     const runtimeSessionId = asString(runtimeSessionParams.sessionId, runtime.sessionId ?? "");
     const runtimeSessionCwd = asString(runtimeSessionParams.cwd, "");
+    const runtimeRemoteExecution = parseObject(runtimeSessionParams.remoteExecution);
     const canResumeSession =
       runtimeSessionId.length > 0 &&
-      (runtimeSessionCwd.length === 0 || path.resolve(runtimeSessionCwd) === path.resolve(cwd));
+      (runtimeSessionCwd.length === 0 || path.resolve(runtimeSessionCwd) === path.resolve(effectiveExecutionCwd)) &&
+      adapterExecutionTargetSessionMatches(runtimeRemoteExecution, executionTarget);
     const sessionId = canResumeSession ? runtimeSessionId : null;
-    if (runtimeSessionId && !canResumeSession) {
+    if (executionTargetIsRemote && runtimeSessionId && !canResumeSession) {
       await onLog(
         "stdout",
-        `[stapler] OpenCode session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
+        `[paperclip] OpenCode session "${runtimeSessionId}" does not match the current remote execution identity and will not be resumed in "${effectiveExecutionCwd}". Starting a fresh remote session.\n`,
+      );
+    } else if (runtimeSessionId && !canResumeSession) {
+      await onLog(
+        "stdout",
+        `[paperclip] OpenCode session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${effectiveExecutionCwd}".\n`,
       );
     }
     const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
@@ -243,7 +376,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         const reason = err instanceof Error ? err.message : String(err);
         await onLog(
           "stdout",
-          `[stapler] Warning: could not read agent instructions file "${resolvedInstructionsFilePath}": ${reason}\n`,
+          `[paperclip] Warning: could not read agent instructions file "${resolvedInstructionsFilePath}": ${reason}\n`,
         );
       }
     }
@@ -282,19 +415,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const shouldUseResumeDeltaPrompt = Boolean(sessionId) && wakePrompt.length > 0;
     const renderedPrompt = shouldUseResumeDeltaPrompt ? "" : renderTemplate(promptTemplate, templateData);
     const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
-    const delegationGuard = [
-      "## Delegation Policy",
-      "When working on a Paperclip issue or task, complete all work before finishing.",
-      "NEVER use run_in_background=true for implementation or issue-resolution work.",
-      "If you delegate to a sub-agent, use run_in_background=false and wait for the result.",
-      "Your process exits when you stop responding — exiting after delegation means incomplete work.",
-      "",
-    ].join("\n");
     const prompt = joinPromptSections([
       instructionsPrefix,
       renderedBootstrapPrompt,
       wakePrompt,
-      delegationGuard,
       sessionHandoffNote,
       renderedPrompt,
     ]);
@@ -322,7 +446,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         await onMeta({
           adapterType: "opencode_local",
           command: resolvedCommand,
-          cwd,
+          cwd: effectiveExecutionCwd,
           commandNotes,
           commandArgs: [...args, `<stdin prompt ${prompt.length} chars>`],
           env: loggedEnv,
@@ -332,9 +456,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         });
       }
 
-      const proc = await runChildProcess(runId, command, args, {
+      const proc = await runAdapterExecutionTargetProcess(runId, executionTarget, command, args, {
         cwd,
-        env: runtimeEnv,
+        env: preparedRuntimeConfig.env,
         stdin: prompt,
         timeoutSec,
         graceSec,
@@ -372,10 +496,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       const resolvedSessionParams = resolvedSessionId
         ? ({
             sessionId: resolvedSessionId,
-            cwd,
+            cwd: effectiveExecutionCwd,
             ...(workspaceId ? { workspaceId } : {}),
             ...(workspaceRepoUrl ? { repoUrl: workspaceRepoUrl } : {}),
             ...(workspaceRepoRef ? { repoRef: workspaceRepoRef } : {}),
+            ...(executionTargetIsRemote
+              ? {
+                  remoteExecution: adapterExecutionTargetSessionIdentity(executionTarget),
+                }
+              : {}),
           } as Record<string, unknown>)
         : null;
 
@@ -416,47 +545,31 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       };
     };
 
-    const MAX_DELEGATION_CONTINUATIONS = 2;
-
-    const initial = await runAttempt(sessionId);
-    const initialFailed =
-      !initial.proc.timedOut && ((initial.proc.exitCode ?? 0) !== 0 || Boolean(initial.parsed.errorMessage));
-    if (
-      sessionId &&
-      initialFailed &&
-      isOpenCodeUnknownSessionError(initial.proc.stdout, initial.rawStderr)
-    ) {
-      await onLog(
-        "stdout",
-        `[stapler] OpenCode session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
-      );
-      const retry = await runAttempt(null);
-      return toResult(retry, true);
-    }
-
-    if (!initialFailed && initial.parsed.hasBackgroundDelegation) {
-      const continuationSessionId = initial.parsed.sessionId ?? sessionId;
-      if (continuationSessionId) {
-        let lastAttempt = initial;
-        for (let i = 0; i < MAX_DELEGATION_CONTINUATIONS; i++) {
-          await onLog(
-            "stdout",
-            `[stapler] Background delegation detected; resuming session to verify completion (attempt ${i + 1}/${MAX_DELEGATION_CONTINUATIONS}).\n`,
-          );
-          const continuation = await runAttempt(continuationSessionId);
-          lastAttempt = continuation;
-          const continuationFailed =
-            !continuation.proc.timedOut &&
-            ((continuation.proc.exitCode ?? 0) !== 0 || Boolean(continuation.parsed.errorMessage));
-          if (continuationFailed || !continuation.parsed.hasBackgroundDelegation) {
-            return toResult(continuation);
-          }
-        }
-        return toResult(lastAttempt);
+    try {
+      const initial = await runAttempt(sessionId);
+      const initialFailed =
+        !initial.proc.timedOut && ((initial.proc.exitCode ?? 0) !== 0 || Boolean(initial.parsed.errorMessage));
+      if (
+        sessionId &&
+        initialFailed &&
+        isOpenCodeUnknownSessionError(initial.proc.stdout, initial.rawStderr)
+      ) {
+        await onLog(
+          "stdout",
+          `[paperclip] OpenCode session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+        );
+        const retry = await runAttempt(null);
+        return toResult(retry, true);
       }
-    }
 
-    return toResult(initial);
+      return toResult(initial);
+    } finally {
+      await Promise.all([
+        paperclipBridge?.stop(),
+        restoreRemoteWorkspace?.(),
+        localSkillsDir ? fs.rm(path.dirname(localSkillsDir), { recursive: true, force: true }).catch(() => undefined) : Promise.resolve(),
+      ]);
+    }
   } finally {
     await preparedRuntimeConfig.cleanup();
   }

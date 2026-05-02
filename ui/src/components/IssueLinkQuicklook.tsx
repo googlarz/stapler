@@ -6,8 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { timeAgo } from "@/lib/timeAgo";
 import { createIssueDetailPath, withIssueDetailHeaderSeed } from "@/lib/issueDetailBreadcrumb";
 import {
-  fetchIssueDetail,
-  getCachedIssueDetail,
+  getIssueDetailQueryOptions,
   ISSUE_DETAIL_STALE_TIME_MS,
   prefetchIssueDetail,
 } from "@/lib/issueDetailCache";
@@ -45,7 +44,7 @@ export function IssueQuicklookCard({
   return (
     <div className={cn("space-y-2", compact && "space-y-1.5")}>
       <div className="flex items-start gap-2">
-        <StatusIcon status={issue.status} className="mt-0.5 shrink-0" />
+        <StatusIcon status={issue.status} blockerAttention={issue.blockerAttention} className="mt-0.5 shrink-0" />
         <RouterDom.Link
           to={linkTo}
           state={linkState ?? withIssueDetailHeaderSeed(null, issue)}
@@ -98,12 +97,9 @@ export const IssueLinkQuicklook = React.forwardRef<
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const prefetchedState = issuePrefetch ? withIssueDetailHeaderSeed(state, issuePrefetch) : state;
-  const cachedIssue = getCachedIssueDetail(queryClient, issuePathId, issuePrefetch ?? undefined);
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.issues.detail(issuePathId),
-    queryFn: () => fetchIssueDetail(queryClient, issuePathId),
+    ...getIssueDetailQueryOptions(queryClient, issuePathId, { placeholderIssue: issuePrefetch ?? undefined }),
     enabled: open,
-    initialData: () => cachedIssue,
     staleTime: ISSUE_DETAIL_STALE_TIME_MS,
   });
 

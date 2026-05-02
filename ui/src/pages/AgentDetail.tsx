@@ -6,13 +6,10 @@ import {
   type AgentKey,
   type ClaudeLoginResult,
   type AgentPermissionUpdate,
-  type TaskProposal,
 } from "../api/agents";
 import { companySkillsApi } from "../api/companySkills";
 import { budgetsApi } from "../api/budgets";
 import { heartbeatsApi } from "../api/heartbeats";
-import { qualityApi } from "../api/quality";
-import { RunScoreBadge } from "../components/RunScoreBadge";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { ApiError } from "../api/client";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
@@ -21,21 +18,19 @@ import { issuesApi } from "../api/issues";
 import { usePanel } from "../context/PanelContext";
 import { useSidebar } from "../context/SidebarContext";
 import { useCompany } from "../context/CompanyContext";
-import { useToast } from "../context/ToastContext";
-import { useDialog } from "../context/DialogContext";
+import { useToastActions } from "../context/ToastContext";
+import { useDialogActions } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { copyTextToClipboard } from "../lib/clipboard";
 import { queryKeys } from "../lib/queryKeys";
 import { AgentConfigForm } from "../components/AgentConfigForm";
-import { AgentMemoryList } from "../components/AgentMemoryList";
 import { PageTabBar } from "../components/PageTabBar";
 import { adapterLabels, roleLabels, help } from "../components/agent-config-primitives";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { useAdapterCapabilities } from "@/adapters/use-adapter-capabilities";
+import { redactCommandText as redactCommandSecretText } from "@stapler/adapter-utils";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { assetsApi } from "../api/assets";
 import { getUIAdapter, buildTranscript, onAdapterChange } from "../adapters";
-import { OllamaModelPicker } from "../adapters/ollama-local/model-picker";
 import { StatusBadge } from "../components/StatusBadge";
 import { agentStatusDot, agentStatusDotDefault } from "../lib/status-colors";
 import { MarkdownBody } from "../components/MarkdownBody";
@@ -49,7 +44,7 @@ import { PackageFileTree, buildFileTree } from "../components/PackageFileTree";
 import { ScrollToBottom } from "../components/ScrollToBottom";
 import { formatCents, formatDate, relativeTime, formatTokens, visibleRunCostUsd } from "../lib/utils";
 import { cn } from "../lib/utils";
-import { useRunStream } from "../hooks/useRunStream";
+import { describeRunRetryState } from "../lib/runRetryState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
@@ -59,13 +54,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import {
   MoreHorizontal,
   CheckCircle2,
@@ -86,18 +74,6 @@ import {
   ArrowLeft,
   HelpCircle,
   FolderOpen,
-  Sparkles,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  ArrowRightLeft,
-  BookOpen,
-  AlertTriangle,
-  CheckCircle,
-  Play,
-  ToggleLeft,
-  ToggleRight,
-  Wrench,
 } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -130,13 +106,17 @@ const runStatusIcons: Record<string, { icon: typeof CheckCircle2; color: string 
   failed: { icon: XCircle, color: "text-red-600 dark:text-red-400" },
   running: { icon: Loader2, color: "text-cyan-600 dark:text-cyan-400" },
   queued: { icon: Clock, color: "text-yellow-600 dark:text-yellow-400" },
+  scheduled_retry: { icon: Clock, color: "text-sky-600 dark:text-sky-400" },
   timed_out: { icon: Timer, color: "text-orange-600 dark:text-orange-400" },
   cancelled: { icon: Slash, color: "text-neutral-500 dark:text-neutral-400" },
 };
 
+const RUN_LOG_PAGE_BYTES = 256_000;
+
 const REDACTED_ENV_VALUE = "***REDACTED***";
 const SECRET_ENV_KEY_RE =
   /(api[-_]?key|access[-_]?token|auth(?:_?token)?|authorization|bearer|secret|passwd|password|credential|jwt|private[-_]?key|cookie|connectionstring)/i;
+const COMMAND_ENV_KEY_RE = /(^command$|^cmd$|command[-_]?line|resolved[-_]?command|STAPLER_RESOLVED_COMMAND)/i;
 const JWT_VALUE_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/;
 
 function redactPathText(value: string, censorUsernameInLogs: boolean) {
@@ -145,6 +125,10 @@ function redactPathText(value: string, censorUsernameInLogs: boolean) {
 
 function redactPathValue<T>(value: T, censorUsernameInLogs: boolean): T {
   return redactHomePathUserSegmentsInValue(value, { enabled: censorUsernameInLogs });
+}
+
+function redactCommandText(value: string, censorUsernameInLogs: boolean): string {
+  return redactPathText(redactCommandSecretText(value, REDACTED_ENV_VALUE), censorUsernameInLogs);
 }
 
 function shouldRedactSecretValue(key: string, value: unknown): boolean {
@@ -164,6 +148,7 @@ function redactEnvValue(key: string, value: unknown, censorUsernameInLogs: boole
   }
   if (shouldRedactSecretValue(key, value)) return REDACTED_ENV_VALUE;
   if (value === null || value === undefined) return "";
+  if (typeof value === "string" && COMMAND_ENV_KEY_RE.test(key)) return redactCommandText(value, censorUsernameInLogs);
   if (typeof value === "string") return redactPathText(value, censorUsernameInLogs);
   try {
     return JSON.stringify(redactPathValue(value, censorUsernameInLogs));
@@ -250,18 +235,14 @@ function scrollToContainerBottom(container: ScrollContainer, behavior: ScrollBeh
   container.scrollTo({ top: container.scrollHeight, behavior });
 }
 
-type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget" | "memories" | "quality" | "collab" | "playbooks";
+type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget";
 
 function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "instructions" || value === "prompts") return "instructions";
   if (value === "configure" || value === "configuration") return "configuration";
   if (value === "skills") return "skills";
   if (value === "budget") return "budget";
-  if (value === "memories") return "memories";
   if (value === "runs") return value;
-  if (value === "quality") return "quality";
-  if (value === "collab") return "collab";
-  if (value === "playbooks") return "playbooks";
   return "dashboard";
 }
 
@@ -328,7 +309,7 @@ export function RunInvocationCard({
   payload: Record<string, unknown>;
   censorUsernameInLogs: boolean;
 }) {
-  const commandLine = [
+  const rawCommandLine = [
     typeof payload.command === "string" ? payload.command : null,
     ...(Array.isArray(payload.commandArgs)
       ? payload.commandArgs.filter((value): value is string => typeof value === "string")
@@ -336,6 +317,7 @@ export function RunInvocationCard({
   ]
     .filter((value): value is string => Boolean(value))
     .join(" ");
+  const commandLine = rawCommandLine ? redactCommandText(rawCommandLine, censorUsernameInLogs) : "";
 
   const hasAdvancedDetails =
     commandLine.length > 0
@@ -652,19 +634,12 @@ export function AgentDetail() {
   }>();
   const { companies, selectedCompanyId, setSelectedCompanyId } = useCompany();
   const { closePanel } = usePanel();
-  const { openNewIssue } = useDialog();
+  const { openNewIssue } = useDialogActions();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [actionError, setActionError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [proposeOpen, setProposeOpen] = useState(false);
-  const [proposing, setProposing] = useState(false);
-  const [proposals, setProposals] = useState<TaskProposal[]>([]);
-  const [proposeError, setProposeError] = useState<string | null>(null);
-  const [proposeModel, setProposeModel] = useState<string>("");
-  const [selectedProposals, setSelectedProposals] = useState<Set<number>>(new Set());
-  const [bulkCreating, setBulkCreating] = useState(false);
   const activeView = urlRunId ? "runs" as AgentDetailView : parseAgentDetailView(urlTab ?? null);
   const needsDashboardData = activeView === "dashboard";
   const needsRunData = activeView === "runs" || Boolean(urlRunId);
@@ -727,7 +702,6 @@ export function AgentDetail() {
     staleTime: 5_000,
   });
 
-
   const assignedIssues = (allIssues ?? [])
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   const reportsToAgent = (allAgents ?? []).find((a) => a.id === agent?.reportsTo);
@@ -787,15 +761,7 @@ export function AgentDetail() {
               ? "runs"
               : activeView === "budget"
                 ? "budget"
-                : activeView === "memories"
-                  ? "memories"
-                  : activeView === "quality"
-                    ? "quality"
-                    : activeView === "collab"
-                      ? "collab"
-                      : activeView === "playbooks"
-                        ? "playbooks"
-                        : "dashboard";
+              : "dashboard";
     if (routeAgentRef !== canonicalAgentRef || urlTab !== canonicalTab) {
       navigate(`/agents/${canonicalAgentRef}/${canonicalTab}`, { replace: true });
       return;
@@ -808,12 +774,13 @@ export function AgentDetail() {
   }, [agent?.companyId, selectedCompanyId, setSelectedCompanyId]);
 
   const agentAction = useMutation({
-    mutationFn: async (action: "invoke" | "pause" | "resume" | "terminate") => {
+    mutationFn: async (action: "invoke" | "pause" | "resume" | "approve" | "terminate") => {
       if (!agentLookupRef) return Promise.reject(new Error("No agent reference"));
       switch (action) {
         case "invoke": return agentsApi.invoke(agentLookupRef, resolvedCompanyId ?? undefined);
         case "pause": return agentsApi.pause(agentLookupRef, resolvedCompanyId ?? undefined);
         case "resume": return agentsApi.resume(agentLookupRef, resolvedCompanyId ?? undefined);
+        case "approve": return agentsApi.approve(agentLookupRef, resolvedCompanyId ?? undefined);
         case "terminate": return agentsApi.terminate(agentLookupRef, resolvedCompanyId ?? undefined);
       }
     },
@@ -896,60 +863,6 @@ export function AgentDetail() {
     },
   });
 
-  const handleProposeTasks = useCallback(() => {
-    if (!agent) return;
-    setProposeOpen(true);
-    setProposals([]);
-    setProposeError(null);
-    setProposing(false);
-    setSelectedProposals(new Set());
-  }, [agent]);
-
-  const handleGenerateProposals = useCallback(async () => {
-    if (!agent) return;
-    setProposing(true);
-    setProposeError(null);
-    try {
-      const result = await agentsApi.proposeTasks(
-        agentLookupRef,
-        resolvedCompanyId ?? undefined,
-        proposeModel || undefined,
-      );
-      setProposals(result.proposals ?? []);
-      setSelectedProposals(new Set());
-    } catch (err) {
-      setProposeError(err instanceof Error ? err.message : "Failed to generate proposals");
-    } finally {
-      setProposing(false);
-    }
-  }, [agent, agentLookupRef, resolvedCompanyId, proposeModel]);
-
-  const handleBulkCreate = useCallback(async () => {
-    if (selectedProposals.size === 0 || !resolvedCompanyId || !agent) return;
-    setBulkCreating(true);
-    try {
-      const toCreate = proposals.filter((_, i) => selectedProposals.has(i));
-      await Promise.all(
-        toCreate.map((proposal) =>
-          issuesApi.create(resolvedCompanyId, {
-            title: proposal.title,
-            description: proposal.description,
-            priority: proposal.priority,
-            assigneeAgentId: agent.id,
-            ...(proposal.goalId ? { goalId: proposal.goalId } : {}),
-          })
-        )
-      );
-      setProposeOpen(false);
-      setProposals([]);
-      setSelectedProposals(new Set());
-    } catch (err) {
-      setProposeError(err instanceof Error ? err.message : "Failed to create issues");
-    } finally {
-      setBulkCreating(false);
-    }
-  }, [selectedProposals, proposals, resolvedCompanyId, agent]);
-
   useEffect(() => {
     const crumbs: { label: string; href?: string }[] = [
       { label: "Agents", href: "/agents" },
@@ -1031,17 +944,6 @@ export function AgentDetail() {
             <Plus className="h-3.5 w-3.5 sm:mr-1" />
             <span className="hidden sm:inline">Assign Task</span>
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleProposeTasks}
-            disabled={proposing}
-          >
-            {proposing
-              ? <Loader2 className="h-3.5 w-3.5 sm:mr-1 animate-spin" />
-              : <Sparkles className="h-3.5 w-3.5 sm:mr-1" />}
-            <span className="hidden sm:inline">Propose Tasks</span>
-          </Button>
           <RunButton
             onClick={() => agentAction.mutate("invoke")}
             disabled={agentAction.isPending || isPendingApproval}
@@ -1078,7 +980,7 @@ export function AgentDetail() {
               <button
                 className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50"
                 onClick={() => {
-                  void copyTextToClipboard(agent.id);
+                  navigator.clipboard.writeText(agent.id);
                   setMoreOpen(false);
                 }}
               >
@@ -1122,10 +1024,6 @@ export function AgentDetail() {
               { value: "skills", label: "Skills" },
               { value: "configuration", label: "Configuration" },
               { value: "runs", label: "Runs" },
-              { value: "memories", label: "Memories" },
-              { value: "quality", label: "Quality" },
-              { value: "collab", label: "Collaboration" },
-              { value: "playbooks", label: "Playbooks" },
               { value: "budget", label: "Budget" },
             ]}
             value={activeView}
@@ -1136,21 +1034,23 @@ export function AgentDetail() {
 
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
       {isPendingApproval && (
-        <p className="text-sm text-amber-500">
-          This agent is pending board approval and cannot be invoked yet.
-        </p>
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-400/40 dark:bg-amber-950/30 dark:text-amber-200">
+          <span>This agent is pending board approval and cannot be invoked yet.</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => agentAction.mutate("approve")}
+            disabled={agentAction.isPending}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" />
+            <span>Approve agent</span>
+          </Button>
+        </div>
       )}
 
       {/* Floating Save/Cancel (desktop) */}
-      {!isMobile && (
-        <div
-          className={cn(
-            "sticky top-6 z-10 float-right transition-opacity duration-150",
-            showConfigActionBar
-              ? "opacity-100"
-              : "opacity-0 pointer-events-none"
-          )}
-        >
+      {!isMobile && showConfigActionBar && (
+        <div className="fixed bottom-6 right-6 z-30">
           <div className="flex items-center gap-2 bg-background/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5 shadow-lg">
             <Button
               variant="ghost"
@@ -1262,149 +1162,11 @@ export function AgentDetail() {
           />
         </div>
       ) : null}
-
-      {activeView === "memories" && <AgentMemoryList agentId={agent.id} />}
-
-      {activeView === "quality" && (
-        <AgentQualityTab agentId={agent.id} />
-      )}
-
-      {activeView === "collab" && (
-        <AgentCollabTab agentId={agent.id} />
-      )}
-
-      {activeView === "playbooks" && (
-        <AgentPlaybooksTab agentId={agent.id} />
-      )}
-
-      {/* Propose Tasks Dialog */}
-      <Dialog open={proposeOpen} onOpenChange={setProposeOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Proposed Tasks for {agent.name}
-            </DialogTitle>
-          </DialogHeader>
-          {!proposing && proposals.length === 0 && !proposeError && (
-            <div className="space-y-4 mt-2">
-              <p className="text-sm text-muted-foreground">
-                Select a model, or leave blank to auto-select.
-              </p>
-              <OllamaModelPicker
-                installedModels={[]}
-                value={proposeModel}
-                onChange={setProposeModel}
-                baseUrl={
-                  typeof (agent.adapterConfig as Record<string, unknown>)?.baseUrl === "string"
-                    ? (agent.adapterConfig as Record<string, unknown>).baseUrl as string
-                    : undefined
-                }
-              />
-              <div className="flex justify-end pt-2">
-                <Button onClick={handleGenerateProposals} disabled={proposing}>
-                  Generate Proposals
-                </Button>
-              </div>
-            </div>
-          )}
-          {proposing && (
-            <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <p className="text-sm">Generating task proposals...</p>
-            </div>
-          )}
-          {!proposing && proposeError && (
-            <div className="py-8 text-center space-y-3">
-              <p className="text-sm text-destructive">{proposeError}</p>
-              <Button variant="outline" size="sm" onClick={handleGenerateProposals}>
-                Try Again
-              </Button>
-            </div>
-          )}
-          {!proposing && proposals.length > 0 && (
-            <>
-              <div className="space-y-3 mt-2">
-                {proposals.map((proposal, i) => (
-                  <div key={i} className="border border-border rounded-lg p-4 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer"
-                          checked={selectedProposals.has(i)}
-                          onChange={(e) => {
-                            setSelectedProposals((prev) => {
-                              const next = new Set(prev);
-                              e.target.checked ? next.add(i) : next.delete(i);
-                              return next;
-                            });
-                          }}
-                        />
-                        <p className="font-semibold text-sm leading-snug">{proposal.title}</p>
-                      </div>
-                      <PriorityBadge priority={proposal.priority} />
-                    </div>
-                    <p className="text-sm text-muted-foreground">{proposal.description}</p>
-                    {proposal.goalTitle && (
-                      <p className="text-xs text-muted-foreground">
-                        Tied to: <span className="font-medium text-foreground">{proposal.goalTitle}</span>
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground italic">{proposal.rationale}</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-1"
-                      onClick={() => {
-                        openNewIssue({
-                          assigneeAgentId: agent.id,
-                          title: proposal.title,
-                          description: proposal.description,
-                          priority: proposal.priority,
-                          ...(proposal.goalId ? { goalId: proposal.goalId } : {}),
-                        });
-                      }}
-                    >
-                      <Plus className="h-3.5 w-3.5 mr-1" />
-                      Create Issue
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-end pt-2 border-t border-border">
-                <Button
-                  onClick={handleBulkCreate}
-                  disabled={selectedProposals.size === 0 || bulkCreating}
-                >
-                  {bulkCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Create selected ({selectedProposals.size})
-                </Button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
 
 /* ---- Helper components ---- */
-
-const PRIORITY_STYLES: Record<string, string> = {
-  urgent: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
-  high: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
-  medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400",
-  low: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
-};
-
-function PriorityBadge({ priority }: { priority: string }) {
-  return (
-    <Badge className={cn("capitalize shrink-0", PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.medium)}>
-      {priority}
-    </Badge>
-  );
-}
 
 function SummaryRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -1416,15 +1178,6 @@ function SummaryRow({ label, children }: { label: string; children: React.ReactN
 }
 
 function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: string }) {
-  const queryClient = useQueryClient();
-  const reviewMutation = useMutation({
-    mutationFn: ({ runId, action }: { runId: string; action: "approve" | "reject" }) =>
-      heartbeatsApi.review(runId, action),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["heartbeats"] });
-    },
-  });
-
   if (runs.length === 0) return null;
 
   const sorted = [...runs].sort(
@@ -1432,10 +1185,8 @@ function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: strin
   );
 
   const liveRun = sorted.find((r) => r.status === "running" || r.status === "queued");
-  const pendingReviewRun = sorted.find((r) => r.status === "needs_review");
-  const run = liveRun ?? pendingReviewRun ?? sorted[0];
+  const run = liveRun ?? sorted[0];
   const isLive = run.status === "running" || run.status === "queued";
-  const isNeedsReview = run.status === "needs_review";
   const statusInfo = runStatusIcons[run.status] ?? { icon: Clock, color: "text-neutral-400" };
   const StatusIcon = statusInfo.icon;
   const summaryRaw = run.resultJson
@@ -1462,22 +1213,29 @@ function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: strin
 
   return (
     <div className="space-y-3">
-      <h3 className="flex items-center gap-2 text-sm font-medium">
-        {isLive && (
-          <span className="relative flex h-2 w-2">
-            <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
-          </span>
-        )}
-        {isNeedsReview ? "Awaiting Review" : isLive ? "Live Run" : "Latest Run"}
-      </h3>
+      <div className="flex w-full items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          {isLive && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
+            </span>
+          )}
+          {isLive ? "Live Run" : "Latest Run"}
+        </h3>
+        <Link
+          to={`/agents/${agentId}/runs/${run.id}`}
+          className="shrink-0 text-xs text-muted-foreground hover:text-foreground transition-colors no-underline"
+        >
+          View details &rarr;
+        </Link>
+      </div>
 
-      <div
+      <Link
+        to={`/agents/${agentId}/runs/${run.id}`}
         className={cn(
-          "border rounded-lg p-4 space-y-2 w-full transition-colors",
-          isLive ? "border-cyan-500/30 shadow-[0_0_12px_rgba(6,182,212,0.08)]"
-            : isNeedsReview ? "border-amber-400/40 shadow-[0_0_12px_rgba(251,191,36,0.08)]"
-            : "border-border"
+          "block border rounded-lg p-4 space-y-2 w-full no-underline transition-colors hover:bg-muted/50 cursor-pointer",
+          isLive ? "border-cyan-500/30 shadow-[0_0_12px_rgba(6,182,212,0.08)]" : "border-border"
         )}
       >
         <div className="flex items-center gap-2">
@@ -1501,38 +1259,7 @@ function LatestRunCard({ runs, agentId }: { runs: HeartbeatRun[]; agentId: strin
             <MarkdownBody className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">{summary}</MarkdownBody>
           </div>
         )}
-
-        {isNeedsReview && (
-          <div className="flex items-center gap-2 pt-1 border-t border-amber-300/30">
-            <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
-              Self-critique flagged this run — review before it ships.
-            </span>
-            <button
-              type="button"
-              disabled={reviewMutation.isPending}
-              onClick={() => reviewMutation.mutate({ runId: run.id, action: "approve" })}
-              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              disabled={reviewMutation.isPending}
-              onClick={() => reviewMutation.mutate({ runId: run.id, action: "reject" })}
-              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors"
-            >
-              Reject
-            </button>
-          </div>
-        )}
-
-        <Link
-          to={`/agents/${agentId}/runs/${run.id}`}
-          className="block text-xs text-muted-foreground hover:text-foreground transition-colors no-underline text-right"
-        >
-          View details &rarr;
-        </Link>
-      </div>
+      </Link>
     </div>
   );
 }
@@ -1554,12 +1281,6 @@ function AgentOverview({
   agentId: string;
   agentRouteId: string;
 }) {
-  const { data: qualityTrend } = useQuery({
-    queryKey: ["quality", "agentTrend", agent.id],
-    queryFn: () => qualityApi.agentTrend(agent.id),
-    enabled: !!agent.id,
-    staleTime: 30_000,
-  });
   return (
     <div className="space-y-8">
       {/* Latest Run */}
@@ -1578,37 +1299,6 @@ function AgentOverview({
         </ChartCard>
         <ChartCard title="Success Rate" subtitle="Last 14 days">
           <SuccessRateChart runs={runs} />
-        </ChartCard>
-        <ChartCard
-          title="Quality"
-          subtitle={
-            qualityTrend && qualityTrend.sampleSize > 0
-              ? `Last ${qualityTrend.windowDays} days · ${qualityTrend.sampleSize} runs`
-              : "Last 30 days"
-          }
-        >
-          <div className="flex flex-col items-start gap-2 py-2">
-            <RunScoreBadge
-              score={qualityTrend?.avgScore ?? null}
-              variant="full"
-              reasoning={
-                qualityTrend && qualityTrend.sampleSize === 0
-                  ? "No scored runs yet. Enable autoScoreRuns in the agent's adapter config."
-                  : undefined
-              }
-            />
-            {qualityTrend && qualityTrend.recent.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {qualityTrend.recent.slice(0, 8).map((r) => (
-                  <RunScoreBadge
-                    key={r.id}
-                    score={r.score}
-                    reasoning={r.reasoning ?? undefined}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
         </ChartCard>
       </div>
 
@@ -1866,7 +1556,7 @@ function ConfigurationTab({
   hideInstructionsFile?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const { pushToast } = useToast();
+  const { pushToast } = useToastActions();
   const [awaitingRefreshAfterSave, setAwaitingRefreshAfterSave] = useState(false);
   const lastAgentRef = useRef(agent);
 
@@ -1916,18 +1606,6 @@ function ConfigurationTab({
 
   const canCreateAgents = Boolean(agent.permissions?.canCreateAgents);
   const canAssignTasks = Boolean(agent.access?.canAssignTasks);
-
-  const agentCfg = (agent.adapterConfig ?? {}) as Record<string, unknown>;
-  const enableMemoryInjection = Boolean(agentCfg.enableMemoryInjection);
-  const storedInjectionLimit =
-    typeof agentCfg.memoryInjectionLimit === "number"
-      ? Math.max(1, Math.min(20, agentCfg.memoryInjectionLimit))
-      : 5;
-  const [injectionLimit, setInjectionLimit] = useState(storedInjectionLimit);
-  // Keep local state in sync when the saved config changes (e.g. after another save).
-  useEffect(() => {
-    setInjectionLimit(storedInjectionLimit);
-  }, [storedInjectionLimit]);
   const taskAssignSource = agent.access?.taskAssignSource ?? "none";
   const taskAssignLocked = agent.role === "ceo" || canCreateAgents;
   const taskAssignHint =
@@ -1997,62 +1675,6 @@ function ConfigurationTab({
           </div>
         </div>
       </div>
-
-      <div>
-        <h3 className="text-sm font-medium mb-3">Memory injection</h3>
-        <div className="border border-border rounded-lg p-4 space-y-4">
-          <div className="flex items-center justify-between gap-4 text-sm">
-            <div className="space-y-1">
-              <div>Inject memories at wakeup</div>
-              <p className="text-xs text-muted-foreground">
-                When enabled, the agent's top matching memories are prepended to its
-                system prompt at every run start, using the task title and wake reason
-                as the search query.
-              </p>
-            </div>
-            <ToggleSwitch
-              checked={enableMemoryInjection}
-              onCheckedChange={() =>
-                updateAgent.mutate({
-                  adapterConfig: {
-                    ...agentCfg,
-                    enableMemoryInjection: !enableMemoryInjection,
-                  },
-                })
-              }
-              disabled={updateAgent.isPending}
-            />
-          </div>
-          {enableMemoryInjection && (
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <div className="space-y-1">
-                <div>Injection limit</div>
-                <p className="text-xs text-muted-foreground">
-                  Maximum number of memories injected per run (1–20).
-                </p>
-              </div>
-              <Input
-                type="number"
-                min={1}
-                max={20}
-                value={injectionLimit}
-                onChange={(e) => setInjectionLimit(Number(e.target.value))}
-                onBlur={() => {
-                  const clamped = Math.max(1, Math.min(20, injectionLimit || 5));
-                  updateAgent.mutate({
-                    adapterConfig: {
-                      ...agentCfg,
-                      enableMemoryInjection,
-                      memoryInjectionLimit: clamped,
-                    },
-                  });
-                }}
-                className="w-20 text-right"
-              />
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -2090,6 +1712,7 @@ function PromptsTab({
   const [pendingFiles, setPendingFiles] = useState<string[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [filePanelWidth, setFilePanelWidth] = useState(260);
+  const [instructionPaneWidth, setInstructionPaneWidth] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [awaitingRefresh, setAwaitingRefresh] = useState(false);
   const lastFileVersionRef = useRef<string | null>(null);
@@ -2153,9 +1776,8 @@ function PromptsTab({
   const selectedFileExists = bundleMatchesDraft && fileOptions.includes(selectedOrEntryFile);
   const selectedFileSummary = bundle?.files.find((file) => file.path === selectedOrEntryFile) ?? null;
 
-  const bundleRootPath = bundle?.rootPath ?? "";
-  const { data: selectedFileDetail, isLoading: fileLoading, error: fileError } = useQuery({
-    queryKey: queryKeys.agents.instructionsFile(agent.id, selectedOrEntryFile, bundleRootPath),
+  const { data: selectedFileDetail, isLoading: fileLoading } = useQuery({
+    queryKey: queryKeys.agents.instructionsFile(agent.id, selectedOrEntryFile),
     queryFn: () => agentsApi.instructionsFile(agent.id, selectedOrEntryFile, companyId),
     enabled: Boolean(companyId && isLocal && selectedFileExists),
   });
@@ -2183,7 +1805,7 @@ function PromptsTab({
     onSuccess: (_, variables) => {
       setPendingFiles((prev) => prev.filter((f) => f !== variables.path));
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.instructionsBundle(agent.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.agents.instructionsFile(agent.id, variables.path, bundleRootPath) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.instructionsFile(agent.id, variables.path) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
     },
@@ -2195,7 +1817,7 @@ function PromptsTab({
     onMutate: () => setAwaitingRefresh(true),
     onSuccess: (_, relativePath) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.instructionsBundle(agent.id) });
-      queryClient.removeQueries({ queryKey: queryKeys.agents.instructionsFile(agent.id, relativePath, bundleRootPath) });
+      queryClient.removeQueries({ queryKey: queryKeys.agents.instructionsFile(agent.id, relativePath) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
     },
@@ -2237,6 +1859,26 @@ function PromptsTab({
     }
     setExpandedDirs((current) => (setsEqual(current, nextExpanded) ? current : nextExpanded));
   }, [visibleFilePaths]);
+
+  useEffect(() => {
+    if (isMobile) {
+      setInstructionPaneWidth(null);
+      return;
+    }
+    const element = containerRef.current;
+    if (!element) return;
+
+    const updateWidth = () => setInstructionPaneWidth(element.getBoundingClientRect().width);
+    updateWidth();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setInstructionPaneWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [bundleLoading, isMobile, visibleFilePaths.length]);
 
   useEffect(() => {
     const versionKey = selectedFileExists && selectedFileDetail
@@ -2304,14 +1946,6 @@ function PromptsTab({
             rootPath: bundleDraft.mode === "external" ? bundleDraft.rootPath : null,
             entryFile: bundleDraft.entryFile,
           });
-        } else if (fileDirty && !bundle) {
-          // New agent — no bundle exists yet. Initialize with defaults so the
-          // subsequent saveFile call has a bundle to attach to.
-          await updateBundle.mutateAsync({
-            mode: "managed",
-            rootPath: null,
-            entryFile: currentEntryFile,
-          });
         }
         if (fileDirty) {
           await saveFile.mutateAsync({
@@ -2323,7 +1957,6 @@ function PromptsTab({
       };
       void save().catch(() => undefined);
     } : null);
-    return () => { onSaveActionChange(null); };
   }, [
     bundle,
     bundleDirty,
@@ -2348,7 +1981,6 @@ function PromptsTab({
         });
       }
     } : null);
-    return () => { onCancelActionChange(null); };
   }, [bundle, isDirty, onCancelActionChange, persistedMode, persistedRootPath]);
 
   const handleSeparatorDrag = useCallback((event: React.MouseEvent) => {
@@ -2371,6 +2003,9 @@ function PromptsTab({
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }, [filePanelWidth]);
+
+  const instructionsSideBySide =
+    !isMobile && instructionPaneWidth !== null && instructionPaneWidth >= filePanelWidth + 520;
 
   if (!isLocal) {
     return (
@@ -2405,8 +2040,8 @@ function PromptsTab({
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-4 pb-6">
           <TooltipProvider>
-            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-[auto_1fr_1fr]">
-              <label className="space-y-1.5">
+            <div className="grid gap-x-6 gap-y-4 md:grid-cols-[auto_minmax(0,1fr)_minmax(12rem,0.65fr)]">
+              <label className="space-y-1.5 min-w-0">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                   Mode
                   <Tooltip>
@@ -2551,12 +2186,20 @@ function PromptsTab({
         </CollapsibleContent>
       </Collapsible>
 
-      <div ref={containerRef} className={cn("flex gap-0", isMobile && "flex-col gap-3")}>
+      <div
+        ref={containerRef}
+        className="grid min-w-0 gap-3"
+        style={
+          instructionsSideBySide
+            ? { gridTemplateColumns: `${filePanelWidth}px 0.5rem minmax(0, 1fr)` }
+            : undefined
+        }
+      >
         <div className={cn(
-          "border border-border rounded-lg p-3 space-y-3 shrink-0",
+          "min-w-0 w-full border border-border rounded-lg p-3 space-y-3",
           isMobile && showFilePanel && "block",
           isMobile && !showFilePanel && "hidden",
-        )} style={isMobile ? undefined : { width: filePanelWidth }}>
+        )}>
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium">Files</h4>
             <div className="flex items-center gap-1">
@@ -2651,6 +2294,7 @@ function PromptsTab({
             }}
             onToggleCheck={() => {}}
             showCheckboxes={false}
+            wrapLabels
             renderFileExtra={(node) => {
               const file = bundle?.files.find((entry) => entry.path === node.path);
               if (!file) return null;
@@ -2678,14 +2322,14 @@ function PromptsTab({
         </div>
 
         {/* Draggable separator */}
-        {!isMobile && (
+        {instructionsSideBySide && (
           <div
-            className="w-1 shrink-0 cursor-col-resize hover:bg-border active:bg-primary/50 rounded transition-colors mx-1"
+            className="w-1 cursor-col-resize rounded transition-colors hover:bg-border active:bg-primary/50"
             onMouseDown={handleSeparatorDrag}
           />
         )}
 
-        <div className={cn("border border-border rounded-lg p-4 space-y-3 min-w-0 flex-1", isMobile && showFilePanel && "hidden")}>
+        <div className={cn("min-w-0 w-full overflow-hidden border border-border rounded-lg p-4 space-y-3", isMobile && showFilePanel && "hidden")}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               {isMobile && (
@@ -2710,43 +2354,51 @@ function PromptsTab({
                 </p>
               </div>
             </div>
-            {selectedFileExists && !selectedFileSummary?.deprecated && selectedOrEntryFile !== currentEntryFile && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (confirm(`Delete ${selectedOrEntryFile}?`)) {
-                    deleteFile.mutate(selectedOrEntryFile, {
-                      onSuccess: () => {
-                        setSelectedFile(currentEntryFile);
-                        setDraft(null);
-                      },
-                    });
-                  }
-                }}
-                disabled={deleteFile.isPending}
-              >
-                Delete
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {!fileLoading && (
+                <CopyText
+                  text={displayValue}
+                  ariaLabel="Copy instructions file as markdown"
+                  title="Copy as markdown"
+                  copiedLabel="Copied"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </CopyText>
+              )}
+              {selectedFileExists && !selectedFileSummary?.deprecated && selectedOrEntryFile !== currentEntryFile && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (confirm(`Delete ${selectedOrEntryFile}?`)) {
+                      deleteFile.mutate(selectedOrEntryFile, {
+                        onSuccess: () => {
+                          setSelectedFile(currentEntryFile);
+                          setDraft(null);
+                        },
+                      });
+                    }
+                  }}
+                  disabled={deleteFile.isPending}
+                >
+                  Delete
+                </Button>
+              )}
+            </div>
           </div>
 
           {selectedFileExists && fileLoading && !selectedFileDetail ? (
             <PromptEditorSkeleton />
-          ) : selectedFileExists && fileError && !selectedFileDetail ? (
-            <div className="flex min-h-[420px] items-center justify-center rounded-md border border-border">
-              <p className="text-sm text-destructive">
-                Failed to load file: {fileError instanceof Error ? fileError.message : "Unknown error"}
-              </p>
-            </div>
           ) : isMarkdown(selectedOrEntryFile) ? (
             <MarkdownEditor
               key={selectedOrEntryFile}
               value={displayValue}
-              onChange={(value) => setDraft(value ?? null)}
+              onChange={(value) => setDraft(value ?? "")}
               placeholder="# Agent instructions"
-              contentClassName="min-h-[420px] text-sm font-mono"
+              className="min-w-0 overflow-hidden"
+              contentClassName="min-h-[420px] max-w-full break-words text-sm font-mono"
               imageUploadHandler={async (file) => {
                 const namespace = `agents/${agent.id}/instructions/${selectedOrEntryFile.replaceAll("/", "-")}`;
                 const asset = await uploadMarkdownImage.mutateAsync({ file, namespace });
@@ -2757,7 +2409,7 @@ function PromptsTab({
             <textarea
               value={displayValue}
               onChange={(event) => setDraft(event.target.value)}
-              className="min-h-[420px] w-full rounded-md border border-border bg-transparent px-3 py-2 font-mono text-sm outline-none"
+              className="min-h-[420px] w-full min-w-0 rounded-md border border-border bg-transparent px-3 py-2 font-mono text-sm outline-none"
               placeholder="File contents"
             />
           )}
@@ -2822,7 +2474,7 @@ function PromptEditorSkeleton() {
   );
 }
 
-function AgentSkillsTab({
+export function AgentSkillsTab({
   agent,
   companyId,
 }: {
@@ -3005,11 +2657,18 @@ function AgentSkillsTab({
   }, [skillSnapshot?.mode]);
   const unsupportedSkillMessage = useMemo(() => {
     if (skillSnapshot?.mode !== "unsupported") return null;
+    if (
+      agent.adapterType === "acpx_local" &&
+      typeof agent.adapterConfig.agent === "string" &&
+      agent.adapterConfig.agent === "custom"
+    ) {
+      return "Paperclip cannot manage skills for custom ACP commands yet.";
+    }
     if (agent.adapterType === "openclaw_gateway") {
       return "Paperclip cannot manage OpenClaw skills here. Visit your OpenClaw instance to manage this agent's skills.";
     }
     return "Paperclip cannot manage skills for this adapter yet. Manage them in the adapter directly.";
-  }, [agent.adapterType, skillSnapshot?.mode]);
+  }, [agent.adapterConfig.agent, agent.adapterType, skillSnapshot?.mode]);
   const hasUnsavedChanges = !arraysEqual(skillDraft, lastSavedSkills);
   const saveStatusLabel = syncSkills.isPending
     ? "Saving changes..."
@@ -3461,19 +3120,6 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
     queryKey: queryKeys.runIssues(run.id),
     queryFn: () => activityApi.issuesForRun(run.id),
   });
-
-  const { data: injectionEvents } = useQuery({
-    queryKey: ["runActivity", run.id, "memory.injected"],
-    queryFn: () => activityApi.activityForRun(run.id, "memory.injected"),
-  });
-  const injectionEvent = injectionEvents?.[0];
-  const injectionDetails = injectionEvent?.details as {
-    total?: number;
-    agentWiki?: number;
-    companyWiki?: number;
-    agentEpisodic?: number;
-    companyEpisodic?: number;
-  } | null | undefined;
   const touchedIssueIds = useMemo(
     () => Array.from(new Set((touchedIssues ?? []).map((issue) => issue.issueId))),
     [touchedIssues],
@@ -3527,6 +3173,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
   const sessionChanged = run.sessionIdBefore && run.sessionIdAfter && run.sessionIdBefore !== run.sessionIdAfter;
   const sessionId = run.sessionIdAfter || run.sessionIdBefore;
   const hasNonZeroExit = run.exitCode !== null && run.exitCode !== 0;
+  const retryState = describeRunRetryState(run);
 
   return (
     <div className="space-y-4 min-w-0">
@@ -3681,6 +3328,30 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
                 {run.signal && <span className="text-muted-foreground ml-1">(signal: {run.signal})</span>}
               </div>
             )}
+            {retryState && (
+              <div className="rounded-md border border-border/70 bg-accent/20 px-3 py-2 text-xs leading-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
+                      retryState.tone,
+                    )}
+                  >
+                    {retryState.badgeLabel}
+                  </span>
+                  {retryState.retryOfRunId ? (
+                    <Link
+                      to={`/agents/${agentRouteId}/runs/${retryState.retryOfRunId}`}
+                      className="font-mono text-foreground hover:underline"
+                    >
+                      {retryState.retryOfRunId.slice(0, 8)}
+                    </Link>
+                  ) : null}
+                </div>
+                {retryState.detail ? <p className="mt-2 text-muted-foreground">{retryState.detail}</p> : null}
+                {retryState.secondary ? <p className="text-muted-foreground">{retryState.secondary}</p> : null}
+              </div>
+            )}
           </div>
 
           {/* Right column: metrics */}
@@ -3787,37 +3458,6 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
         </div>
       )}
 
-      {/* Memory injection trace */}
-      {injectionDetails && (injectionDetails.total ?? 0) > 0 && (
-        <div className="space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">
-            Memories injected ({injectionDetails.total})
-          </span>
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            {(injectionDetails.agentWiki ?? 0) > 0 && (
-              <span className="rounded bg-primary/10 text-primary px-1.5 py-0.5">
-                {injectionDetails.agentWiki} agent wiki
-              </span>
-            )}
-            {(injectionDetails.companyWiki ?? 0) > 0 && (
-              <span className="rounded bg-primary/10 text-primary px-1.5 py-0.5">
-                {injectionDetails.companyWiki} company wiki
-              </span>
-            )}
-            {(injectionDetails.agentEpisodic ?? 0) > 0 && (
-              <span className="rounded bg-muted px-1.5 py-0.5">
-                {injectionDetails.agentEpisodic} agent memories
-              </span>
-            )}
-            {(injectionDetails.companyEpisodic ?? 0) > 0 && (
-              <span className="rounded bg-muted px-1.5 py-0.5">
-                {injectionDetails.companyEpisodic} company memories
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* stderr excerpt for failed runs */}
       {run.stderrExcerpt && (
         <div className="space-y-1">
@@ -3850,6 +3490,8 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
   const [logLoading, setLogLoading] = useState(!!run.logRef);
   const [logError, setLogError] = useState<string | null>(null);
   const [logOffset, setLogOffset] = useState(0);
+  const [hasMoreLog, setHasMoreLog] = useState(false);
+  const [loadingMoreLog, setLoadingMoreLog] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isStreamingConnected, setIsStreamingConnected] = useState(false);
   const [transcriptMode, setTranscriptMode] = useState<TranscriptMode>("nice");
@@ -3862,9 +3504,6 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     distanceFromBottom: Number.POSITIVE_INFINITY,
   });
   const isLive = run.status === "running" || run.status === "queued";
-  // SSE stream — active only for live runs. Falls back gracefully when SSE is
-  // unavailable (setIsStreamingConnected stays false → polling takes over).
-  const { events: sseEvents, streamStatus } = useRunStream(isLive ? run.id : null);
   const { data: workspaceOperations = [] } = useQuery({
     queryKey: queryKeys.runWorkspaceOperations(run.id),
     queryFn: () => heartbeatsApi.workspaceOperations(run.id),
@@ -3907,12 +3546,10 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     }
   }
 
-  // Fetch events (used for completed runs; live runs use SSE stream below)
+  // Fetch events
   const { data: initialEvents } = useQuery({
     queryKey: ["run-events", run.id],
     queryFn: () => heartbeatsApi.events(run.id, 0, 200),
-    // Skip initial fetch for live runs — SSE delivers events in real-time.
-    enabled: !isLive,
   });
 
   useEffect(() => {
@@ -3921,20 +3558,6 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
       setLoading(false);
     }
   }, [initialEvents]);
-
-  // Wire SSE events for live runs
-  useEffect(() => {
-    if (!isLive) return;
-    if (streamStatus === "streaming" || streamStatus === "done") {
-      setIsStreamingConnected(true);
-      setEvents(sseEvents);
-      setLoading(false);
-    }
-    if (streamStatus === "error") {
-      // SSE failed — fall back to polling by leaving isStreamingConnected false
-      setIsStreamingConnected(false);
-    }
-  }, [isLive, sseEvents, streamStatus]);
 
   const getScrollContainer = useCallback((): ScrollContainer => {
     if (scrollContainerRef.current) return scrollContainerRef.current;
@@ -4023,6 +3646,8 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     pendingLogLineRef.current = "";
     setLogLines([]);
     setLogOffset(0);
+    setHasMoreLog(false);
+    setLoadingMoreLog(false);
     setLogError(null);
 
     if (!run.logRef && !isLive) {
@@ -4033,25 +3658,14 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     }
 
     setLogLoading(true);
-    const firstLimit =
-      typeof run.logBytes === "number" && run.logBytes > 0
-        ? Math.min(Math.max(run.logBytes + 1024, 256_000), 2_000_000)
-        : 256_000;
-
     const load = async () => {
       try {
-        let offset = 0;
-        let first = true;
-        while (!cancelled) {
-          const result = await heartbeatsApi.log(run.id, offset, first ? firstLimit : 256_000);
-          if (cancelled) break;
-          appendLogContent(result.content, result.nextOffset === undefined);
-          const next = result.nextOffset ?? offset + result.content.length;
-          setLogOffset(next);
-          offset = next;
-          first = false;
-          if (result.nextOffset === undefined || isLive) break;
-        }
+        const result = await heartbeatsApi.log(run.id, 0, RUN_LOG_PAGE_BYTES);
+        if (cancelled) return;
+        appendLogContent(result.content, result.nextOffset === undefined);
+        const next = result.nextOffset ?? result.content.length;
+        setLogOffset(next);
+        setHasMoreLog(!isLive && result.nextOffset !== undefined);
       } catch (err) {
         if (!cancelled) {
           if (isLive && isRunLogUnavailable(err)) {
@@ -4070,6 +3684,23 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
       cancelled = true;
     };
   }, [run.id, run.logRef, run.logBytes, isLive]);
+
+  async function loadMorePersistedLog() {
+    if (loadingMoreLog || !hasMoreLog) return;
+    setLoadingMoreLog(true);
+    setLogError(null);
+    try {
+      const result = await heartbeatsApi.log(run.id, logOffset, RUN_LOG_PAGE_BYTES);
+      appendLogContent(result.content, result.nextOffset === undefined);
+      const next = result.nextOffset ?? logOffset + result.content.length;
+      setLogOffset(next);
+      setHasMoreLog(result.nextOffset !== undefined);
+    } catch (err) {
+      setLogError(err instanceof Error ? err.message : "Failed to load more run log");
+    } finally {
+      setLoadingMoreLog(false);
+    }
+  }
 
   // Poll for live updates
   useEffect(() => {
@@ -4337,6 +3968,25 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
           streaming={isLive}
           emptyMessage={run.logRef ? "Waiting for transcript..." : "No persisted transcript for this run."}
         />
+        {hasMoreLog && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={loadMorePersistedLog}
+              disabled={loadingMoreLog}
+            >
+              {loadingMoreLog ? "Loading..." : "Load more log"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Showing the first {Math.round(logOffset / 1024).toLocaleString("en-US")} KB
+              {typeof run.logBytes === "number" && run.logBytes > 0
+                ? ` of ${Math.round(run.logBytes / 1024).toLocaleString("en-US")} KB`
+                : ""}
+            </span>
+          </div>
+        )}
         {logError && (
           <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-700 dark:text-red-300">
             {logError}
@@ -4449,7 +4099,7 @@ function KeysTab({ agentId, companyId }: { agentId: string; companyId?: string }
 
   function copyToken() {
     if (!newToken) return;
-    void copyTextToClipboard(newToken);
+    navigator.clipboard.writeText(newToken);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -4582,268 +4232,6 @@ function KeysTab({ agentId, companyId }: { agentId: string; companyId?: string }
               </div>
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Quality Tab ───────────────────────────────────────────────────────────────
-
-function AgentQualityTab({ agentId }: { agentId: string }) {
-  const { data: trends } = useQuery({
-    queryKey: ["quality", "agentTrends", agentId],
-    queryFn: () => qualityApi.agentTrends(agentId),
-    staleTime: 30_000,
-  });
-  const { data: recent } = useQuery({
-    queryKey: ["quality", "agentTrend", agentId],
-    queryFn: () => qualityApi.agentTrend(agentId, 50),
-    staleTime: 30_000,
-  });
-
-  function WindowCard({ label, window: w }: { label: string; window: { windowDays: number; avgScore: number | null; sampleSize: number } }) {
-    return (
-      <div className="border border-border rounded-xl p-4 space-y-2">
-        <div className="text-xs text-muted-foreground font-medium">{label}</div>
-        <RunScoreBadge score={w.avgScore} variant="full" />
-        <div className="text-xs text-muted-foreground">{w.sampleSize} run{w.sampleSize !== 1 ? "s" : ""}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-8 pb-16">
-      <div>
-        <h2 className="text-sm font-medium">Rolling Averages</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">Quality scores over different time windows.</p>
-      </div>
-
-      {trends ? (
-        <div className="grid grid-cols-3 gap-4">
-          <WindowCard label="Last 7 days" window={trends.windows.d7} />
-          <WindowCard label="Last 30 days" window={trends.windows.d30} />
-          <WindowCard label="Last 90 days" window={trends.windows.d90} />
-        </div>
-      ) : (
-        <div className="text-sm text-muted-foreground">Loading...</div>
-      )}
-
-      {recent && recent.recent.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-medium">Recent Scored Runs</h2>
-          <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
-            {recent.recent.map((s) => (
-              <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-                <RunScoreBadge score={s.score} reasoning={s.reasoning ?? undefined} />
-                <div className="flex-1 min-w-0">
-                  <span className="font-mono text-xs text-muted-foreground">{s.runId.slice(0, 8)}</span>
-                  {s.reasoning && (
-                    <p className="text-xs text-muted-foreground truncate">{s.reasoning}</p>
-                  )}
-                </div>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {new Date(s.judgedAt).toLocaleString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {recent && recent.recent.length === 0 && (
-        <div className="flex flex-col items-center py-12 text-center text-sm text-muted-foreground gap-2">
-          <TrendingUp className="h-8 w-8 text-muted-foreground/40" />
-          <p>No scored runs yet.</p>
-          <p className="text-xs">Set <code className="bg-muted px-1 py-0.5 rounded">autoScoreRuns: true</code> in the adapter config.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Collaboration Tab ─────────────────────────────────────────────────────────
-
-function AgentCollabTab({ agentId }: { agentId: string }) {
-  const { data } = useQuery({
-    queryKey: ["collab", "stats", agentId],
-    queryFn: () => qualityApi.agentCollabStats(agentId),
-    staleTime: 30_000,
-  });
-
-  const items = data?.items ?? [];
-
-  function formatMs(ms: number | null): string {
-    if (ms == null) return "—";
-    if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
-    if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
-    return `${Math.round(ms / 3_600_000)}h`;
-  }
-
-  return (
-    <div className="space-y-6 pb-16">
-      <div>
-        <h2 className="text-sm font-medium">Delegation Partners</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Agents this agent delegates to, ranked by total delegations.
-        </p>
-      </div>
-
-      {items.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center text-sm text-muted-foreground gap-2">
-          <ArrowRightLeft className="h-8 w-8 text-muted-foreground/40" />
-          <p>No delegation data yet.</p>
-          <p className="text-xs">Delegation edges are recorded when this agent creates and assigns issues to other agents.</p>
-        </div>
-      ) : (
-        <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
-          <div className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/30">
-            <span>Agent</span>
-            <span className="text-right">Delegations</span>
-            <span className="text-right">Successes</span>
-            <span className="text-right">Win Rate</span>
-            <span className="text-right">Avg Time</span>
-          </div>
-          {items.map((item) => {
-            const winRatePct = Math.round(item.winRate * 100);
-            return (
-              <div key={item.toAgentId} className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 px-4 py-3 items-center">
-                <Link to={`/agents/${item.toAgentId}`} className="text-sm font-medium hover:underline no-underline truncate">
-                  {item.toAgentName}
-                </Link>
-                <span className="text-right text-sm tabular-nums">{item.totalDelegations}</span>
-                <span className="text-right text-sm tabular-nums">{item.successCount}</span>
-                <span className={cn(
-                  "text-right text-sm tabular-nums font-medium",
-                  winRatePct >= 70 ? "text-emerald-500" : winRatePct >= 40 ? "text-amber-500" : "text-rose-500"
-                )}>
-                  {winRatePct}%
-                </span>
-                <span className="text-right text-xs text-muted-foreground tabular-nums">
-                  {formatMs(item.avgRoundTripMs)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Playbooks Tab ─────────────────────────────────────────────────────────────
-
-function AgentPlaybooksTab({ agentId }: { agentId: string }) {
-  const queryClient = useQueryClient();
-  const { pushToast } = useToast();
-
-  const { data } = useQuery({
-    queryKey: ["playbooks", agentId],
-    queryFn: () => qualityApi.agentPlaybooks(agentId),
-    staleTime: 30_000,
-  });
-
-  const mineMutation = useMutation({
-    mutationFn: () => qualityApi.minePlaybooks(agentId),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["playbooks", agentId] });
-      pushToast({ title: `Mining complete — ${result.playbooksUpserted} playbook${result.playbooksUpserted !== 1 ? "s" : ""} updated`, tone: "success" });
-    },
-    onError: () => pushToast({ title: "Mining failed", tone: "error" }),
-  });
-
-  const toggleMutation = useMutation({
-    mutationFn: ({ playbookId, active }: { playbookId: string; active: boolean }) =>
-      qualityApi.updatePlaybook(agentId, playbookId, { active }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["playbooks", agentId] }),
-    onError: () => pushToast({ title: "Failed to update playbook", tone: "error" }),
-  });
-
-  const items = data?.items ?? [];
-
-  return (
-    <div className="space-y-6 pb-16">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-medium">Playbooks</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Step-by-step strategies mined from high-scoring runs.
-            Enable <code className="bg-muted px-1 py-0.5 rounded text-xs">enablePlaybooks: true</code> in the adapter config.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => mineMutation.mutate()}
-          disabled={mineMutation.isPending}
-          className="gap-1.5"
-        >
-          {mineMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-          Mine now
-        </Button>
-      </div>
-
-      {items.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center text-sm text-muted-foreground gap-2">
-          <BookOpen className="h-8 w-8 text-muted-foreground/40" />
-          <p>No playbooks yet.</p>
-          <p className="text-xs">Click "Mine now" after at least 3 high-scoring runs of similar tasks.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {items.map((pb) => {
-            let steps: string[] = [];
-            try { steps = JSON.parse(pb.steps) as string[]; } catch { /* */ }
-            const isActive = pb.active === 1;
-            return (
-              <div
-                key={pb.id}
-                className={cn(
-                  "border border-border rounded-xl p-4 space-y-3 transition-colors",
-                  !isActive && "opacity-50"
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{pb.title}</span>
-                      <span className="text-xs text-muted-foreground shrink-0">v{pb.version}</span>
-                      {pb.abTesting === 1 && (
-                        <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 px-1.5 py-0.5 rounded">A/B</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {pb.sampleSize} run{pb.sampleSize !== 1 ? "s" : ""}
-                      {pb.winRate != null && ` · ${Math.round(pb.winRate * 100)}% win rate`}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0 h-7 px-2 gap-1"
-                    onClick={() => toggleMutation.mutate({ playbookId: pb.id, active: !isActive })}
-                    disabled={toggleMutation.isPending}
-                  >
-                    {isActive
-                      ? <><ToggleRight className="h-4 w-4 text-emerald-500" /><span className="text-xs">Enabled</span></>
-                      : <><ToggleLeft className="h-4 w-4 text-muted-foreground" /><span className="text-xs">Disabled</span></>
-                    }
-                  </Button>
-                </div>
-
-                {steps.length > 0 && (
-                  <ol className="space-y-1">
-                    {steps.map((step, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                        <span className="shrink-0 w-4 text-right text-muted-foreground/50 font-mono">{i + 1}.</span>
-                        <span>{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </div>
-            );
-          })}
         </div>
       )}
     </div>

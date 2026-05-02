@@ -1,45 +1,14 @@
 import { Router, type Request } from "express";
 import type { Db } from "@stapler/db";
-import { patchInstanceExperimentalSettingsSchema, patchInstanceGeneralSettingsSchema } from "@stapler/shared";
-import { forbidden, badRequest } from "../errors.js";
+import {
+  issueGraphLivenessAutoRecoveryRequestSchema,
+  patchInstanceExperimentalSettingsSchema,
+  patchInstanceGeneralSettingsSchema,
+} from "@stapler/shared";
+import { forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
-import { instanceSettingsService, logActivity } from "../services/index.js";
-import { getActorInfo } from "./authz.js";
-
-const OLLAMA_ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
-const OLLAMA_ALLOWED_PATHS = new Set(["/api/tags", "/api/chat"]);
-// Only allow localhost/loopback by default. Docker-network deployments may
-// override via STAPLER_OLLAMA_ALLOWED_HOSTS (comma-separated hostnames).
-const OLLAMA_ALLOWED_HOSTS: Set<string> = (() => {
-  const base = new Set(["localhost", "127.0.0.1", "::1"]);
-  const extra = process.env.STAPLER_OLLAMA_ALLOWED_HOSTS ?? "";
-  for (const h of extra.split(",").map((s) => s.trim()).filter(Boolean)) {
-    base.add(h.toLowerCase());
-  }
-  return base;
-})();
-
-function validateOllamaUrl(rawUrl: string, allowedPath: string): URL {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    throw badRequest("Invalid Ollama base URL");
-  }
-  if (!OLLAMA_ALLOWED_PROTOCOLS.has(parsed.protocol)) {
-    throw badRequest("Ollama base URL must use http or https");
-  }
-  const host = parsed.hostname.toLowerCase();
-  if (!OLLAMA_ALLOWED_HOSTS.has(host)) {
-    throw badRequest(
-      `Hostname '${host}' is not allowed. Add it to STAPLER_OLLAMA_ALLOWED_HOSTS to permit it.`,
-    );
-  }
-  if (!OLLAMA_ALLOWED_PATHS.has(allowedPath)) {
-    throw badRequest(`Path '${allowedPath}' is not permitted via the proxy`);
-  }
-  return parsed;
-}
+import { heartbeatService, instanceSettingsService, logActivity } from "../services/index.js";
+import { assertBoardOrgAccess, getActorInfo } from "./authz.js";
 
 function assertCanManageInstanceSettings(req: Request) {
   if (req.actor.type !== "board") {
@@ -54,13 +23,12 @@ function assertCanManageInstanceSettings(req: Request) {
 export function instanceSettingsRoutes(db: Db) {
   const router = Router();
   const svc = instanceSettingsService(db);
+  const heartbeat = heartbeatService(db);
 
   router.get("/instance/settings/general", async (req, res) => {
     // General settings (e.g. keyboardShortcuts) are readable by any
-    // authenticated board user.  Only PATCH requires instance-admin.
-    if (req.actor.type !== "board") {
-      throw forbidden("Board access required");
-    }
+    // authenticated org member or instance admin. Only PATCH requires instance-admin.
+    assertBoardOrgAccess(req);
     res.json(await svc.getGeneral());
   });
 
@@ -95,11 +63,9 @@ export function instanceSettingsRoutes(db: Db) {
   );
 
   router.get("/instance/settings/experimental", async (req, res) => {
-    // Experimental settings are readable by any authenticated board user.
-    // Only PATCH requires instance-admin.
-    if (req.actor.type !== "board") {
-      throw forbidden("Board access required");
-    }
+    // Experimental settings are readable by any authenticated org member
+    // or instance admin. Only PATCH requires instance-admin.
+    assertBoardOrgAccess(req);
     res.json(await svc.getExperimental());
   });
 
@@ -133,37 +99,53 @@ export function instanceSettingsRoutes(db: Db) {
     },
   );
 
-  // ── Ollama benchmark proxy ────────────────────────────────────────────────
-  // Proxies /api/tags and /api/chat to a user-supplied Ollama base URL.
-  // Running this server-side lets us enforce a hostname allowlist so an
-  // authenticated user cannot use the benchmark page to probe internal network
-  // services from the Stapler server's network position.
-  router.post("/instance/settings/ollama-proxy", async (req, res) => {
-    assertCanManageInstanceSettings(req);
-    const body = req.body as Record<string, unknown>;
-    const rawBase = typeof body.baseUrl === "string" ? body.baseUrl.replace(/\/$/, "") : "";
-    const action = body.action;
+  router.post(
+    "/instance/settings/experimental/issue-graph-liveness-auto-recovery/preview",
+    validate(issueGraphLivenessAutoRecoveryRequestSchema),
+    async (req, res) => {
+      assertCanManageInstanceSettings(req);
+      res.json(await heartbeat.buildIssueGraphLivenessAutoRecoveryPreview({
+        lookbackHours: req.body.lookbackHours,
+      }));
+    },
+  );
 
-    if (action !== "tags" && action !== "chat") {
-      res.status(400).json({ error: "action must be 'tags' or 'chat'" });
-      return;
-    }
-
-    const apiPath = action === "tags" ? "/api/tags" : "/api/chat";
-    const parsed = validateOllamaUrl(rawBase, apiPath);
-    const targetUrl = `${parsed.protocol}//${parsed.host}${apiPath}`;
-
-    const isChat = action === "chat";
-    const upstream = await fetch(targetUrl, {
-      method: isChat ? "POST" : "GET",
-      headers: isChat ? { "Content-Type": "application/json" } : undefined,
-      body: isChat && body.payload !== undefined ? JSON.stringify(body.payload) : undefined,
-      signal: AbortSignal.timeout(isChat ? 120_000 : 5_000),
-    });
-
-    const upstreamBody = await upstream.json();
-    res.status(upstream.status).json(upstreamBody);
-  });
+  router.post(
+    "/instance/settings/experimental/issue-graph-liveness-auto-recovery/run",
+    validate(issueGraphLivenessAutoRecoveryRequestSchema),
+    async (req, res) => {
+      assertCanManageInstanceSettings(req);
+      const actor = getActorInfo(req);
+      const result = await heartbeat.reconcileIssueGraphLiveness({
+        runId: actor.runId,
+        force: true,
+        lookbackHours: req.body.lookbackHours,
+      });
+      const companyIds = await svc.listCompanyIds();
+      await Promise.all(
+        companyIds.map((companyId) =>
+          logActivity(db, {
+            companyId,
+            actorType: actor.actorType,
+            actorId: actor.actorId,
+            agentId: actor.agentId,
+            runId: actor.runId,
+            action: "instance.settings.issue_graph_liveness_auto_recovery_run",
+            entityType: "instance_settings",
+            entityId: "default",
+            details: {
+              lookbackHours: result.lookbackHours,
+              escalationsCreated: result.escalationsCreated,
+              existingEscalations: result.existingEscalations,
+              skippedOutsideLookback: result.skippedOutsideLookback,
+              escalationIssueIds: result.escalationIssueIds,
+            },
+          }),
+        ),
+      );
+      res.json(result);
+    },
+  );
 
   return router;
 }

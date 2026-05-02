@@ -1,4 +1,5 @@
 import type { CLIAdapterModule } from "@stapler/adapter-utils";
+import { printAcpxStreamEvent } from "@stapler/adapter-acpx-local/cli";
 import { printClaudeStreamEvent } from "@stapler/adapter-claude-local/cli";
 import { printCodexStreamEvent } from "@stapler/adapter-codex-local/cli";
 import { printCursorStreamEvent } from "@stapler/adapter-cursor-local/cli";
@@ -6,13 +7,17 @@ import { printGeminiStreamEvent } from "@stapler/adapter-gemini-local/cli";
 import { printOpenCodeStreamEvent } from "@stapler/adapter-opencode-local/cli";
 import { printPiStreamEvent } from "@stapler/adapter-pi-local/cli";
 import { printOpenClawGatewayStreamEvent } from "@stapler/adapter-openclaw-gateway/cli";
-import { printOllamaStreamEvent } from "@stapler/adapter-ollama-local/cli";
 import { processCLIAdapter } from "./process/index.js";
 import { httpCLIAdapter } from "./http/index.js";
 
 const claudeLocalCLIAdapter: CLIAdapterModule = {
   type: "claude_local",
   formatStdoutEvent: printClaudeStreamEvent,
+};
+
+const acpxLocalCLIAdapter: CLIAdapterModule = {
+  type: "acpx_local",
+  formatStdoutEvent: printAcpxStreamEvent,
 };
 
 const codexLocalCLIAdapter: CLIAdapterModule = {
@@ -45,13 +50,9 @@ const openclawGatewayCLIAdapter: CLIAdapterModule = {
   formatStdoutEvent: printOpenClawGatewayStreamEvent,
 };
 
-const ollamaLocalCLIAdapter: CLIAdapterModule = {
-  type: "ollama_local",
-  formatStdoutEvent: printOllamaStreamEvent,
-};
-
 const adaptersByType = new Map<string, CLIAdapterModule>(
   [
+    acpxLocalCLIAdapter,
     claudeLocalCLIAdapter,
     codexLocalCLIAdapter,
     openCodeLocalCLIAdapter,
@@ -59,7 +60,6 @@ const adaptersByType = new Map<string, CLIAdapterModule>(
     cursorLocalCLIAdapter,
     geminiLocalCLIAdapter,
     openclawGatewayCLIAdapter,
-    ollamaLocalCLIAdapter,
     processCLIAdapter,
     httpCLIAdapter,
   ].map((a) => [a.type, a]),

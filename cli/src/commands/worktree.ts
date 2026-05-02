@@ -51,7 +51,7 @@ import { ensureAgentJwtSecret, loadPaperclipEnvFile, mergePaperclipEnvEntries, r
 import { expandHomePrefix } from "../config/home.js";
 import type { PaperclipConfig } from "../config/schema.js";
 import { readConfig, resolveConfigPath, writeConfig } from "../config/store.js";
-import { printStaplerCliBanner } from "../utils/banner.js";
+import { printPaperclipCliBanner } from "../utils/banner.js";
 import { resolveRuntimeLikePath } from "../utils/path-resolver.js";
 import {
   buildWorktreeConfig,
@@ -143,7 +143,6 @@ type WorktreeRepairOptions = {
   noSeed?: boolean;
   allowLiveTarget?: boolean;
 };
-
 
 type EmbeddedPostgresInstance = {
   initialise(): Promise<void>;
@@ -587,6 +586,46 @@ function detectGitBranchName(cwd: string): string | null {
   }
 }
 
+function validateGitBranchName(cwd: string, branchName: string): string {
+  const value = nonEmpty(branchName);
+  if (!value) {
+    throw new Error("Branch name is required.");
+  }
+  try {
+    execFileSync("git", ["check-ref-format", "--branch", value], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    throw new Error(`Invalid branch name "${branchName}": ${extractExecSyncErrorMessage(error) ?? String(error)}`);
+  }
+  return value;
+}
+
+function isPrimaryGitWorktree(cwd: string): boolean {
+  const workspace = detectGitWorkspaceInfo(cwd);
+  return Boolean(workspace && workspace.gitDir === workspace.commonDir);
+}
+
+function resolvePrimaryGitRepoRoot(cwd: string): string {
+  const workspace = detectGitWorkspaceInfo(cwd);
+  if (!workspace) {
+    throw new Error("Current directory is not inside a git repository.");
+  }
+  if (workspace.gitDir === workspace.commonDir) {
+    return workspace.root;
+  }
+  return path.resolve(workspace.commonDir, "..");
+}
+
+function resolveRepairWorktreeDirName(branchName: string): string {
+  const normalized = branchName.trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-._]+|[-._]+$/g, "");
+  return normalized || "worktree";
+}
+
 function detectGitWorkspaceInfo(cwd: string): GitWorkspaceInfo | null {
   try {
     const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
@@ -810,6 +849,21 @@ export function resolveWorktreeReseedSource(input: WorktreeReseedOptions): Resol
   );
 }
 
+function resolveWorktreeRepairSource(input: WorktreeRepairOptions): ResolvedWorktreeReseedSource {
+  const fromConfig = nonEmpty(input.fromConfig);
+  const fromDataDir = nonEmpty(input.fromDataDir);
+  const fromInstance = nonEmpty(input.fromInstance) ?? "default";
+  const configPath = resolveSourceConfigPath({
+    fromConfig: fromConfig ?? undefined,
+    fromDataDir: fromDataDir ?? undefined,
+    fromInstance,
+  });
+  return {
+    configPath,
+    label: configPath,
+  };
+}
+
 export function resolveWorktreeReseedTargetPaths(input: {
   configPath: string;
   rootPath: string;
@@ -820,7 +874,7 @@ export function resolveWorktreeReseedTargetPaths(input: {
 
   if (!homeDir || !instanceId) {
     throw new Error(
-      `Target config ${input.configPath} does not look like a worktree-local Stapler instance. Expected STAPLER_HOME and STAPLER_INSTANCE_ID in the adjacent .env.`,
+      `Target config ${input.configPath} does not look like a worktree-local Paperclip instance. Expected STAPLER_HOME and STAPLER_INSTANCE_ID in the adjacent .env.`,
     );
   }
 
@@ -829,6 +883,105 @@ export function resolveWorktreeReseedTargetPaths(input: {
     homeDir,
     instanceId,
   });
+}
+
+function resolveExistingGitWorktree(selector: string, cwd: string): MergeSourceChoice | null {
+  const trimmed = selector.trim();
+  if (trimmed.length === 0) return null;
+
+  const directPath = path.resolve(trimmed);
+  if (existsSync(directPath)) {
+    return {
+      worktree: directPath,
+      branch: null,
+      branchLabel: path.basename(directPath),
+      hasPaperclipConfig: existsSync(path.resolve(directPath, ".paperclip", "config.json")),
+      isCurrent: directPath === path.resolve(cwd),
+    };
+  }
+
+  return toMergeSourceChoices(cwd).find((choice) =>
+    choice.worktree === directPath
+    || path.basename(choice.worktree) === trimmed
+    || choice.branchLabel === trimmed
+    || choice.branch === trimmed,
+  ) ?? null;
+}
+
+async function ensureRepairTargetWorktree(input: {
+  selector?: string;
+  seedMode: WorktreeSeedMode;
+  opts: WorktreeRepairOptions;
+}): Promise<ResolvedWorktreeRepairTarget | null> {
+  const cwd = process.cwd();
+  const currentRoot = path.resolve(cwd);
+  const currentConfigPath = path.resolve(currentRoot, ".paperclip", "config.json");
+
+  if (!input.selector) {
+    if (isPrimaryGitWorktree(cwd)) {
+      return null;
+    }
+    return {
+      rootPath: currentRoot,
+      configPath: currentConfigPath,
+      label: path.basename(currentRoot),
+      branchName: detectGitBranchName(cwd),
+      created: false,
+    };
+  }
+
+  const existing = resolveExistingGitWorktree(input.selector, cwd);
+  if (existing) {
+    return {
+      rootPath: existing.worktree,
+      configPath: path.resolve(existing.worktree, ".paperclip", "config.json"),
+      label: existing.branchLabel,
+      branchName: existing.branchLabel === "(detached)" ? null : existing.branchLabel,
+      created: false,
+    };
+  }
+
+  const repoRoot = resolvePrimaryGitRepoRoot(cwd);
+  const branchName = validateGitBranchName(repoRoot, input.selector);
+  const targetPath = path.resolve(
+    repoRoot,
+    ".paperclip",
+    "worktrees",
+    resolveRepairWorktreeDirName(branchName),
+  );
+
+  if (existsSync(targetPath)) {
+    throw new Error(`Target path already exists but is not a registered git worktree: ${targetPath}`);
+  }
+
+  mkdirSync(path.dirname(targetPath), { recursive: true });
+
+  const spinner = p.spinner();
+  spinner.start(`Creating git worktree for ${branchName}...`);
+  try {
+    execFileSync("git", resolveGitWorktreeAddArgs({
+      branchName,
+      targetPath,
+      branchExists: localBranchExists(repoRoot, branchName),
+    }), {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    spinner.stop(`Created git worktree at ${targetPath}.`);
+  } catch (error) {
+    spinner.stop(pc.red("Failed to create git worktree."));
+    throw new Error(extractExecSyncErrorMessage(error) ?? String(error));
+  }
+
+  installDependenciesBestEffort(targetPath);
+
+  return {
+    rootPath: targetPath,
+    configPath: path.resolve(targetPath, ".paperclip", "config.json"),
+    label: branchName,
+    branchName,
+    created: true,
+  };
 }
 
 function resolveSourceConnectionString(config: PaperclipConfig, envEntries: Record<string, string>, portOverride?: number): string {
@@ -1158,6 +1311,7 @@ async function seedWorktreeDatabase(input: {
       backupDir: path.resolve(input.targetPaths.backupDir, "seed"),
       retention: { dailyDays: 7, weeklyWeeks: 4, monthlyMonths: 1 },
       filenamePrefix: `${input.instanceId}-seed`,
+      backupEngine: "javascript",
       includeMigrationJournal: true,
       excludeTables: seedPlan.excludedTables,
       nullifyColumns: seedPlan.nullifyColumns,
@@ -1337,14 +1491,14 @@ async function runWorktreeInit(opts: WorktreeInitOptions): Promise<void> {
 }
 
 export async function worktreeInitCommand(opts: WorktreeInitOptions): Promise<void> {
-  printStaplerCliBanner();
-  p.intro(pc.bgCyan(pc.black(" stapler worktree init ")));
+  printPaperclipCliBanner();
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree init ")));
   await runWorktreeInit(opts);
 }
 
 export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOptions): Promise<void> {
-  printStaplerCliBanner();
-  p.intro(pc.bgCyan(pc.black(" stapler worktree:make ")));
+  printPaperclipCliBanner();
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree:make ")));
 
   const name = resolveWorktreeMakeName(nameArg);
   const startPoint = resolveWorktreeStartPoint(opts.startPoint);
@@ -1390,18 +1544,7 @@ export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOpt
     throw new Error(extractExecSyncErrorMessage(error) ?? String(error));
   }
 
-  const installSpinner = p.spinner();
-  installSpinner.start("Installing dependencies...");
-  try {
-    execFileSync("pnpm", ["install"], {
-      cwd: targetPath,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    installSpinner.stop("Installed dependencies.");
-  } catch (error) {
-    installSpinner.stop(pc.yellow("Failed to install dependencies (continuing anyway)."));
-    p.log.warning(extractExecSyncErrorMessage(error) ?? String(error));
-  }
+  installDependenciesBestEffort(targetPath);
 
   const originalCwd = process.cwd();
   try {
@@ -1415,6 +1558,21 @@ export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOpt
     throw error;
   } finally {
     process.chdir(originalCwd);
+  }
+}
+
+function installDependenciesBestEffort(targetPath: string): void {
+  const installSpinner = p.spinner();
+  installSpinner.start("Installing dependencies...");
+  try {
+    execFileSync("pnpm", ["install"], {
+      cwd: targetPath,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    installSpinner.stop("Installed dependencies.");
+  } catch (error) {
+    installSpinner.stop(pc.yellow("Failed to install dependencies (continuing anyway)."));
+    p.log.warning(extractExecSyncErrorMessage(error) ?? String(error));
   }
 }
 
@@ -1449,6 +1607,14 @@ type ResolvedWorktreeEndpoint = {
 type ResolvedWorktreeReseedSource = {
   configPath: string;
   label: string;
+};
+
+type ResolvedWorktreeRepairTarget = {
+  rootPath: string;
+  configPath: string;
+  label: string;
+  branchName: string | null;
+  created: boolean;
 };
 
 function parseGitWorktreeList(cwd: string): GitWorktreeListEntry[] {
@@ -1544,8 +1710,8 @@ function worktreePathHasUncommittedChanges(worktreePath: string): boolean {
 }
 
 export async function worktreeCleanupCommand(nameArg: string, opts: WorktreeCleanupOptions): Promise<void> {
-  printStaplerCliBanner();
-  p.intro(pc.bgCyan(pc.black(" stapler worktree:cleanup ")));
+  printPaperclipCliBanner();
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree:cleanup ")));
 
   const name = resolveWorktreeMakeName(nameArg);
   const sourceCwd = process.cwd();
@@ -2376,7 +2542,7 @@ async function promptForSourceEndpoint(excludeWorktreePath?: string): Promise<Re
       hint: `${choice.worktree}${choice.isCurrent ? " (current)" : ""}`,
     }));
   if (choices.length === 0) {
-    throw new Error("No Paperclip worktrees were found. Run `stapler worktree:list` to inspect the repo worktrees.");
+    throw new Error("No Paperclip worktrees were found. Run `paperclipai worktree:list` to inspect the repo worktrees.");
   }
   const selection = await p.select<string>({
     message: "Choose the source worktree to import from",
@@ -2892,64 +3058,6 @@ export async function worktreeMergeHistoryCommand(sourceArg: string | undefined,
   }
 }
 
-function resolveWorktreeRepairSource(opts: WorktreeRepairOptions): ResolvedWorktreeReseedSource {
-  const fromConfig = nonEmpty(opts.fromConfig);
-  const fromDataDir = nonEmpty(opts.fromDataDir);
-  const fromInstance = nonEmpty(opts.fromInstance);
-  const hasExplicitConfigSource = Boolean(fromConfig || fromDataDir || fromInstance);
-
-  if (hasExplicitConfigSource) {
-    const configPath = resolveSourceConfigPath({
-      fromConfig: fromConfig ?? undefined,
-      fromDataDir: fromDataDir ?? undefined,
-      fromInstance: fromInstance ?? undefined,
-    });
-    return { configPath, label: configPath };
-  }
-
-  // Fall back to current endpoint as source
-  const current = resolveCurrentEndpoint();
-  return { configPath: current.configPath, label: current.label };
-}
-
-async function ensureRepairTargetWorktree(input: {
-  selector: string | undefined;
-  seedMode: string;
-  opts: WorktreeRepairOptions;
-}): Promise<ResolvedWorktreeEndpoint | null> {
-  const { selector, opts } = input;
-
-  if (selector) {
-    // Try to resolve an existing worktree by selector
-    try {
-      return resolveWorktreeEndpointFromSelector(selector, { allowCurrent: false });
-    } catch {
-      // Not found as existing worktree — create it under .paperclip/worktrees/<selector>
-      const homeDir = resolveWorktreeHome(opts.home);
-      const worktreeName = resolveWorktreeMakeName(selector);
-      const targetRootPath = path.resolve(homeDir, worktreeName);
-      const targetConfigPath = path.resolve(targetRootPath, ".paperclip", "config.json");
-      return {
-        rootPath: targetRootPath,
-        configPath: targetConfigPath,
-        label: worktreeName,
-        isCurrent: false,
-      };
-    }
-  }
-
-  // No selector — check if current directory is a linked worktree
-  const current = resolveCurrentEndpoint();
-  const worktrees = parseGitWorktreeList(current.rootPath);
-  // The first entry is the primary (main) worktree
-  const primaryWorktree = worktrees[0];
-  const isPrimary = primaryWorktree && path.resolve(primaryWorktree.worktree) === path.resolve(current.rootPath);
-  if (isPrimary) {
-    return null;
-  }
-  return current;
-}
-
 async function runWorktreeReseed(opts: WorktreeReseedOptions): Promise<void> {
   const seedMode = opts.seedMode ?? "full";
   if (!isWorktreeSeedMode(seedMode)) {
@@ -3040,14 +3148,14 @@ async function runWorktreeReseed(opts: WorktreeReseedOptions): Promise<void> {
 }
 
 export async function worktreeReseedCommand(opts: WorktreeReseedOptions): Promise<void> {
-  printStaplerCliBanner();
-  p.intro(pc.bgCyan(pc.black(" stapler worktree reseed ")));
+  printPaperclipCliBanner();
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree reseed ")));
   await runWorktreeReseed(opts);
 }
 
 export async function worktreeRepairCommand(opts: WorktreeRepairOptions): Promise<void> {
-  printStaplerCliBanner();
-  p.intro(pc.bgCyan(pc.black(" stapler worktree repair ")));
+  printPaperclipCliBanner();
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree repair ")));
 
   const seedMode = opts.seedMode ?? "minimal";
   if (!isWorktreeSeedMode(seedMode)) {
@@ -3070,7 +3178,7 @@ export async function worktreeRepairCommand(opts: WorktreeRepairOptions): Promis
     throw new Error(`Source config not found at ${source.configPath}.`);
   }
   if (path.resolve(source.configPath) === path.resolve(target.configPath)) {
-    throw new Error("Source and target Stapler configs are the same. Use --from-config/--from-instance to point repair at a different source.");
+    throw new Error("Source and target Paperclip configs are the same. Use --from-config/--from-instance to point repair at a different source.");
   }
 
   const targetConfig = existsSync(target.configPath) ? readConfig(target.configPath) : null;
@@ -3106,7 +3214,7 @@ export async function worktreeRepairCommand(opts: WorktreeRepairOptions): Promis
   const runningTargetPid = readRunningPostmasterPid(path.resolve(repairPaths.embeddedPostgresDataDir, "postmaster.pid"));
   if (runningTargetPid && !opts.allowLiveTarget) {
     throw new Error(
-      `Target worktree database appears to be running (pid ${runningTargetPid}). Stop Stapler in ${target.rootPath} before repairing, or re-run with --allow-live-target if you want to override this guard.`,
+      `Target worktree database appears to be running (pid ${runningTargetPid}). Stop Paperclip in ${target.rootPath} before repairing, or re-run with --allow-live-target if you want to override this guard.`,
     );
   }
   if (runningTargetPid && opts.allowLiveTarget) {
@@ -3131,13 +3239,12 @@ export async function worktreeRepairCommand(opts: WorktreeRepairOptions): Promis
   }
 }
 
-
 export function registerWorktreeCommands(program: Command): void {
-  const worktree = program.command("worktree").description("Worktree-local Stapler instance helpers");
+  const worktree = program.command("worktree").description("Worktree-local Paperclip instance helpers");
 
   program
     .command("worktree:make")
-    .description("Create ~/NAME as a git worktree, then initialize an isolated Stapler instance inside it")
+    .description("Create ~/NAME as a git worktree, then initialize an isolated Paperclip instance inside it")
     .argument("<name>", "Worktree name — auto-prefixed with paperclip- if needed (created at ~/paperclip-NAME)")
     .option("--start-point <ref>", "Remote ref to base the new branch on (env: STAPLER_WORKTREE_START_POINT)")
     .option("--instance <id>", "Explicit isolated instance id")
@@ -3172,7 +3279,7 @@ export function registerWorktreeCommands(program: Command): void {
 
   worktree
     .command("env")
-    .description("Print shell exports for the current worktree-local Stapler instance")
+    .description("Print shell exports for the current worktree-local Paperclip instance")
     .option("-c, --config <path>", "Path to config file")
     .option("--json", "Print JSON instead of shell exports")
     .action(worktreeEnvCommand);
@@ -3198,7 +3305,7 @@ export function registerWorktreeCommands(program: Command): void {
 
   worktree
     .command("reseed")
-    .description("Re-seed an existing worktree-local instance from another Stapler instance or worktree")
+    .description("Re-seed an existing worktree-local instance from another Paperclip instance or worktree")
     .option("--from <worktree>", "Source worktree path, directory name, branch name, or current")
     .option("--to <worktree>", "Target worktree path, directory name, branch name, or current (defaults to current)")
     .option("--from-config <path>", "Source config.json to seed from")
@@ -3212,7 +3319,7 @@ export function registerWorktreeCommands(program: Command): void {
 
   worktree
     .command("repair")
-    .description("Create or repair a linked worktree-local Stapler instance without touching the primary checkout")
+    .description("Create or repair a linked worktree-local Paperclip instance without touching the primary checkout")
     .option("--branch <name>", "Existing branch/worktree selector to repair, or a branch name to create under .paperclip/worktrees")
     .option("--home <path>", `Home root for worktree instances (env: STAPLER_WORKTREES_DIR, default: ${DEFAULT_WORKTREE_HOME})`)
     .option("--from-config <path>", "Source config.json to seed from")
@@ -3223,7 +3330,6 @@ export function registerWorktreeCommands(program: Command): void {
     .option("--no-seed", "Repair metadata only and skip reseeding when bootstrapping a missing worktree config", false)
     .option("--allow-live-target", "Override the guard that requires the target worktree DB to be stopped first", false)
     .action(worktreeRepairCommand);
-
 
   program
     .command("worktree:cleanup")

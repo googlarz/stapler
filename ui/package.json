@@ -1,5 +1,6 @@
 {
   "name": "@stapler/ui",
+  "private": true,
   "version": "0.3.1",
   "description": "Prebuilt Stapler board UI assets.",
   "license": "MIT",
@@ -16,9 +17,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "storybook": "storybook dev -p 6006 -c storybook/.storybook",
+    "build-storybook": "storybook build -c storybook/.storybook -o storybook-static",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "clean": "rm -rf dist storybook-static tsconfig.tsbuildinfo",
     "prepack": "rm -f package.dev.json && cp package.json package.dev.json && node ../scripts/generate-ui-package-json.mjs",
     "postpack": "if [ -f package.dev.json ]; then mv package.dev.json package.json; fi"
   },
@@ -32,17 +35,17 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@lexical/link": "0.35.0",
     "@mdxeditor/editor": "^3.52.4",
-    "@radix-ui/react-slot": "^1.2.4",
+    "@stapler/adapter-acpx-local": "workspace:*",
     "@stapler/adapter-claude-local": "workspace:*",
     "@stapler/adapter-codex-local": "workspace:*",
     "@stapler/adapter-cursor-local": "workspace:*",
     "@stapler/adapter-gemini-local": "workspace:*",
-    "@stapler/adapter-ollama-local": "workspace:*",
     "@stapler/adapter-openclaw-gateway": "workspace:*",
     "@stapler/adapter-opencode-local": "workspace:*",
     "@stapler/adapter-pi-local": "workspace:*",
     "@stapler/adapter-utils": "workspace:*",
     "@stapler/shared": "workspace:*",
+    "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.90.21",
     "class-variance-authority": "^0.7.1",
@@ -62,15 +65,17 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.7",
+    "@storybook/addon-a11y": "10.3.5",
+    "@storybook/addon-docs": "10.3.5",
+    "@storybook/react-vite": "10.3.5",
     "@types/node": "^25.2.3",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
-    "happy-dom": "^20.9.0",
     "tailwindcss": "^4.0.7",
     "typescript": "^5.7.3",
+    "storybook": "10.3.5",
     "vite": "^6.1.0",
     "vitest": "^3.0.5"
-  },
-  "private": true
+  }
 }

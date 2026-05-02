@@ -10,38 +10,31 @@ import {
   agentTaskSessions,
   agentWakeupRequests,
   issues,
-  issueReadStates,
   issueComments,
-  issueInboxArchives,
-  feedbackVotes,
   projects,
   goals,
-  labels,
   heartbeatRuns,
   heartbeatRunEvents,
   costEvents,
   financeEvents,
+  issueReadStates,
   approvalComments,
   approvals,
-  budgetIncidents,
-  budgetPolicies,
   activityLog,
   companySecrets,
-  companySkills,
   joinRequests,
   invites,
   principalPermissionGrants,
   companyMemberships,
-  agentConfigRevisions,
-  workspaceOperations,
-  workspaceRuntimeServices,
+  companySkills,
   documents,
-  outputs,
 } from "@stapler/db";
 import { notFound, unprocessable } from "../errors.js";
+import { environmentService } from "./environments.js";
 
 export function companyService(db: Db) {
   const ISSUE_PREFIX_FALLBACK = "CMP";
+  const environmentsSvc = environmentService(db);
 
   const companySelection = {
     id: companies.id,
@@ -52,13 +45,13 @@ export function companyService(db: Db) {
     issueCounter: companies.issueCounter,
     budgetMonthlyCents: companies.budgetMonthlyCents,
     spentMonthlyCents: companies.spentMonthlyCents,
+    attachmentMaxBytes: companies.attachmentMaxBytes,
     requireBoardApprovalForNewAgents: companies.requireBoardApprovalForNewAgents,
     feedbackDataSharingEnabled: companies.feedbackDataSharingEnabled,
     feedbackDataSharingConsentAt: companies.feedbackDataSharingConsentAt,
     feedbackDataSharingConsentByUserId: companies.feedbackDataSharingConsentByUserId,
     feedbackDataSharingTermsVersion: companies.feedbackDataSharingTermsVersion,
     brandColor: companies.brandColor,
-    defaultModel: companies.defaultModel,
     logoAssetId: companyLogos.assetId,
     createdAt: companies.createdAt,
     updatedAt: companies.updatedAt,
@@ -87,10 +80,10 @@ export function companyService(db: Db) {
     if (companyIds.length === 0) return new Map<string, number>();
     const { start, end } = currentUtcMonthWindow();
     const rows = await database
-      .select({
-        companyId: costEvents.companyId,
-        spentMonthlyCents: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::int`,
-      })
+        .select({
+          companyId: costEvents.companyId,
+          spentMonthlyCents: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::double precision`,
+        })
       .from(costEvents)
       .where(
         and(
@@ -181,6 +174,7 @@ export function companyService(db: Db) {
 
     create: async (data: typeof companies.$inferInsert) => {
       const created = await createCompanyWithUniquePrefix(data);
+      await environmentsSvc.ensureLocalEnvironment(created.id);
       const row = await getCompanyQuery(db)
         .where(eq(companies.id, created.id))
         .then((rows) => rows[0] ?? null);
@@ -270,56 +264,32 @@ export function companyService(db: Db) {
 
     remove: (id: string) =>
       db.transaction(async (tx) => {
-        // Delete from child tables in dependency order (RESTRICT FK constraints first)
-        // Tables referencing heartbeatRuns
+        // Delete from child tables in dependency order
         await tx.delete(heartbeatRunEvents).where(eq(heartbeatRunEvents.companyId, id));
         await tx.delete(agentTaskSessions).where(eq(agentTaskSessions.companyId, id));
-        // financeEvents must be before costEvents (financeEvents.costEventId → costEvents RESTRICT)
-        await tx.delete(financeEvents).where(eq(financeEvents.companyId, id));
-        await tx.delete(costEvents).where(eq(costEvents.companyId, id));
         await tx.delete(activityLog).where(eq(activityLog.companyId, id));
-        // heartbeatRuns must be before agentWakeupRequests (heartbeatRuns.wakeupRequestId → agentWakeupRequests RESTRICT)
         await tx.delete(heartbeatRuns).where(eq(heartbeatRuns.companyId, id));
-        // Tables referencing agents
         await tx.delete(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, id));
         await tx.delete(agentApiKeys).where(eq(agentApiKeys.companyId, id));
         await tx.delete(agentRuntimeState).where(eq(agentRuntimeState.companyId, id));
-        await tx.delete(agentConfigRevisions).where(eq(agentConfigRevisions.companyId, id));
-        // Tables referencing issues (must be before issues)
         await tx.delete(issueComments).where(eq(issueComments.companyId, id));
-        await tx.delete(feedbackVotes).where(eq(feedbackVotes.companyId, id));
-        await tx.delete(issueReadStates).where(eq(issueReadStates.companyId, id));
-        await tx.delete(issueInboxArchives).where(eq(issueInboxArchives.companyId, id));
-        // Tables referencing approvals (must be before approvals)
+        await tx.delete(costEvents).where(eq(costEvents.companyId, id));
+        await tx.delete(financeEvents).where(eq(financeEvents.companyId, id));
         await tx.delete(approvalComments).where(eq(approvalComments.companyId, id));
-        await tx.delete(budgetIncidents).where(eq(budgetIncidents.companyId, id));
-        await tx.delete(budgetPolicies).where(eq(budgetPolicies.companyId, id));
         await tx.delete(approvals).where(eq(approvals.companyId, id));
         await tx.delete(companySecrets).where(eq(companySecrets.companyId, id));
-        // joinRequests must be before invites (joinRequests.inviteId → invites RESTRICT)
         await tx.delete(joinRequests).where(eq(joinRequests.companyId, id));
         await tx.delete(invites).where(eq(invites.companyId, id));
         await tx.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, id));
         await tx.delete(companyMemberships).where(eq(companyMemberships.companyId, id));
-        // issues must be before projects and goals (issues.projectId/goalId RESTRICT)
-        await tx.delete(issues).where(eq(issues.companyId, id));
-        // Workspace tables (all nullable set null refs, just need to be before company)
-        await tx.delete(workspaceOperations).where(eq(workspaceOperations.companyId, id));
-        await tx.delete(workspaceRuntimeServices).where(eq(workspaceRuntimeServices.companyId, id));
-        // companyLogos must be before assets (companyLogos.assetId → assets RESTRICT)
-        await tx.delete(companyLogos).where(eq(companyLogos.companyId, id));
-        // assets must be before agents (assets.createdByAgentId → agents RESTRICT)
-        await tx.delete(assets).where(eq(assets.companyId, id));
-        await tx.delete(documents).where(eq(documents.companyId, id));
-        // projects must be before goals (projects.goalId → goals RESTRICT)
-        // projectGoals/projectWorkspaces/executionWorkspaces cascade from projects
-        // routines cascade from projects
-        await tx.delete(projects).where(eq(projects.companyId, id));
-        await tx.delete(goals).where(eq(goals.companyId, id));
-        await tx.delete(labels).where(eq(labels.companyId, id));
         await tx.delete(companySkills).where(eq(companySkills.companyId, id));
-        // outputVersions cascade from outputs
-        await tx.delete(outputs).where(eq(outputs.companyId, id));
+        await tx.delete(issueReadStates).where(eq(issueReadStates.companyId, id));
+        await tx.delete(documents).where(eq(documents.companyId, id));
+        await tx.delete(issues).where(eq(issues.companyId, id));
+        await tx.delete(companyLogos).where(eq(companyLogos.companyId, id));
+        await tx.delete(assets).where(eq(assets.companyId, id));
+        await tx.delete(goals).where(eq(goals.companyId, id));
+        await tx.delete(projects).where(eq(projects.companyId, id));
         await tx.delete(agents).where(eq(agents.companyId, id));
         const rows = await tx
           .delete(companies)

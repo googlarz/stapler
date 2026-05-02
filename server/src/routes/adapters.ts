@@ -25,11 +25,11 @@ import {
   findActiveServerAdapter,
   listEnabledServerAdapters,
   registerServerAdapter,
+  resolveExternalAdapterRegistration,
   unregisterServerAdapter,
   isOverridePaused,
   setOverridePaused,
 } from "../adapters/registry.js";
-import { getAdapterSessionManagement } from "@stapler/adapter-utils";
 import {
   listAdapterPlugins,
   addAdapterPlugin,
@@ -66,6 +66,7 @@ interface AdapterCapabilities {
   supportsSkills: boolean;
   supportsLocalAgentJwt: boolean;
   requiresMaterializedRuntimeSkills: boolean;
+  supportsModelProfiles: boolean;
 }
 
 interface AdapterInfo {
@@ -119,6 +120,7 @@ function buildAdapterCapabilities(adapter: ServerAdapterModule): AdapterCapabili
     supportsSkills: Boolean(adapter.listSkills || adapter.syncSkills),
     supportsLocalAgentJwt: adapter.supportsLocalAgentJwt ?? false,
     requiresMaterializedRuntimeSkills: adapter.requiresMaterializedRuntimeSkills ?? false,
+    supportsModelProfiles: Boolean(adapter.modelProfiles?.length || adapter.listModelProfiles),
   };
 }
 
@@ -168,15 +170,17 @@ async function normalizeLocalPath(rawPath: string): Promise<string> {
 }
 
 /**
- * Register an adapter module into the server registry, filling in
- * sessionManagement from the host.
+ * Register an external adapter module into the server registry via the
+ * hot-install path, resolving `sessionManagement` identically to how the
+ * init-time IIFE does. Module-provided `sessionManagement` is honored first,
+ * with fallback to the host registry by type for builtin-type overrides.
+ *
+ * Keeps the hot-install and init-time paths at parity so an adapter installed
+ * via `POST /api/adapters/install` has the same shape in the registry as the
+ * same adapter loaded on the next server restart.
  */
 function registerWithSessionManagement(adapter: ServerAdapterModule): void {
-  const wrapped: ServerAdapterModule = {
-    ...adapter,
-    sessionManagement: getAdapterSessionManagement(adapter.type) ?? undefined,
-  };
-  registerServerAdapter(wrapped);
+  registerServerAdapter(resolveExternalAdapterRegistration(adapter));
 }
 
 // ---------------------------------------------------------------------------
@@ -610,7 +614,11 @@ export function adapterRoutes() {
   // Serve a declarative config schema for an adapter's UI form fields.
   // The adapter's getConfigSchema() resolves all options (static and dynamic)
   // so the UI receives a fully hydrated schema in a single fetch.
-  const configSchemaCache = new Map<string, { schema: AdapterConfigSchema; fetchedAt: number }>();
+  const configSchemaCache = new Map<string, {
+    adapter: ServerAdapterModule;
+    schema: AdapterConfigSchema;
+    fetchedAt: number;
+  }>();
   const CONFIG_SCHEMA_TTL_MS = 30_000;
 
   router.get("/adapters/:type/config-schema", async (req, res) => {
@@ -630,14 +638,14 @@ export function adapterRoutes() {
     }
 
     const cached = configSchemaCache.get(type);
-    if (cached && Date.now() - cached.fetchedAt < CONFIG_SCHEMA_TTL_MS) {
+    if (cached && cached.adapter === adapter && Date.now() - cached.fetchedAt < CONFIG_SCHEMA_TTL_MS) {
       res.json(cached.schema);
       return;
     }
 
     try {
       const schema = await adapter.getConfigSchema();
-      configSchemaCache.set(type, { schema, fetchedAt: Date.now() });
+      configSchemaCache.set(type, { adapter, schema, fetchedAt: Date.now() });
       res.json(schema);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

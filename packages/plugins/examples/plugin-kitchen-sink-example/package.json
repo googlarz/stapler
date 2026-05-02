@@ -13,10 +13,10 @@
     "ui": "./dist/ui/"
   },
   "scripts": {
-    "prebuild": "node ../../../../scripts/ensure-plugin-build-deps.mjs",
+    "prebuild": "pnpm --filter @stapler/plugin-sdk ensure-build-deps",
     "build": "tsc && node ./scripts/build-ui.mjs",
     "clean": "rm -rf dist",
-    "typecheck": "pnpm --filter @stapler/plugin-sdk build && tsc --noEmit"
+    "typecheck": "pnpm --filter @stapler/plugin-sdk ensure-build-deps && tsc --noEmit"
   },
   "dependencies": {
     "@stapler/plugin-sdk": "workspace:*",

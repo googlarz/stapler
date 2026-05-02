@@ -28,11 +28,15 @@ import {
   findActiveServerAdapter,
   findServerAdapter,
   listAdapterModels,
+  listAdapterModelProfiles,
   registerServerAdapter,
   requireServerAdapter,
   unregisterServerAdapter,
 } from "../adapters/index.js";
-import { setOverridePaused } from "../adapters/registry.js";
+import {
+  resolveExternalAdapterRegistration,
+  setOverridePaused,
+} from "../adapters/registry.js";
 
 const externalAdapter: ServerAdapterModule = {
   type: "external_test",
@@ -73,6 +77,31 @@ describe("server adapter registry", () => {
     expect(requireServerAdapter("external_test")).toBe(externalAdapter);
     expect(await listAdapterModels("external_test")).toEqual([
       { id: "external-model", label: "External Model" },
+    ]);
+  });
+
+  it("exposes adapter model profiles when adapters declare them", async () => {
+    const adapterWithProfiles: ServerAdapterModule = {
+      ...externalAdapter,
+      modelProfiles: [
+        {
+          key: "cheap",
+          label: "Cheap",
+          adapterConfig: { model: "external-mini" },
+          source: "adapter_default",
+        },
+      ],
+    };
+
+    registerServerAdapter(adapterWithProfiles);
+
+    expect(await listAdapterModelProfiles("external_test")).toEqual([
+      {
+        key: "cheap",
+        label: "Cheap",
+        adapterConfig: { model: "external-mini" },
+        source: "adapter_default",
+      },
     ]);
   });
 
@@ -164,6 +193,45 @@ describe("server adapter registry", () => {
     expect(adapter!.supportsLocalAgentJwt).toBe(true);
   });
 
+  it("built-in local adapters declare cheap model profile defaults where supported", async () => {
+    await expect(listAdapterModelProfiles("claude_local")).resolves.toEqual([
+      expect.objectContaining({
+        key: "cheap",
+        adapterConfig: expect.objectContaining({ model: "claude-sonnet-4-6" }),
+        source: "adapter_default",
+      }),
+    ]);
+    await expect(listAdapterModelProfiles("codex_local")).resolves.toEqual([
+      expect.objectContaining({
+        key: "cheap",
+        adapterConfig: expect.objectContaining({ model: "gpt-5.3-codex-spark" }),
+        source: "adapter_default",
+      }),
+    ]);
+    await expect(listAdapterModelProfiles("gemini_local")).resolves.toEqual([
+      expect.objectContaining({
+        key: "cheap",
+        adapterConfig: expect.objectContaining({ model: "gemini-2.5-flash-lite" }),
+        source: "adapter_default",
+      }),
+    ]);
+    await expect(listAdapterModelProfiles("opencode_local")).resolves.toEqual([
+      expect.objectContaining({
+        key: "cheap",
+        adapterConfig: expect.objectContaining({ model: "openai/gpt-5.1-codex-mini" }),
+        source: "adapter_default",
+      }),
+    ]);
+    await expect(listAdapterModelProfiles("cursor")).resolves.toEqual([
+      expect.objectContaining({
+        key: "cheap",
+        adapterConfig: expect.objectContaining({ model: "gpt-5.1-codex-mini" }),
+        source: "adapter_default",
+      }),
+    ]);
+    await expect(listAdapterModelProfiles("pi_local")).resolves.toEqual([]);
+  });
+
   it("switches active adapter behavior back to the builtin when an override is paused", async () => {
     const builtIn = findServerAdapter("claude_local");
     expect(builtIn).not.toBeNull();
@@ -250,9 +318,42 @@ describe("server adapter registry", () => {
       "Authorization: Bearer $STAPLER_API_KEY",
     );
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toContain(
-      "X-Stapler-Run-Id: $STAPLER_RUN_ID",
+      "X-Paperclip-Run-Id: $STAPLER_RUN_ID",
     );
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toContain("Existing prompt");
+  });
+
+  it("preserves Hermes command normalization while injecting auth", async () => {
+    const adapter = requireServerAdapter("hermes_local");
+
+    await adapter.execute({
+      runId: "run-123",
+      agent: {
+        id: "agent-123",
+        companyId: "company-123",
+        name: "Hermes Agent",
+        role: "engineer",
+        adapterType: "hermes_local",
+        adapterConfig: {
+          command: "agent-hermes",
+        },
+      },
+      runtime: {},
+      config: {
+        command: "runtime-hermes",
+      },
+      context: {},
+      onLog: async () => {},
+      onMeta: async () => {},
+      onSpawn: async () => {},
+      authToken: "agent-run-jwt",
+    });
+
+    expect(hermesExecuteMock).toHaveBeenCalledTimes(1);
+    const [patchedCtx] = hermesExecuteMock.mock.calls[0];
+    expect(patchedCtx.config.hermesCommand).toBe("runtime-hermes");
+    expect(patchedCtx.agent.adapterConfig.hermesCommand).toBe("agent-hermes");
+    expect(patchedCtx.agent.adapterConfig.env.STAPLER_API_KEY).toBe("agent-run-jwt");
   });
 
   it("passes the original Hermes context through when authToken is absent", async () => {
@@ -349,5 +450,73 @@ describe("server adapter registry", () => {
     expect(patchedCtx.agent.adapterConfig.promptTemplate).toBeUndefined();
     // Auth token is still injected.
     expect(patchedCtx.agent.adapterConfig.env.STAPLER_API_KEY).toBe("agent-run-jwt");
+  });
+});
+
+describe("resolveExternalAdapterRegistration", () => {
+  it("preserves module-provided sessionManagement", () => {
+    const sessionManagement = {
+      supportsSessionResume: true,
+      nativeContextManagement: "unknown" as const,
+      defaultSessionCompaction: {
+        enabled: true,
+        maxSessionRuns: 200,
+        maxRawInputTokens: 2_000_000,
+        maxSessionAgeHours: 72,
+      },
+    };
+    const adapter: ServerAdapterModule = {
+      type: "external_session_test",
+      execute: async () => ({ exitCode: 0, signal: null, timedOut: false }),
+      testEnvironment: async () => ({
+        adapterType: "external_session_test",
+        status: "pass",
+        checks: [],
+        testedAt: new Date(0).toISOString(),
+      }),
+      sessionManagement,
+    };
+
+    const resolved = resolveExternalAdapterRegistration(adapter);
+
+    expect(resolved.sessionManagement).toBe(sessionManagement);
+  });
+
+  it("falls back to the hardcoded registry when the module omits sessionManagement", () => {
+    // An external that overrides a built-in type should inherit the built-in's
+    // sessionManagement when it does not provide its own.
+    const adapter: ServerAdapterModule = {
+      type: "claude_local",
+      execute: async () => ({ exitCode: 0, signal: null, timedOut: false }),
+      testEnvironment: async () => ({
+        adapterType: "claude_local",
+        status: "pass",
+        checks: [],
+        testedAt: new Date(0).toISOString(),
+      }),
+    };
+
+    const resolved = resolveExternalAdapterRegistration(adapter);
+
+    expect(resolved.sessionManagement).toBeDefined();
+    expect(resolved.sessionManagement?.supportsSessionResume).toBe(true);
+    expect(resolved.sessionManagement?.nativeContextManagement).toBe("confirmed");
+  });
+
+  it("leaves sessionManagement undefined when neither module nor registry provides one", () => {
+    const adapter: ServerAdapterModule = {
+      type: "external_unknown_test",
+      execute: async () => ({ exitCode: 0, signal: null, timedOut: false }),
+      testEnvironment: async () => ({
+        adapterType: "external_unknown_test",
+        status: "pass",
+        checks: [],
+        testedAt: new Date(0).toISOString(),
+      }),
+    };
+
+    const resolved = resolveExternalAdapterRegistration(adapter);
+
+    expect(resolved.sessionManagement).toBeUndefined();
   });
 });

@@ -6,8 +6,8 @@ type MarkdownNode = {
 };
 
 const BARE_ISSUE_IDENTIFIER_RE = /^[A-Z][A-Z0-9]+-\d+$/i;
-const ISSUE_REFERENCE_TOKEN_RE =
-  /https?:\/\/[^\s<>()]+|issue:\/\/:?[^\s<>()]+|\/[A-Z][A-Z0-9]*\/issues\/[^\s<>()]+|\/issues\/[^\s<>()]+|\b[A-Z][A-Z0-9]+-\d+\b/gi;
+const ISSUE_SCHEME_RE = /^issue:\/\/:?([^?#\s]+)(?:[?#].*)?$/i;
+const ISSUE_REFERENCE_TOKEN_RE = /issue:\/\/:?[^\s<>()]+|https?:\/\/[^\s<>()]+|\/(?:[^\s<>()/]+\/)*issues\/[A-Z][A-Z0-9]+-\d+(?=$|[\s<>)\],.;!?:])|\b[A-Z][A-Z0-9]+-\d+\b/gi;
 
 export function parseIssuePathIdFromPath(pathOrUrl: string | null | undefined): string | null {
   if (!pathOrUrl) return null;
@@ -18,14 +18,23 @@ export function parseIssuePathIdFromPath(pathOrUrl: string | null | undefined): 
   const segments = pathname.split("/").filter(Boolean);
   const issueIndex = segments.findIndex((segment) => segment === "issues");
   if (issueIndex === -1 || issueIndex === segments.length - 1) return null;
-  const candidate = decodeURIComponent(segments[issueIndex + 1] ?? "").toUpperCase();
-  // Reject route placeholders like :id and non-identifier segments.
-  if (!BARE_ISSUE_IDENTIFIER_RE.test(candidate)) return null;
-  return candidate;
+  const issuePathId = decodeURIComponent(segments[issueIndex + 1] ?? "");
+  if (!issuePathId || issuePathId.startsWith(":")) return null;
+  return BARE_ISSUE_IDENTIFIER_RE.test(issuePathId) ? issuePathId.toUpperCase() : issuePathId;
 }
 
 export function parseIssueReferenceFromHref(href: string | null | undefined) {
   if (!href) return null;
+  const trimmed = href.trim();
+  const issueSchemeMatch = trimmed.match(ISSUE_SCHEME_RE);
+  if (issueSchemeMatch?.[1]) {
+    const issuePathId = decodeURIComponent(issueSchemeMatch[1]);
+    return {
+      issuePathId,
+      href: `/issues/${encodeURIComponent(issuePathId)}`,
+    };
+  }
+
   const pathId = parseIssuePathIdFromPath(href);
   if (pathId) {
     return {
@@ -34,17 +43,6 @@ export function parseIssueReferenceFromHref(href: string | null | undefined) {
     };
   }
 
-  // Handle issue:// scheme: issue://PAP-1310  or  issue://:PAP-1310
-  const issueSchemeMatch = href.trim().match(/^issue:\/\/:?([A-Z][A-Z0-9]+-\d+)$/i);
-  if (issueSchemeMatch) {
-    const normalized = issueSchemeMatch[1]!.toUpperCase();
-    return {
-      issuePathId: normalized,
-      href: `/issues/${encodeURIComponent(normalized)}`,
-    };
-  }
-
-  const trimmed = href.trim();
   if (!BARE_ISSUE_IDENTIFIER_RE.test(trimmed)) return null;
   const normalized = trimmed.toUpperCase();
   return {
@@ -59,10 +57,15 @@ function splitTrailingPunctuation(token: string) {
 
   while (core.length > 0) {
     const lastChar = core.at(-1);
-    if (!lastChar || !/[),.;!?]/.test(lastChar)) break;
+    if (!lastChar || !/[),.;!?:\]]/.test(lastChar)) break;
     if (lastChar === ")") {
       const openCount = (core.match(/\(/g) ?? []).length;
       const closeCount = (core.match(/\)/g) ?? []).length;
+      if (closeCount <= openCount) break;
+    }
+    if (lastChar === "]") {
+      const openCount = (core.match(/\[/g) ?? []).length;
+      const closeCount = (core.match(/\]/g) ?? []).length;
       if (closeCount <= openCount) break;
     }
     trailing = `${lastChar}${trailing}`;

@@ -8,37 +8,41 @@ import {
   Clock3,
   Copy,
   Play,
-  Plus,
+  RefreshCw,
   Repeat,
   Save,
+  Trash2,
+  Webhook,
+  Zap,
 } from "lucide-react";
 import { routinesApi, type RoutineTriggerResponse, type RotateRoutineTriggerResponse } from "../api/routines";
-import { TriggerListCard } from "../components/TriggerListCard";
-import { TriggerDialog } from "../components/TriggerDialog";
-import { ConfirmDialog } from "../components/ConfirmDialog";
 import { heartbeatsApi } from "../api/heartbeats";
 import { LiveRunWidget } from "../components/LiveRunWidget";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
+import { accessApi } from "../api/access";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { useToast } from "../context/ToastContext";
-import { copyTextToClipboard } from "../lib/clipboard";
+import { useToastActions } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
+import { buildRoutineTriggerPatch } from "../lib/routine-trigger-patch";
+import { buildMarkdownMentionOptions } from "../lib/company-members";
 import { timeAgo } from "../lib/timeAgo";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { AgentIcon } from "../components/AgentIconPicker";
 import { InlineEntitySelector, type InlineEntityOption } from "../components/InlineEntitySelector";
-import { MarkdownEditor, type MarkdownEditorRef } from "../components/MarkdownEditor";
+import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "../components/MarkdownEditor";
 import {
   RoutineRunVariablesDialog,
   type RoutineRunDialogSubmitData,
 } from "../components/RoutineRunVariablesDialog";
 import { RoutineVariablesEditor, RoutineVariablesHint } from "../components/RoutineVariablesEditor";
+import { ScheduleEditor, describeSchedule } from "../components/ScheduleEditor";
 import { RunButton } from "../components/AgentActionButtons";
 import { getRecentAssigneeIds, sortAgentsByRecency, trackRecentAssignee } from "../lib/recent-assignees";
+import { getRecentProjectIds, trackRecentProject } from "../lib/recent-projects";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
@@ -57,6 +61,8 @@ import type { RoutineTrigger, RoutineVariable } from "@stapler/shared";
 
 const concurrencyPolicies = ["coalesce_if_active", "always_enqueue", "skip_if_active"];
 const catchUpPolicies = ["skip_missed", "enqueue_missed_with_cap"];
+const triggerKinds = ["schedule", "webhook"];
+const signingModes = ["bearer", "hmac_sha256", "github_hmac", "none"];
 const routineTabs = ["triggers", "runs", "activity"] as const;
 const concurrencyPolicyDescriptions: Record<string, string> = {
   coalesce_if_active: "Keep one follow-up run queued while an active run is still working.",
@@ -67,6 +73,13 @@ const catchUpPolicyDescriptions: Record<string, string> = {
   skip_missed: "Ignore schedule windows that were missed while the routine or scheduler was paused.",
   enqueue_missed_with_cap: "Catch up missed schedule windows in capped batches after recovery.",
 };
+const signingModeDescriptions: Record<string, string> = {
+  bearer: "Expect a shared bearer token in the Authorization header.",
+  hmac_sha256: "Expect an HMAC SHA-256 signature over the request using the shared secret.",
+  github_hmac: "Accept GitHub-style X-Hub-Signature-256 header (HMAC over raw body, no timestamp).",
+  none: "No authentication — the webhook URL itself acts as a shared secret.",
+};
+const SIGNING_MODES_WITHOUT_REPLAY_WINDOW = new Set(["github_hmac", "none"]);
 
 type RoutineTab = (typeof routineTabs)[number];
 
@@ -129,6 +142,128 @@ function buildRoutineMutationPayload(input: {
   };
 }
 
+function TriggerEditor({
+  trigger,
+  onSave,
+  onRotate,
+  onDelete,
+}: {
+  trigger: RoutineTrigger;
+  onSave: (id: string, patch: Record<string, unknown>) => void;
+  onRotate: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [draft, setDraft] = useState({
+    label: trigger.label ?? "",
+    cronExpression: trigger.cronExpression ?? "",
+    signingMode: trigger.signingMode ?? "bearer",
+    replayWindowSec: String(trigger.replayWindowSec ?? 300),
+  });
+
+  useEffect(() => {
+    setDraft({
+      label: trigger.label ?? "",
+      cronExpression: trigger.cronExpression ?? "",
+      signingMode: trigger.signingMode ?? "bearer",
+      replayWindowSec: String(trigger.replayWindowSec ?? 300),
+    });
+  }, [trigger]);
+
+  return (
+    <div className="rounded-lg border border-border p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {trigger.kind === "schedule" ? <Clock3 className="h-3.5 w-3.5" /> : trigger.kind === "webhook" ? <Webhook className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
+          {trigger.label ?? trigger.kind}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {trigger.kind === "schedule" && trigger.nextRunAt
+            ? `Next: ${new Date(trigger.nextRunAt).toLocaleString()}`
+            : trigger.kind === "webhook"
+              ? "Webhook"
+              : "API"}
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Label</Label>
+          <Input
+            value={draft.label}
+            onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))}
+          />
+        </div>
+        {trigger.kind === "schedule" && (
+          <div className="md:col-span-2 space-y-1.5">
+            <Label className="text-xs">Schedule</Label>
+            <ScheduleEditor
+              value={draft.cronExpression}
+              onChange={(cronExpression) => setDraft((current) => ({ ...current, cronExpression }))}
+            />
+          </div>
+        )}
+        {trigger.kind === "webhook" && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Signing mode</Label>
+              <Select
+                value={draft.signingMode}
+                onValueChange={(signingMode) => setDraft((current) => ({ ...current, signingMode }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {signingModes.map((mode) => (
+                    <SelectItem key={mode} value={mode}>{mode}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {!SIGNING_MODES_WITHOUT_REPLAY_WINDOW.has(draft.signingMode) && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Replay window (seconds)</Label>
+                <Input
+                  value={draft.replayWindowSec}
+                  onChange={(event) => setDraft((current) => ({ ...current, replayWindowSec: event.target.value }))}
+                />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {trigger.lastResult && <span className="text-xs text-muted-foreground">Last: {trigger.lastResult}</span>}
+        <div className="ml-auto flex items-center gap-2">
+          {trigger.kind === "webhook" && (
+            <Button variant="outline" size="sm" onClick={() => onRotate(trigger.id)}>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              Rotate secret
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSave(trigger.id, buildRoutineTriggerPatch(trigger, draft, getLocalTimezone()))}
+          >
+            <Save className="mr-1.5 h-3.5 w-3.5" />
+            Save trigger
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => onDelete(trigger.id)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RoutineDetail() {
   const { routineId } = useParams<{ routineId: string }>();
   const { selectedCompanyId } = useCompany();
@@ -136,7 +271,7 @@ export function RoutineDetail() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
-  const { pushToast } = useToast();
+  const { pushToast } = useToastActions();
   const hydratedRoutineIdRef = useRef<string | null>(null);
   const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
   const descriptionEditorRef = useRef<MarkdownEditorRef>(null);
@@ -145,10 +280,12 @@ export function RoutineDetail() {
   const [secretMessage, setSecretMessage] = useState<SecretMessage | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [runVariablesOpen, setRunVariablesOpen] = useState(false);
-  const [triggerDialogOpen, setTriggerDialogOpen] = useState(false);
-  const [editingTrigger, setEditingTrigger] = useState<RoutineTrigger | null>(null);
-  const [triggerPendingDelete, setTriggerPendingDelete] = useState<RoutineTrigger | null>(null);
-  const [togglingTriggerId, setTogglingTriggerId] = useState<string | null>(null);
+  const [newTrigger, setNewTrigger] = useState({
+    kind: "schedule",
+    cronExpression: "0 10 * * *",
+    signingMode: "bearer",
+    replayWindowSec: "300",
+  });
   const [editDraft, setEditDraft] = useState<{
     title: string;
     description: string;
@@ -215,6 +352,11 @@ export function RoutineDetail() {
     queryFn: () => projectsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
+  const { data: companyMembers } = useQuery({
+    queryKey: queryKeys.access.companyUserDirectory(selectedCompanyId!),
+    queryFn: () => accessApi.listUserDirectory(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
 
   const routineDefaults = useMemo(
     () =>
@@ -264,7 +406,7 @@ export function RoutineDetail() {
 
   const copySecretValue = async (label: string, value: string) => {
     try {
-      await copyTextToClipboard(value);
+      await navigator.clipboard.writeText(value);
       pushToast({ title: `${label} copied`, tone: "success" });
     } catch (error) {
       pushToast({
@@ -370,23 +512,24 @@ export function RoutineDetail() {
   });
 
   const createTrigger = useMutation({
-    mutationFn: async (body: Record<string, unknown>): Promise<RoutineTriggerResponse> => {
-      // Auto-label when the caller didn't provide one (e.g. dialog left the
-      // Label field blank). Keeps the existing "schedule-2"-style numbering
-      // behaviour so existing routines keep unique-ish labels.
-      const kind = String(body.kind ?? "schedule");
-      const trimmedLabel = typeof body.label === "string" ? body.label.trim() : "";
-      let finalLabel: string;
-      if (trimmedLabel.length > 0 && trimmedLabel !== kind) {
-        finalLabel = trimmedLabel;
-      } else {
-        const existingOfKind = (routine?.triggers ?? []).filter((t) => t.kind === kind).length;
-        finalLabel = existingOfKind > 0 ? `${kind}-${existingOfKind + 1}` : kind;
-      }
-      return routinesApi.createTrigger(routineId!, { ...body, label: finalLabel });
+    mutationFn: async (): Promise<RoutineTriggerResponse> => {
+      const existingOfKind = (routine?.triggers ?? []).filter((t) => t.kind === newTrigger.kind).length;
+      const autoLabel = existingOfKind > 0 ? `${newTrigger.kind}-${existingOfKind + 1}` : newTrigger.kind;
+      return routinesApi.createTrigger(routineId!, {
+        kind: newTrigger.kind,
+        label: autoLabel,
+        ...(newTrigger.kind === "schedule"
+          ? { cronExpression: newTrigger.cronExpression.trim(), timezone: getLocalTimezone() }
+          : {}),
+        ...(newTrigger.kind === "webhook"
+          ? {
+            signingMode: newTrigger.signingMode,
+            replayWindowSec: Number(newTrigger.replayWindowSec || "300"),
+          }
+          : {}),
+      });
     },
     onSuccess: async (result) => {
-      setTriggerDialogOpen(false);
       if (result.secretMaterial) {
         setSecretMessage({
           title: "Webhook trigger created",
@@ -420,10 +563,9 @@ export function RoutineDetail() {
     onSuccess: async () => {
       pushToast({
         title: "Trigger saved",
+        body: "The routine cadence update was saved.",
         tone: "success",
       });
-      setTriggerDialogOpen(false);
-      setEditingTrigger(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
@@ -437,9 +579,6 @@ export function RoutineDetail() {
         tone: "error",
       });
     },
-    onSettled: () => {
-      setTogglingTriggerId(null);
-    },
   });
 
   const deleteTrigger = useMutation({
@@ -449,7 +588,6 @@ export function RoutineDetail() {
         title: "Trigger deleted",
         tone: "success",
       });
-      setTriggerPendingDelete(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
@@ -496,6 +634,7 @@ export function RoutineDetail() {
     [projects],
   );
   const recentAssigneeIds = useMemo(() => getRecentAssigneeIds(), [routine?.id]);
+  const recentProjectIds = useMemo(() => getRecentProjectIds(), [routine?.id]);
   const assigneeOptions = useMemo<InlineEntityOption[]>(
     () =>
       sortAgentsByRecency(
@@ -517,6 +656,13 @@ export function RoutineDetail() {
       })),
     [projects],
   );
+  const mentionOptions = useMemo<MentionOption[]>(() => {
+    return buildMarkdownMentionOptions({
+      agents,
+      projects,
+      members: companyMembers?.users,
+    });
+  }, [agents, companyMembers?.users, projects]);
   const currentAssignee = editDraft.assigneeAgentId ? agentById.get(editDraft.assigneeAgentId) ?? null : null;
   const currentProject = editDraft.projectId ? projectById.get(editDraft.projectId) ?? null : null;
 
@@ -656,6 +802,7 @@ export function RoutineDetail() {
             ref={assigneeSelectorRef}
             value={editDraft.assigneeAgentId}
             options={assigneeOptions}
+            recentOptionIds={recentAssigneeIds}
             placeholder="Assignee"
             noneLabel="No assignee"
             searchPlaceholder="Search assignees..."
@@ -701,11 +848,15 @@ export function RoutineDetail() {
             ref={projectSelectorRef}
             value={editDraft.projectId}
             options={projectOptions}
+            recentOptionIds={recentProjectIds}
             placeholder="Project"
             noneLabel="No project"
             searchPlaceholder="Search projects..."
             emptyMessage="No projects found."
-            onChange={(projectId) => setEditDraft((current) => ({ ...current, projectId }))}
+            onChange={(projectId) => {
+              if (projectId) trackRecentProject(projectId);
+              setEditDraft((current) => ({ ...current, projectId }));
+            }}
             onConfirm={() => descriptionEditorRef.current?.focus()}
             renderTriggerValue={(option) =>
               option && currentProject ? (
@@ -745,6 +896,7 @@ export function RoutineDetail() {
         placeholder="Add instructions..."
         bordered={false}
         contentClassName="min-h-[120px] text-[15px] leading-7"
+        mentions={mentionOptions}
         onSubmit={() => {
           if (!saveRoutine.isPending && editDraft.title.trim()) {
             saveRoutine.mutate();
@@ -842,63 +994,78 @@ export function RoutineDetail() {
         </TabsList>
 
         <TabsContent value="triggers" className="space-y-4">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <h2 className="text-sm font-medium">Triggers</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Schedules and webhooks that fire this routine.
-              </p>
+          {/* Add trigger form */}
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <p className="text-sm font-medium">Add trigger</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Kind</Label>
+                <Select value={newTrigger.kind} onValueChange={(kind) => setNewTrigger((current) => ({ ...current, kind }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {triggerKinds.map((kind) => (
+                      <SelectItem key={kind} value={kind} disabled={kind === "webhook"}>
+                        {kind}{kind === "webhook" ? " — COMING SOON" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {newTrigger.kind === "schedule" && (
+                <div className="md:col-span-2 space-y-1.5">
+                  <Label className="text-xs">Schedule</Label>
+                  <ScheduleEditor
+                    value={newTrigger.cronExpression}
+                    onChange={(cronExpression) => setNewTrigger((current) => ({ ...current, cronExpression }))}
+                  />
+                </div>
+              )}
+              {newTrigger.kind === "webhook" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Signing mode</Label>
+                    <Select value={newTrigger.signingMode} onValueChange={(signingMode) => setNewTrigger((current) => ({ ...current, signingMode }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {signingModes.map((mode) => (
+                          <SelectItem key={mode} value={mode}>{mode}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{signingModeDescriptions[newTrigger.signingMode]}</p>
+                  </div>
+                  {!SIGNING_MODES_WITHOUT_REPLAY_WINDOW.has(newTrigger.signingMode) && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Replay window (seconds)</Label>
+                      <Input value={newTrigger.replayWindowSec} onChange={(event) => setNewTrigger((current) => ({ ...current, replayWindowSec: event.target.value }))} />
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingTrigger(null);
-                setTriggerDialogOpen(true);
-              }}
-            >
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Add trigger
-            </Button>
-          </div>
-
-          {routine.triggers.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
-              <p className="text-sm font-medium">No triggers yet</p>
-              <p className="text-xs text-muted-foreground mt-1 mb-4">
-                Triggers fire this routine on a schedule or via webhook.
-              </p>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingTrigger(null);
-                  setTriggerDialogOpen(true);
-                }}
-              >
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Add your first trigger
+            <div className="flex items-center justify-end">
+              <Button size="sm" onClick={() => createTrigger.mutate()} disabled={createTrigger.isPending}>
+                {createTrigger.isPending ? "Adding..." : "Add trigger"}
               </Button>
             </div>
+          </div>
+
+          {/* Existing triggers */}
+          {routine.triggers.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No triggers configured yet.</p>
           ) : (
             <div className="space-y-3">
               {routine.triggers.map((trigger) => (
-                <TriggerListCard
+                <TriggerEditor
                   key={trigger.id}
                   trigger={trigger}
-                  onEdit={() => {
-                    setEditingTrigger(trigger);
-                    setTriggerDialogOpen(true);
-                  }}
-                  onDelete={() => setTriggerPendingDelete(trigger)}
-                  onToggleEnabled={(enabled) => {
-                    setTogglingTriggerId(trigger.id);
-                    updateTrigger.mutate({ id: trigger.id, patch: { enabled } });
-                  }}
-                  onRotateSecret={
-                    trigger.kind === "webhook"
-                      ? () => rotateTrigger.mutate(trigger.id)
-                      : undefined
-                  }
-                  togglePending={togglingTriggerId === trigger.id}
+                  onSave={(id, patch) => updateTrigger.mutate({ id, patch })}
+                  onRotate={(id) => rotateTrigger.mutate(id)}
+                  onDelete={(id) => deleteTrigger.mutate(id)}
                 />
               ))}
             </div>
@@ -969,6 +1136,7 @@ export function RoutineDetail() {
         open={runVariablesOpen}
         onOpenChange={setRunVariablesOpen}
         companyId={routine.companyId}
+        routineName={routine.title}
         agents={agents ?? []}
         projects={projects ?? []}
         defaultProjectId={routine.projectId}
@@ -976,43 +1144,6 @@ export function RoutineDetail() {
         variables={routine.variables ?? []}
         isPending={runRoutine.isPending}
         onSubmit={(data) => runRoutine.mutate(data)}
-      />
-
-      <TriggerDialog
-        open={triggerDialogOpen}
-        onOpenChange={(next) => {
-          setTriggerDialogOpen(next);
-          if (!next) setEditingTrigger(null);
-        }}
-        trigger={editingTrigger}
-        fallbackTimezone={getLocalTimezone()}
-        submitting={createTrigger.isPending || updateTrigger.isPending}
-        onSubmit={({ id, body }) => {
-          if (id) {
-            updateTrigger.mutate({ id, patch: body });
-          } else {
-            createTrigger.mutate(body);
-          }
-        }}
-      />
-
-      <ConfirmDialog
-        open={!!triggerPendingDelete}
-        onOpenChange={(next) => {
-          if (!next) setTriggerPendingDelete(null);
-        }}
-        title="Delete trigger?"
-        description={
-          triggerPendingDelete
-            ? `"${triggerPendingDelete.label ?? triggerPendingDelete.kind}" will be removed. This can't be undone.`
-            : undefined
-        }
-        confirmLabel="Delete"
-        destructive
-        busy={deleteTrigger.isPending}
-        onConfirm={() => {
-          if (triggerPendingDelete) deleteTrigger.mutate(triggerPendingDelete.id);
-        }}
       />
     </div>
   );

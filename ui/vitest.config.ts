@@ -9,7 +9,7 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "happy-dom",
-    setupFiles: ["./src/test-setup.ts"],
+    environment: "node",
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

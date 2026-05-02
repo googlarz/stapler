@@ -1,18 +1,19 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/stapler/stapler/master/doc/assets/header.png" alt="Paperclip — runs your business" width="720" />
+  <img src="https://raw.githubusercontent.com/paperclipai/paperclip/master/doc/assets/header.png" alt="Paperclip — runs your business" width="720" />
 </p>
 
 <p align="center">
   <a href="#quickstart"><strong>Quickstart</strong></a> &middot;
   <a href="https://paperclip.ing/docs"><strong>Docs</strong></a> &middot;
-  <a href="https://github.com/googlarz/stapler"><strong>GitHub</strong></a> &middot;
-  <a href="https://discord.gg/m4HZY7xNG3"><strong>Discord</strong></a>
+  <a href="https://github.com/paperclipai/paperclip"><strong>GitHub</strong></a> &middot;
+  <a href="https://discord.gg/m4HZY7xNG3"><strong>Discord</strong></a> &middot;
+  <a href="https://x.com/papercliping"><strong>Twitter</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/googlarz/stapler/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
-  <a href="https://github.com/googlarz/stapler/stargazers"><img src="https://img.shields.io/github/stars/paperclipai/paperclip?style=flat" alt="Stars" /></a>
-  <a href="https://discord.gg/m4HZY7xNG3"><img src="https://img.shields.io/badge/discord-join%20chat-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="https://github.com/paperclipai/paperclip/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+  <a href="https://github.com/paperclipai/paperclip/stargazers"><img src="https://img.shields.io/github/stars/paperclipai/paperclip?style=flat" alt="Stars" /></a>
+  <a href="https://discord.gg/m4HZY7xNG3"><img src="https://img.shields.io/discord/000000000?label=discord" alt="Discord" /></a>
 </p>
 
 <br/>
@@ -51,12 +52,12 @@ It looks like a task manager — but under the hood it has org charts, budgets, 
 <table>
   <tr>
     <td align="center"><strong>Works<br/>with</strong></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/stapler/stapler/master/doc/assets/logos/openclaw.svg" width="32" alt="OpenClaw" /><br/><sub>OpenClaw</sub></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/stapler/stapler/master/doc/assets/logos/claude.svg" width="32" alt="Claude" /><br/><sub>Claude Code</sub></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/stapler/stapler/master/doc/assets/logos/codex.svg" width="32" alt="Codex" /><br/><sub>Codex</sub></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/stapler/stapler/master/doc/assets/logos/cursor.svg" width="32" alt="Cursor" /><br/><sub>Cursor</sub></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/stapler/stapler/master/doc/assets/logos/bash.svg" width="32" alt="Bash" /><br/><sub>Bash</sub></td>
-    <td align="center"><img src="https://raw.githubusercontent.com/stapler/stapler/master/doc/assets/logos/http.svg" width="32" alt="HTTP" /><br/><sub>HTTP</sub></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/paperclipai/paperclip/master/doc/assets/logos/openclaw.svg" width="32" alt="OpenClaw" /><br/><sub>OpenClaw</sub></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/paperclipai/paperclip/master/doc/assets/logos/claude.svg" width="32" alt="Claude" /><br/><sub>Claude Code</sub></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/paperclipai/paperclip/master/doc/assets/logos/codex.svg" width="32" alt="Codex" /><br/><sub>Codex</sub></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/paperclipai/paperclip/master/doc/assets/logos/cursor.svg" width="32" alt="Cursor" /><br/><sub>Cursor</sub></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/paperclipai/paperclip/master/doc/assets/logos/bash.svg" width="32" alt="Bash" /><br/><sub>Bash</sub></td>
+    <td align="center"><img src="https://raw.githubusercontent.com/paperclipai/paperclip/master/doc/assets/logos/http.svg" width="32" alt="HTTP" /><br/><sub>HTTP</sub></td>
   </tr>
 </table>
 
@@ -190,7 +191,7 @@ If you already have Paperclip configured, rerunning `onboard` keeps the existing
 Or manually:
 
 ```bash
-git clone https://github.com/googlarz/stapler.git
+git clone https://github.com/paperclipai/paperclip.git
 cd paperclip
 pnpm install
 pnpm dev
@@ -233,12 +234,16 @@ pnpm dev:once         # Full dev without file watching
 pnpm dev:server       # Server only
 pnpm build            # Build all
 pnpm typecheck        # Type checking
-pnpm test:run         # Run tests
+pnpm test             # Cheap default test run (Vitest only)
+pnpm test:watch       # Vitest watch mode
+pnpm test:e2e         # Playwright browser suite
 pnpm db:generate      # Generate DB migration
 pnpm db:migrate       # Apply migrations
 ```
 
-See [doc/DEVELOPING.md](https://github.com/googlarz/stapler/blob/master/doc/DEVELOPING.md) for the full development guide.
+`pnpm test` does not run Playwright. Browser suites stay separate and are typically run only when working on those flows or in CI.
+
+See [doc/DEVELOPING.md](https://github.com/paperclipai/paperclip/blob/master/doc/DEVELOPING.md) for the full development guide.
 
 <br/>
 
@@ -254,7 +259,7 @@ See [doc/DEVELOPING.md](https://github.com/googlarz/stapler/blob/master/doc/DEVE
 - ⚪ Artifacts & Deployments
 - ⚪ CEO Chat
 - ⚪ MAXIMIZER MODE
-- ⚪ Multiple Human Users
+- ✅ Multiple Human Users
 - ⚪ Cloud / Sandbox agents (e.g. Cursor / e2b agents)
 - ⚪ Cloud deployments
 - ⚪ Desktop App
@@ -267,15 +272,16 @@ Find Plugins and more at [awesome-paperclip](https://github.com/gsxdsm/awesome-p
 
 ## Contributing
 
-We welcome contributions. See the [contributing guide](https://github.com/googlarz/stapler/blob/master/CONTRIBUTING.md) for details.
+We welcome contributions. See the [contributing guide](https://github.com/paperclipai/paperclip/blob/master/CONTRIBUTING.md) for details.
 
 <br/>
 
 ## Community
 
 - [Discord](https://discord.gg/m4HZY7xNG3) — Join the community
-- [GitHub Issues](https://github.com/googlarz/stapler/issues) — bugs and feature requests
-- [GitHub Discussions](https://github.com/googlarz/stapler/discussions) — ideas and RFC
+- [Twitter / X](https://x.com/papercliping) — Follow updates and announcements
+- [GitHub Issues](https://github.com/paperclipai/paperclip/issues) — bugs and feature requests
+- [GitHub Discussions](https://github.com/paperclipai/paperclip/discussions) — ideas and RFC
 
 <br/>
 
@@ -292,7 +298,7 @@ MIT &copy; 2026 Paperclip
 ---
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/stapler/stapler/master/doc/assets/footer.jpg" alt="" width="720" />
+  <img src="https://raw.githubusercontent.com/paperclipai/paperclip/master/doc/assets/footer.jpg" alt="" width="720" />
 </p>
 
 <p align="center">

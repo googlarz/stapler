@@ -7,7 +7,7 @@ import { useCompany } from "../context/CompanyContext";
 import { companiesApi } from "../api/companies";
 import { goalsApi } from "../api/goals";
 import { agentsApi } from "../api/agents";
-import { routinesApi } from "../api/routines";
+import { approvalsApi } from "../api/approvals";
 import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
 import { queryKeys } from "../lib/queryKeys";
@@ -25,6 +25,7 @@ import {
 } from "../lib/model-utils";
 import { getUIAdapter } from "../adapters";
 import { listUIAdapters } from "../adapters";
+import { isVisualAdapterChoice } from "../adapters/metadata";
 import { useDisabledAdaptersSync } from "../adapters/use-disabled-adapters";
 import { useAdapterCapabilities } from "../adapters/use-adapter-capabilities";
 import { getAdapterDisplay } from "../adapters/adapter-display-registry";
@@ -41,15 +42,12 @@ import {
   DEFAULT_CODEX_LOCAL_MODEL
 } from "@stapler/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@stapler/adapter-cursor-local";
-import { DEFAULT_OLLAMA_MODEL } from "@stapler/adapter-ollama-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@stapler/adapter-gemini-local";
 import { resolveRouteOnboardingOptions } from "../lib/onboarding-route";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
-import { suggestFromGoal, type OnboardingSuggestion } from "../lib/onboarding-suggestion";
 import {
   Building2,
   Bot,
-  BarChart2,
   ListTodo,
   Rocket,
   ArrowLeft,
@@ -57,58 +55,13 @@ import {
   Check,
   Loader2,
   ChevronDown,
-  X,
-  Sparkles,
-  ToggleLeft,
-  ToggleRight
+  X
 } from "lucide-react";
 
 
-type Step = 1 | 2 | 3 | 4 | 5;
-
-const CPO_INSTRUCTIONS = `# CPO — Chief Product Officer
-
-You are the CPO of this Stapler company. You are always present — you respond to questions, review approaches on demand, and run a full company review on a regular schedule.
-
-You are an observer, advisor, and proposer. You do NOT directly edit agent configs, close goals, or reassign issues. You give recommendations and let the board decide.
-
-## How you get woken up
-
-Check \`context.wakeReason\` to determine your mode:
-
-### Mode 1 — Ad-hoc (wakeReason: comment, issue_assigned, approval_requested)
-Someone needs strategic input. Be concise and direct (under 300 words). Post your response as a comment, then mark the issue done.
-
-### Mode 2 — Scheduled review (wakeReason: routine or schedule)
-Post ONE issue titled \`Company Review #N — YYYY-MM-DD\` with:
-- Health: 🟢 Good / 🟡 Needs attention / 🔴 Critical
-- What's working (max 3 bullets with evidence)
-- What needs attention (max 5 bullets with evidence)
-- Recommendations (3–6, each with observation + proposed change + expected impact)
-- Agent snapshots table (runs last 10, success rate, flag if <70%)
-
-Find review number from prior issues titled "Company Review #...".
-
-### Mode 3 — Startup / no clear context
-Post a brief "CPO online — [date]" note on the most recent open Company Review issue.
-
-## Reading company state
-
-\`\`\`bash
-curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/agents" | jq .
-curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/goals" | jq .
-curl -s "$STAPLER_API_URL/api/companies/$STAPLER_COMPANY_ID/issues?limit=50" | jq .
-\`\`\`
-
-## Always-on constraints
-- Ad-hoc: max 300 words, close the issue when done
-- Review: post ONE issue, no sub-issues, no agent assignments
-- Never edit agent configs, goals, or routines directly
-- You can store observations as memories: curl -X POST "$STAPLER_API_URL/api/agents/$STAPLER_AGENT_ID/memories" -H "Content-Type: application/json" -d '{"content": "...", "tags": ["review"]}'
-`;
+type Step = 1 | 2 | 3 | 4;
 type AdapterType = string;
 
-const DEFAULT_TASK_TITLE = "Hire your first engineer and create a hiring plan";
 const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the company.
 
 - hire a founding engineer
@@ -123,10 +76,6 @@ export function OnboardingWizard() {
   const location = useLocation();
   const { companyPrefix } = useParams<{ companyPrefix?: string }>();
   const [routeDismissed, setRouteDismissed] = useState(false);
-  // Keep wizard open during the launch flow (steps 3-4) even if the route
-  // changes after company creation causes resolveRouteOnboardingOptions to
-  // return null (#2304 P1).
-  const [launchInProgress, setLaunchInProgress] = useState(false);
 
   // Sync disabled adapter types from server so adapter grid filters them out
   const disabledTypes = useDisabledAdaptersSync();
@@ -139,24 +88,11 @@ export function OnboardingWizard() {
           companyPrefix,
           companies,
         });
-  const [routeOnboardingSnapshot, setRouteOnboardingSnapshot] = useState(
-    routeOnboardingOptions
-  );
-
-  useEffect(() => {
-    if (routeOnboardingOptions !== null) {
-      setRouteOnboardingSnapshot(routeOnboardingOptions);
-    }
-  }, [routeOnboardingOptions]);
-
   const effectiveOnboardingOpen =
-    onboardingOpen ||
-    launchInProgress ||
-    ((routeOnboardingOptions !== null || routeOnboardingSnapshot !== null) &&
-      !routeDismissed);
+    onboardingOpen || (routeOnboardingOptions !== null && !routeDismissed);
   const effectiveOnboardingOptions = onboardingOpen
     ? onboardingOptions
-    : routeOnboardingOptions ?? routeOnboardingSnapshot ?? {};
+    : routeOnboardingOptions ?? {};
 
   const initialStep = effectiveOnboardingOptions.initialStep ?? 1;
   const existingCompanyId = effectiveOnboardingOptions.companyId;
@@ -187,27 +123,13 @@ export function OnboardingWizard() {
   const [unsetAnthropicLoading, setUnsetAnthropicLoading] = useState(false);
   const [showMoreAdapters, setShowMoreAdapters] = useState(false);
 
-  // Step 3 — CPO
-  const [cpoEnabled, setCpoEnabled] = useState(true);
-  const [cpoFrequency, setCpoFrequency] = useState<"weekly" | "biweekly" | "monthly">("weekly");
-  const [cpoAdapterType, setCpoAdapterType] = useState("claude_local");
-  const [cpoModel, setCpoModel] = useState("");
-  const [cpoModelOpen, setCpoModelOpen] = useState(false);
-  const [cpoModelSearch, setCpoModelSearch] = useState("");
-  const [cpoAdapterEnvResult, setCpoAdapterEnvResult] =
-    useState<AdapterEnvironmentTestResult | null>(null);
-  const [cpoAdapterEnvError, setCpoAdapterEnvError] = useState<string | null>(null);
-  const [cpoAdapterEnvLoading, setCpoAdapterEnvLoading] = useState(false);
-  const [cpoShowMoreAdapters, setCpoShowMoreAdapters] = useState(false);
-
-  // Step 4 — Task
-  const [taskTitle, setTaskTitle] = useState(DEFAULT_TASK_TITLE);
+  // Step 3
+  const [taskTitle, setTaskTitle] = useState(
+    "Hire your first engineer and create a hiring plan"
+  );
   const [taskDescription, setTaskDescription] = useState(
     DEFAULT_TASK_DESCRIPTION
   );
-
-  // Goal-based suggestion
-  const [suggestion, setSuggestion] = useState<OnboardingSuggestion | null>(null);
 
   // Auto-grow textarea for task description
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -234,7 +156,6 @@ export function OnboardingWizard() {
 
   useEffect(() => {
     setRouteDismissed(false);
-    setRouteOnboardingSnapshot(routeOnboardingOptions);
   }, [location.pathname]);
 
   // Sync step and company when onboarding opens with options.
@@ -263,9 +184,9 @@ export function OnboardingWizard() {
     if (company) setCreatedCompanyPrefix(company.issuePrefix);
   }, [effectiveOnboardingOpen, createdCompanyId, createdCompanyPrefix, companies]);
 
-  // Resize textarea when step 4 (task) is shown or description changes
+  // Resize textarea when step 3 is shown or description changes
   useEffect(() => {
-    if (step === 4) autoResizeTextarea();
+    if (step === 3) autoResizeTextarea();
   }, [step, taskDescription, autoResizeTextarea]);
 
   const {
@@ -284,25 +205,16 @@ export function OnboardingWizard() {
   const adapterCaps = getCapabilities(adapterType);
   const isLocalAdapter = adapterCaps.supportsInstructionsBundle || adapterCaps.supportsSkills || adapterCaps.supportsLocalAgentJwt;
 
-  const {
-    data: cpoAdapterModels,
-    isLoading: cpoAdapterModelsLoading,
-    isFetching: cpoAdapterModelsFetching
-  } = useQuery({
-    queryKey: createdCompanyId
-      ? queryKeys.agents.adapterModels(createdCompanyId, cpoAdapterType)
-      : ["agents", "none", "adapter-models", cpoAdapterType],
-    queryFn: () => agentsApi.adapterModels(createdCompanyId!, cpoAdapterType),
-    enabled: Boolean(createdCompanyId) && effectiveOnboardingOpen && step === 3 && cpoEnabled
-  });
-  const isCpoLocalAdapter = getCapabilities(cpoAdapterType).supportsInstructionsBundle;
-
   // Build adapter grids dynamically from the UI registry + display metadata.
   // External/plugin adapters automatically appear with generic defaults.
   const { recommendedAdapters, moreAdapters } = useMemo(() => {
     const SYSTEM_ADAPTER_TYPES = new Set(["process", "http"]);
     const all = listUIAdapters()
-      .filter((a) => !SYSTEM_ADAPTER_TYPES.has(a.type) && !disabledTypes.has(a.type))
+      .filter((a) =>
+        !SYSTEM_ADAPTER_TYPES.has(a.type) &&
+        !disabledTypes.has(a.type) &&
+        isVisualAdapterChoice(a.type)
+      )
       .map((a) => ({ ...getAdapterDisplay(a.type), type: a.type }));
 
     return {
@@ -317,7 +229,6 @@ export function OnboardingWizard() {
     pi_local: "pi",
     cursor: "agent",
     opencode_local: "opencode",
-    ollama_local: "ollama",
   };
   const effectiveAdapterCommand =
     command.trim() ||
@@ -328,12 +239,6 @@ export function OnboardingWizard() {
     setAdapterEnvResult(null);
     setAdapterEnvError(null);
   }, [step, adapterType, model, command, args, url]);
-
-  useEffect(() => {
-    if (step !== 3) return;
-    setCpoAdapterEnvResult(null);
-    setCpoAdapterEnvError(null);
-  }, [step, cpoAdapterType, cpoModel]);
 
   const selectedModel = (adapterModels ?? []).find((m) => m.id === model);
   const hasAnthropicApiKeyOverrideCheck =
@@ -381,46 +286,7 @@ export function OnboardingWizard() {
       }));
   }, [filteredModels, adapterType]);
 
-  // CPO model picker derived values
-  const cpoSelectedModel = (cpoAdapterModels ?? []).find((m) => m.id === cpoModel);
-  const cpoFilteredModels = useMemo(() => {
-    const query = cpoModelSearch.trim().toLowerCase();
-    return (cpoAdapterModels ?? []).filter((entry) => {
-      if (!query) return true;
-      const provider = extractProviderIdWithFallback(entry.id, "");
-      return (
-        entry.id.toLowerCase().includes(query) ||
-        entry.label.toLowerCase().includes(query) ||
-        provider.toLowerCase().includes(query)
-      );
-    });
-  }, [cpoAdapterModels, cpoModelSearch]);
-  const cpoGroupedModels = useMemo(() => {
-    if (cpoAdapterType !== "opencode_local") {
-      return [
-        {
-          provider: "models",
-          entries: [...cpoFilteredModels].sort((a, b) => a.id.localeCompare(b.id))
-        }
-      ];
-    }
-    const groups = new Map<string, Array<{ id: string; label: string }>>();
-    for (const entry of cpoFilteredModels) {
-      const provider = extractProviderIdWithFallback(entry.id);
-      const bucket = groups.get(provider) ?? [];
-      bucket.push(entry);
-      groups.set(provider, bucket);
-    }
-    return Array.from(groups.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([provider, entries]) => ({
-        provider,
-        entries: [...entries].sort((a, b) => a.id.localeCompare(b.id))
-      }));
-  }, [cpoFilteredModels, cpoAdapterType]);
-
   function reset() {
-    setRouteOnboardingSnapshot(routeOnboardingOptions);
     setStep(1);
     setLoading(false);
     setError(null);
@@ -437,17 +303,7 @@ export function OnboardingWizard() {
     setAdapterEnvLoading(false);
     setForceUnsetAnthropicApiKey(false);
     setUnsetAnthropicLoading(false);
-    setCpoEnabled(true);
-    setCpoFrequency("weekly");
-    setCpoAdapterType("claude_local");
-    setCpoModel("");
-    setCpoModelOpen(false);
-    setCpoModelSearch("");
-    setCpoAdapterEnvResult(null);
-    setCpoAdapterEnvError(null);
-    setCpoAdapterEnvLoading(false);
-    setCpoShowMoreAdapters(false);
-    setTaskTitle(DEFAULT_TASK_TITLE);
+    setTaskTitle("Hire your first engineer and create a hiring plan");
     setTaskDescription(DEFAULT_TASK_DESCRIPTION);
     setCreatedCompanyId(null);
     setCreatedCompanyPrefix(null);
@@ -455,7 +311,6 @@ export function OnboardingWizard() {
     setCreatedAgentId(null);
     setCreatedProjectId(null);
     setCreatedIssueRef(null);
-    setSuggestion(null);
   }
 
   function handleClose() {
@@ -475,8 +330,6 @@ export function OnboardingWizard() {
             ? model || DEFAULT_GEMINI_LOCAL_MODEL
           : adapterType === "cursor"
           ? model || DEFAULT_CURSOR_LOCAL_MODEL
-          : adapterType === "ollama_local"
-          ? model || DEFAULT_OLLAMA_MODEL
           : model,
       command,
       args,
@@ -532,84 +385,7 @@ export function OnboardingWizard() {
     }
   }
 
-  function buildCpoAdapterConfig(): Record<string, unknown> {
-    const adapter = getUIAdapter(cpoAdapterType);
-    return adapter.buildAdapterConfig({
-      ...defaultCreateValues,
-      adapterType: cpoAdapterType,
-      model:
-        cpoAdapterType === "codex_local"
-          ? cpoModel || DEFAULT_CODEX_LOCAL_MODEL
-          : cpoAdapterType === "gemini_local"
-            ? cpoModel || DEFAULT_GEMINI_LOCAL_MODEL
-            : cpoAdapterType === "cursor"
-              ? cpoModel || DEFAULT_CURSOR_LOCAL_MODEL
-              : cpoAdapterType === "ollama_local"
-                ? cpoModel || DEFAULT_OLLAMA_MODEL
-                : cpoModel,
-      command: "",
-      args: "",
-      url: "",
-      dangerouslySkipPermissions:
-        cpoAdapterType === "claude_local" || cpoAdapterType === "opencode_local",
-      dangerouslyBypassSandbox:
-        cpoAdapterType === "codex_local"
-          ? DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX
-          : defaultCreateValues.dangerouslyBypassSandbox
-    });
-  }
-
-  async function runCpoAdapterEnvironmentTest(): Promise<AdapterEnvironmentTestResult | null> {
-    if (!createdCompanyId) {
-      setCpoAdapterEnvError("Create a company before testing the CPO adapter.");
-      return null;
-    }
-    setCpoAdapterEnvLoading(true);
-    setCpoAdapterEnvError(null);
-    try {
-      const result = await agentsApi.testEnvironment(
-        createdCompanyId,
-        cpoAdapterType,
-        { adapterConfig: buildCpoAdapterConfig() }
-      );
-      setCpoAdapterEnvResult(result);
-      return result;
-    } catch (err) {
-      setCpoAdapterEnvError(
-        err instanceof Error ? err.message : "Adapter environment test failed"
-      );
-      return null;
-    } finally {
-      setCpoAdapterEnvLoading(false);
-    }
-  }
-
   async function handleStep1Next() {
-    const companyId = await ensureCompanyCreated();
-    if (companyId) {
-      const s = suggestFromGoal(companyGoal);
-      setSuggestion(s);
-      if (s) {
-        // Only pre-fill if the user hasn't edited the task fields away from
-        // their defaults — guards against back→next discarding user edits.
-        if (taskTitle === DEFAULT_TASK_TITLE) setTaskTitle(s.taskTitle);
-        if (taskDescription === DEFAULT_TASK_DESCRIPTION) setTaskDescription(s.taskDescription);
-        // Auto-expand "More adapters" if the suggested adapter lives there
-        // so the "For your goal" badge is actually visible.
-        if (moreAdapters.some((a) => a.type === s.adapterType)) {
-          setShowMoreAdapters(true);
-        }
-      }
-      setStep(2);
-    }
-  }
-
-  async function ensureCompanyCreated(): Promise<string | null> {
-    if (createdCompanyId) return createdCompanyId;
-    if (!companyName.trim()) {
-      setError("Enter a company name before continuing.");
-      return null;
-    }
     setLoading(true);
     setError(null);
     try {
@@ -636,39 +412,13 @@ export function OnboardingWizard() {
       } else {
         setCreatedCompanyGoalId(null);
       }
-      return company.id;
+
+      setStep(2);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create company");
-      return null;
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleStepTabClick(targetStep: Step) {
-    if (loading) return;
-    if (targetStep <= step) {
-      setError(null);
-      setStep(targetStep);
-      return;
-    }
-
-    if (targetStep >= 2) {
-      const companyId = await ensureCompanyCreated();
-      if (!companyId) {
-        setStep(1);
-        return;
-      }
-    }
-
-    if (targetStep >= 3 && !createdAgentId) {
-      setError("Create your first agent before continuing.");
-      setStep(2);
-      return;
-    }
-
-    setError(null);
-    setStep(targetStep);
   }
 
   async function handleStep2Next() {
@@ -714,29 +464,28 @@ export function OnboardingWizard() {
         if (!result) return;
       }
 
-      const agent = await agentsApi.create(createdCompanyId, {
+      const hire = await agentsApi.hire(createdCompanyId, {
         name: agentName.trim(),
         role: "ceo",
         adapterType,
         adapterConfig: buildAdapterConfig(),
         runtimeConfig: buildNewAgentRuntimeConfig()
       });
+      if (hire.approval) {
+        await approvalsApi.approve(
+          hire.approval.id,
+          "Approved during onboarding first-agent setup."
+        );
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.approvals.list(createdCompanyId)
+        });
+      }
+      const agent = hire.agent;
       setCreatedAgentId(agent.id);
-
-      // Auto-create COO alongside the CEO — optimization agent present in every company by default.
-      // Uses the same adapter so it can run without extra configuration.
-      await agentsApi.create(createdCompanyId, {
-        name: "COO",
-        role: "coo",
-        adapterType,
-        adapterConfig: buildAdapterConfig(),
-        runtimeConfig: buildNewAgentRuntimeConfig(),
-      });
-
       queryClient.invalidateQueries({
         queryKey: queryKeys.agents.list(createdCompanyId)
       });
-      setStep(3); // advance to CPO step
+      setStep(3);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create agent");
     } finally {
@@ -795,69 +544,12 @@ export function OnboardingWizard() {
 
   async function handleStep3Next() {
     if (!createdCompanyId || !createdAgentId) return;
-    setLoading(true);
     setError(null);
-    try {
-      if (cpoEnabled) {
-        // Run env check for local adapters (same gate as CEO step)
-        if (isCpoLocalAdapter) {
-          const result = cpoAdapterEnvResult ?? (await runCpoAdapterEnvironmentTest());
-          if (!result) return;
-        }
-
-        const cpoAgent = await agentsApi.create(createdCompanyId, {
-          name: "CPO",
-          role: "pm",
-          adapterType: cpoAdapterType,
-          adapterConfig: {
-            ...buildCpoAdapterConfig(),
-            enableMemoryInjection: true,
-          },
-        });
-        // Save CPO instructions to the agent's instructions bundle
-        await agentsApi.saveInstructionsFile(
-          cpoAgent.id,
-          { path: "INSTRUCTIONS.md", content: CPO_INSTRUCTIONS, clearLegacyPromptTemplate: true },
-          createdCompanyId,
-        );
-        queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(createdCompanyId) });
-
-        // Create routine + schedule trigger
-        const routine = await routinesApi.create(createdCompanyId, {
-          title: "Company Review",
-          assigneeAgentId: cpoAgent.id,
-          concurrencyPolicy: "coalesce_if_active",
-          catchUpPolicy: "skip_missed",
-        });
-        const cronMap = {
-          weekly: "0 9 * * 1",
-          biweekly: "0 9 1,15 * *",
-          monthly: "0 9 1 * *",
-        } as const;
-        await routinesApi.createTrigger(routine.id, {
-          kind: "schedule",
-          cronExpression: cronMap[cpoFrequency],
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          enabled: true,
-        });
-      }
-      setStep(4);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set up CPO");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleStep4Next() {
-    if (!createdCompanyId || !createdAgentId) return;
-    setError(null);
-    setStep(5);
+    setStep(4);
   }
 
   async function handleLaunch() {
     if (!createdCompanyId || !createdAgentId) return;
-    setLaunchInProgress(true);
     setLoading(true);
     setError(null);
     try {
@@ -912,7 +604,6 @@ export function OnboardingWizard() {
       setError(err instanceof Error ? err.message : "Failed to create task");
     } finally {
       setLoading(false);
-      setLaunchInProgress(false);
     }
   }
 
@@ -921,9 +612,8 @@ export function OnboardingWizard() {
       e.preventDefault();
       if (step === 1 && companyName.trim()) handleStep1Next();
       else if (step === 2 && agentName.trim()) handleStep2Next();
-      else if (step === 3) handleStep3Next();
-      else if (step === 4 && taskTitle.trim()) handleStep4Next();
-      else if (step === 5) handleLaunch();
+      else if (step === 3 && taskTitle.trim()) handleStep3Next();
+      else if (step === 4) handleLaunch();
     }
   }
 
@@ -940,12 +630,11 @@ export function OnboardingWizard() {
       }}
     >
       <DialogPortal>
-        <>
-          {/* Plain div instead of DialogOverlay — Radix's overlay wraps in
-              RemoveScroll which blocks wheel events on our custom (non-DialogContent)
-              scroll container. A plain div preserves the background without scroll-locking. */}
-          <div className="fixed inset-0 z-50 bg-background" />
-          <div className="fixed inset-0 z-50 flex" onKeyDown={handleKeyDown}>
+        {/* Plain div instead of DialogOverlay — Radix's overlay wraps in
+            RemoveScroll which blocks wheel events on our custom (non-DialogContent)
+            scroll container. A plain div preserves the background without scroll-locking. */}
+        <div className="fixed inset-0 z-50 bg-background" />
+        <div className="fixed inset-0 z-50 flex" onKeyDown={handleKeyDown}>
           {/* Close button */}
           <button
             onClick={handleClose}
@@ -969,19 +658,16 @@ export function OnboardingWizard() {
                   [
                     { step: 1 as Step, label: "Company", icon: Building2 },
                     { step: 2 as Step, label: "Agent", icon: Bot },
-                    { step: 3 as Step, label: "CPO", icon: BarChart2 },
-                    { step: 4 as Step, label: "Task", icon: ListTodo },
-                    { step: 5 as Step, label: "Launch", icon: Rocket }
+                    { step: 3 as Step, label: "Task", icon: ListTodo },
+                    { step: 4 as Step, label: "Launch", icon: Rocket }
                   ] as const
                 ).map(({ step: s, label, icon: Icon }) => (
                   <button
                     key={s}
                     type="button"
-                    onClick={() => void handleStepTabClick(s)}
-                    disabled={loading}
+                    onClick={() => setStep(s)}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors cursor-pointer",
-                      loading && "cursor-not-allowed opacity-60",
                       s === step
                         ? "border-foreground text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground/70 hover:border-border"
@@ -1075,17 +761,9 @@ export function OnboardingWizard() {
 
                   {/* Adapter type radio cards */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-muted-foreground">
-                        Adapter type
-                      </label>
-                      {suggestion && (
-                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                          <Sparkles className="h-3 w-3" />
-                          {suggestion.adapterHint}
-                        </span>
-                      )}
-                    </div>
+                    <label className="text-xs text-muted-foreground mb-2 block">
+                      Adapter type
+                    </label>
                     <div className="grid grid-cols-2 gap-2">
                       {recommendedAdapters.map((opt) => (
                         <button
@@ -1107,15 +785,11 @@ export function OnboardingWizard() {
                             }
                           }}
                         >
-                          {suggestion && suggestion.adapterType === opt.type ? (
-                            <span className="absolute -top-1.5 right-1.5 bg-blue-500 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
-                              For your goal
-                            </span>
-                          ) : opt.recommended ? (
+                          {opt.recommended && (
                             <span className="absolute -top-1.5 right-1.5 bg-green-500 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
                               Recommended
                             </span>
-                          ) : null}
+                          )}
                           <opt.icon className="h-4 w-4" />
                           <span className="font-medium">{opt.label}</span>
                           <span className="text-muted-foreground text-[10px]">
@@ -1434,301 +1108,6 @@ export function OnboardingWizard() {
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
-                      <BarChart2 className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium">Add a CPO agent</h3>
-                      <p className="text-xs text-muted-foreground">
-                        The CPO reviews your company on a schedule and surfaces what to improve.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Enable toggle */}
-                  <button
-                    type="button"
-                    className="flex items-center justify-between w-full rounded-md border border-border px-3 py-2.5 hover:bg-accent/50 transition-colors"
-                    onClick={() => setCpoEnabled((v) => !v)}
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-left">Enable CPO</p>
-                      <p className="text-xs text-muted-foreground text-left">
-                        Creates a CPO agent and schedules regular company reviews.
-                      </p>
-                    </div>
-                    {cpoEnabled ? (
-                      <ToggleRight className="h-5 w-5 text-foreground shrink-0 ml-3" />
-                    ) : (
-                      <ToggleLeft className="h-5 w-5 text-muted-foreground shrink-0 ml-3" />
-                    )}
-                  </button>
-
-                  {cpoEnabled && (
-                    <>
-                      {/* Review frequency */}
-                      <div>
-                        <label className="text-xs text-muted-foreground mb-2 block">
-                          Review frequency
-                        </label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(["weekly", "biweekly", "monthly"] as const).map((freq) => (
-                            <button
-                              key={freq}
-                              type="button"
-                              className={cn(
-                                "rounded-md border px-3 py-2 text-xs font-medium transition-colors",
-                                cpoFrequency === freq
-                                  ? "border-foreground bg-accent"
-                                  : "border-border hover:bg-accent/50"
-                              )}
-                              onClick={() => setCpoFrequency(freq)}
-                            >
-                              {freq === "weekly" ? "Weekly" : freq === "biweekly" ? "Bi-weekly" : "Monthly"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Adapter type radio cards */}
-                      <div>
-                        <label className="text-xs text-muted-foreground mb-2 block">
-                          Adapter type
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {recommendedAdapters.map((opt) => (
-                            <button
-                              key={opt.type}
-                              type="button"
-                              className={cn(
-                                "flex flex-col items-center gap-1.5 rounded-md border p-3 text-xs transition-colors relative",
-                                cpoAdapterType === opt.type
-                                  ? "border-foreground bg-accent"
-                                  : "border-border hover:bg-accent/50"
-                              )}
-                              onClick={() => {
-                                const nextType = opt.type;
-                                setCpoAdapterType(nextType);
-                                if (nextType === "codex_local") {
-                                  setCpoModel(DEFAULT_CODEX_LOCAL_MODEL);
-                                } else {
-                                  setCpoModel("");
-                                }
-                              }}
-                            >
-                              <opt.icon className="h-4 w-4" />
-                              <span className="font-medium">{opt.label}</span>
-                              <span className="text-muted-foreground text-[10px]">
-                                {opt.description}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-
-                        <button
-                          className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                          onClick={() => setCpoShowMoreAdapters((v) => !v)}
-                        >
-                          <ChevronDown
-                            className={cn(
-                              "h-3 w-3 transition-transform",
-                              cpoShowMoreAdapters ? "rotate-0" : "-rotate-90"
-                            )}
-                          />
-                          More Adapter Types
-                        </button>
-
-                        {cpoShowMoreAdapters && (
-                          <div className="grid grid-cols-2 gap-2 mt-2">
-                            {moreAdapters.map((opt) => (
-                              <button
-                                key={opt.type}
-                                disabled={!!opt.comingSoon}
-                                type="button"
-                                className={cn(
-                                  "flex flex-col items-center gap-1.5 rounded-md border p-3 text-xs transition-colors relative",
-                                  opt.comingSoon
-                                    ? "border-border opacity-40 cursor-not-allowed"
-                                    : cpoAdapterType === opt.type
-                                    ? "border-foreground bg-accent"
-                                    : "border-border hover:bg-accent/50"
-                                )}
-                                onClick={() => {
-                                  if (opt.comingSoon) return;
-                                  const nextType = opt.type;
-                                  setCpoAdapterType(nextType);
-                                  if (nextType === "gemini_local") {
-                                    setCpoModel(DEFAULT_GEMINI_LOCAL_MODEL);
-                                    return;
-                                  }
-                                  if (nextType === "cursor") {
-                                    setCpoModel(DEFAULT_CURSOR_LOCAL_MODEL);
-                                    return;
-                                  }
-                                  setCpoModel("");
-                                }}
-                              >
-                                <opt.icon className="h-4 w-4" />
-                                <span className="font-medium">{opt.label}</span>
-                                <span className="text-muted-foreground text-[10px]">
-                                  {opt.comingSoon
-                                    ? opt.disabledLabel ?? "Coming soon"
-                                    : opt.description}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Model picker */}
-                      {isCpoLocalAdapter && (
-                        <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">
-                            Model
-                          </label>
-                          <Popover
-                            open={cpoModelOpen}
-                            onOpenChange={(next) => {
-                              setCpoModelOpen(next);
-                              if (!next) setCpoModelSearch("");
-                            }}
-                          >
-                            <PopoverTrigger asChild>
-                              <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
-                                <span className={cn(!cpoModel && "text-muted-foreground")}>
-                                  {cpoSelectedModel
-                                    ? cpoSelectedModel.label
-                                    : cpoModel || "Default"}
-                                </span>
-                                <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className="w-[var(--radix-popover-trigger-width)] p-1"
-                              align="start"
-                            >
-                              <input
-                                className="w-full px-2 py-1.5 text-xs bg-transparent outline-none border-b border-border mb-1 placeholder:text-muted-foreground/50"
-                                placeholder="Search models..."
-                                value={cpoModelSearch}
-                                onChange={(e) => setCpoModelSearch(e.target.value)}
-                                autoFocus
-                              />
-                              <button
-                                className={cn(
-                                  "flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50",
-                                  !cpoModel && "bg-accent"
-                                )}
-                                onClick={() => {
-                                  setCpoModel("");
-                                  setCpoModelOpen(false);
-                                }}
-                              >
-                                Default
-                              </button>
-                              <div className="max-h-[240px] overflow-y-auto">
-                                {(cpoAdapterModelsLoading || cpoAdapterModelsFetching) && (
-                                  <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                                    Loading models...
-                                  </p>
-                                )}
-                                {cpoGroupedModels.map((group) => (
-                                  <div key={group.provider} className="mb-1 last:mb-0">
-                                    {cpoAdapterType === "opencode_local" && (
-                                      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                                        {group.provider} ({group.entries.length})
-                                      </div>
-                                    )}
-                                    {group.entries.map((m) => (
-                                      <button
-                                        key={m.id}
-                                        className={cn(
-                                          "flex items-center w-full px-2 py-1.5 text-sm rounded hover:bg-accent/50",
-                                          m.id === cpoModel && "bg-accent"
-                                        )}
-                                        onClick={() => {
-                                          setCpoModel(m.id);
-                                          setCpoModelOpen(false);
-                                        }}
-                                      >
-                                        <span
-                                          className="block w-full text-left truncate"
-                                          title={m.id}
-                                        >
-                                          {cpoAdapterType === "opencode_local"
-                                            ? extractModelName(m.id)
-                                            : m.label}
-                                        </span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                ))}
-                              </div>
-                              {!cpoAdapterModelsLoading && cpoFilteredModels.length === 0 && (
-                                <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                                  No models discovered.
-                                </p>
-                              )}
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      )}
-
-                      {/* Adapter environment check */}
-                      {isCpoLocalAdapter && (
-                        <div className="space-y-2 rounded-md border border-border p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <p className="text-xs font-medium">
-                                Adapter environment check
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">
-                                Runs a live probe to confirm the CPO adapter is reachable.
-                              </p>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2.5 text-xs"
-                              disabled={cpoAdapterEnvLoading}
-                              onClick={() => void runCpoAdapterEnvironmentTest()}
-                            >
-                              {cpoAdapterEnvLoading ? "Testing..." : "Test now"}
-                            </Button>
-                          </div>
-
-                          {cpoAdapterEnvError && (
-                            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">
-                              {cpoAdapterEnvError}
-                            </div>
-                          )}
-
-                          {cpoAdapterEnvResult &&
-                          cpoAdapterEnvResult.status === "pass" ? (
-                            <div className="flex items-center gap-2 rounded-md border border-green-300 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-300 animate-in fade-in slide-in-from-bottom-1 duration-300">
-                              <Check className="h-3.5 w-3.5 shrink-0" />
-                              <span className="font-medium">Passed</span>
-                            </div>
-                          ) : cpoAdapterEnvResult ? (
-                            <AdapterEnvironmentResult result={cpoAdapterEnvResult} />
-                          ) : null}
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {!cpoEnabled && (
-                    <p className="text-xs text-muted-foreground">
-                      You can add a CPO agent manually later from the Agents page.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {step === 4 && (
-                <div className="space-y-5">
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className="bg-muted/50 p-2">
                       <ListTodo className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
@@ -1766,7 +1145,7 @@ export function OnboardingWizard() {
                 </div>
               )}
 
-              {step === 5 && (
+              {step === 4 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
@@ -1799,20 +1178,6 @@ export function OnboardingWizard() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {getUIAdapter(adapterType).label}
-                        </p>
-                      </div>
-                      <Check className="h-4 w-4 text-green-500 shrink-0" />
-                    </div>
-                    <div className="flex items-center gap-3 px-3 py-2.5">
-                      <BarChart2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          CPO
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {cpoEnabled
-                            ? `${cpoFrequency.charAt(0).toUpperCase() + cpoFrequency.slice(1)} company reviews`
-                            : "Skipped"}
                         </p>
                       </div>
                       <Check className="h-4 w-4 text-green-500 shrink-0" />
@@ -1887,38 +1252,18 @@ export function OnboardingWizard() {
                   {step === 3 && (
                     <Button
                       size="sm"
-                      disabled={loading}
-                      onClick={() => void handleStep3Next()}
+                      disabled={!taskTitle.trim() || loading}
+                      onClick={handleStep3Next}
                     >
                       {loading ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                       ) : (
                         <ArrowRight className="h-3.5 w-3.5 mr-1" />
                       )}
-                      {loading
-                        ? cpoEnabled
-                          ? "Setting up CPO..."
-                          : "Continuing..."
-                        : cpoEnabled
-                          ? "Create CPO & Continue"
-                          : "Skip & Continue"}
+                      {loading ? "Creating..." : "Next"}
                     </Button>
                   )}
                   {step === 4 && (
-                    <Button
-                      size="sm"
-                      disabled={!taskTitle.trim() || loading}
-                      onClick={() => void handleStep4Next()}
-                    >
-                      {loading ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <ArrowRight className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      {loading ? "Saving..." : "Next"}
-                    </Button>
-                  )}
-                  {step === 5 && (
                     <Button size="sm" disabled={loading} onClick={handleLaunch}>
                       {loading ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
@@ -1942,8 +1287,7 @@ export function OnboardingWizard() {
           >
             <AsciiArtAnimation />
           </div>
-          </div>
-        </>
+        </div>
       </DialogPortal>
     </Dialog>
   );
