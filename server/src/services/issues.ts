@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm";
+import { type SQL, and, asc, desc, eq, gt, inArray, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import type { Db } from "@stapler/db";
 import {
   activityLog,
@@ -3464,7 +3464,7 @@ export function issueService(db: Db) {
           ? Math.min(Math.floor(opts.limit), MAX_ISSUE_COMMENT_PAGE_LIMIT)
           : null;
 
-      const conditions = [eq(issueComments.issueId, issueId)];
+      const conditions: (SQL | undefined)[] = [eq(issueComments.issueId, issueId)];
       if (afterCommentId) {
         const anchor = await db
           .select({
@@ -3476,17 +3476,16 @@ export function issueService(db: Db) {
           .then((rows) => rows[0] ?? null);
 
         if (!anchor) return [];
-        conditions.push(
-          order === "asc"
-            ? or(
-                gt(issueComments.createdAt, anchor.createdAt),
-                and(eq(issueComments.createdAt, anchor.createdAt), gt(issueComments.id, anchor.id)),
-              )!
-            : or(
-                lt(issueComments.createdAt, anchor.createdAt),
-                and(eq(issueComments.createdAt, anchor.createdAt), lt(issueComments.id, anchor.id)),
-              )!,
-        );
+        const cursorCondition = order === "asc"
+          ? or(
+              gt(issueComments.createdAt, anchor.createdAt),
+              and(eq(issueComments.createdAt, anchor.createdAt), gt(issueComments.id, anchor.id)),
+            )
+          : or(
+              lt(issueComments.createdAt, anchor.createdAt),
+              and(eq(issueComments.createdAt, anchor.createdAt), lt(issueComments.id, anchor.id)),
+            );
+        if (cursorCondition) conditions.push(cursorCondition);
       }
 
       const query = db
