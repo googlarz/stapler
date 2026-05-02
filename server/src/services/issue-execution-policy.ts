@@ -315,6 +315,22 @@ export function applyIssueExecutionPolicyTransition(input: TransitionInput): Tra
         patch.status = "in_progress";
         Object.assign(patch, patchForPrincipal(existingState.returnAssignee));
       }
+    } else if (requestedStatus === "in_review") {
+      // No policy and no existing state: initialize a minimal executionState so
+      // in_review issues never end up with executionState=null, which would let
+      // any agent's run proceed unchecked through evaluateQueuedRunStaleness.
+      patch.executionState = {
+        status: PENDING_STATUS,
+        currentStageId: null,
+        currentStageIndex: null,
+        currentStageType: null,
+        currentParticipant: currentAssignee,
+        returnAssignee: currentAssignee,
+        reviewRequest: null,
+        completedStageIds: [],
+        lastDecisionId: null,
+        lastDecisionOutcome: null,
+      } satisfies IssueExecutionState;
     }
     return { patch };
   }
