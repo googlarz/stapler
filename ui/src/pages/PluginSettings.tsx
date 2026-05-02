@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Puzzle, ArrowLeft, ShieldAlert, ActivitySquare, CheckCircle, XCircle, Loader2, Clock, Cpu, Webhook, CalendarClock, AlertTriangle } from "lucide-react";
+import { Puzzle, ArrowLeft, ShieldAlert, ActivitySquare, CheckCircle, XCircle, Loader2, Clock, Cpu, Webhook, CalendarClock, AlertTriangle, Database } from "lucide-react";
 import { useCompany } from "@/context/CompanyContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { Link, Navigate, useParams } from "@/lib/router";
 import { PluginSlotMount, usePluginSlots } from "@/plugins/slots";
 import { pluginsApi } from "@/api/plugins";
+import { accessApi } from "@/api/access";
 import { queryKeys } from "@/lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +99,28 @@ export function PluginSettings() {
     queryKey: queryKeys.plugins.config(pluginId!),
     queryFn: () => pluginsApi.getConfig(pluginId!),
     enabled: !!pluginId && !!hasConfigSchema,
+  });
+
+  const hasRuntimeConfigCapability = !!(plugin?.manifestJson?.capabilities as string[] | undefined)?.includes("plugin.config.write");
+
+  const { data: boardAccess } = useQuery({
+    queryKey: queryKeys.access.currentBoardAccess,
+    queryFn: () => accessApi.getCurrentBoardAccess(),
+  });
+  const isInstanceAdmin = boardAccess?.isInstanceAdmin ?? false;
+
+  const queryClient = useQueryClient();
+  const { data: runtimeConfigData, isLoading: runtimeConfigLoading } = useQuery({
+    queryKey: ["plugins", pluginId, "runtime-config"],
+    queryFn: () => pluginsApi.getRuntimeConfig(pluginId!),
+    enabled: !!pluginId && hasRuntimeConfigCapability,
+  });
+
+  const clearRuntimeConfigMutation = useMutation({
+    mutationFn: () => pluginsApi.clearRuntimeConfig(pluginId!),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["plugins", pluginId, "runtime-config"] });
+    },
   });
 
   const { slots } = usePluginSlots({
@@ -550,6 +573,45 @@ export function PluginSettings() {
                   )}
                 </CardContent>
               </Card>
+
+              {hasRuntimeConfigCapability && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-1.5">
+                      <Database className="h-4 w-4" />
+                      Runtime Config
+                    </CardTitle>
+                    <CardDescription>
+                      Plugin-managed mutable configuration. Revision {runtimeConfigData?.revision ?? "0"}.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {runtimeConfigLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading...</p>
+                    ) : runtimeConfigData && Object.keys(runtimeConfigData.values).length > 0 ? (
+                      <pre className="max-h-48 overflow-y-auto rounded bg-muted px-3 py-2 text-xs font-mono text-foreground/85 whitespace-pre-wrap break-all">
+                        {JSON.stringify(runtimeConfigData.values, null, 2)}
+                      </pre>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No runtime config stored.</p>
+                    )}
+                    {isInstanceAdmin && runtimeConfigData && Object.keys(runtimeConfigData.values).length > 0 && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={clearRuntimeConfigMutation.isPending}
+                        onClick={() => clearRuntimeConfigMutation.mutate()}
+                      >
+                        {clearRuntimeConfigMutation.isPending ? (
+                          <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Clearing…</>
+                        ) : (
+                          "Clear Runtime Config"
+                        )}
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         </TabsContent>

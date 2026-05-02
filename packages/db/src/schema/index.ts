@@ -69,6 +69,7 @@ export { companySkills } from "./company_skills.js";
 export { instanceSkills } from "./instance_skills.js";
 export { plugins } from "./plugins.js";
 export { pluginConfig } from "./plugin_config.js";
+export { pluginConfigRuntime } from "./plugin_config_runtime.js";
 export { pluginCompanySettings } from "./plugin_company_settings.js";
 export { pluginState } from "./plugin_state.js";
 export { pluginEntities } from "./plugin_entities.js";

@@ -645,6 +645,7 @@ export const PLUGIN_CAPABILITIES = [
   "http.outbound",
   "secrets.read-ref",
   "secrets.write",
+  "plugin.config.write",
   "environment.drivers.register",
   // Agent Tools
   "agent.tools.register",

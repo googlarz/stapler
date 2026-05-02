@@ -480,6 +480,28 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
       async get() {
         return { ...currentConfig };
       },
+      runtime: (() => {
+        const runtimeStore: Record<string, unknown> = {};
+        let revision = 0n;
+        return {
+          async get() {
+            requireCapability(manifest, capabilitySet, "plugin.config.write");
+            return { values: { ...runtimeStore }, revision: String(revision) };
+          },
+          async set(patch: Record<string, unknown>) {
+            requireCapability(manifest, capabilitySet, "plugin.config.write");
+            Object.assign(runtimeStore, patch);
+            revision += 1n;
+            return { revision: String(revision) };
+          },
+          async unset(key: string) {
+            requireCapability(manifest, capabilitySet, "plugin.config.write");
+            delete runtimeStore[key];
+            revision += 1n;
+            return { revision: String(revision) };
+          },
+        };
+      })(),
     },
     events: {
       on(name: PluginEventType | `plugin.${string}`, filterOrFn: EventFilter | ((event: PluginEvent) => Promise<void>), maybeFn?: (event: PluginEvent) => Promise<void>): () => void {

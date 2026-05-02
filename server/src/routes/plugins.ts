@@ -45,6 +45,7 @@ import {
   PLUGIN_STATUSES,
 } from "@stapler/shared";
 import { pluginRegistryService } from "../services/plugin-registry.js";
+import { createPluginRuntimeConfigService } from "../services/plugin-runtime-config.js";
 import { pluginLifecycleManager } from "../services/plugin-lifecycle.js";
 import { getPluginUiContributionMetadata, pluginLoader } from "../services/plugin-loader.js";
 import { logActivity } from "../services/activity-log.js";
@@ -2567,6 +2568,50 @@ export function pluginRoutes(
       health,
       checkedAt: new Date().toISOString(),
     });
+  });
+
+  // ===========================================================================
+  // Runtime config routes (operator inspect / clear)
+  // ===========================================================================
+
+  /**
+   * GET /api/plugins/:pluginId/runtime-config
+   *
+   * Returns the current plugin-managed runtime configuration and revision.
+   * Accessible to any board member (read-only inspect).
+   */
+  router.get("/plugins/:pluginId/runtime-config", async (req, res) => {
+    assertBoardOrgAccess(req);
+    const { pluginId } = req.params as { pluginId: string };
+    const registry = pluginRegistryService(db);
+    const plugin = await registry.getById(pluginId);
+    if (!plugin) throw notFound("Plugin not found");
+
+    const svc = createPluginRuntimeConfigService(db);
+    const result = await svc.getRuntime(pluginId);
+    res.json(result);
+  });
+
+  /**
+   * DELETE /api/plugins/:pluginId/runtime-config
+   *
+   * Clears all plugin-managed runtime configuration for this plugin.
+   * Restricted to instance admins.
+   */
+  router.delete("/plugins/:pluginId/runtime-config", async (req, res) => {
+    assertInstanceAdmin(req);
+    const { pluginId } = req.params as { pluginId: string };
+    const registry = pluginRegistryService(db);
+    const plugin = await registry.getById(pluginId);
+    if (!plugin) throw notFound("Plugin not found");
+
+    const svc = createPluginRuntimeConfigService(db);
+    await svc.clearRuntime(pluginId);
+    await logPluginMutationActivity(req, "plugin.runtime-config.cleared", pluginId, {
+      pluginId: plugin.id,
+      pluginKey: plugin.pluginKey,
+    });
+    res.status(204).end();
   });
 
   return router;

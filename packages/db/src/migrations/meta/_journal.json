@@ -701,6 +701,13 @@
       "when": 1777660800000,
       "tag": "0099_issue_custom_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1777747200000,
+      "tag": "0100_plugin_config_runtime",
+      "breakpoints": true
     }
   ]
 }

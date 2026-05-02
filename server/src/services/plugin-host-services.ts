@@ -23,6 +23,7 @@ import type {
 } from "@stapler/plugin-sdk";
 import type { CreateIssueThreadInteraction, IssueDocumentSummary, IssueCustomFieldType } from "@stapler/shared";
 import { issueCustomFieldService } from "./issue-custom-fields.js";
+import { createPluginRuntimeConfigService } from "./plugin-runtime-config.js";
 import { companyService } from "./companies.js";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
@@ -482,6 +483,7 @@ export function buildHostServices(
   const issueApprovals = issueApprovalService(db);
   const assets = assetService(db);
   const issueCustomFields = issueCustomFieldService(db);
+  const runtimeConfig = createPluginRuntimeConfigService(db);
   const scopedBus = eventBus.forPlugin(pluginKey);
 
   // Track active session event subscriptions for cleanup
@@ -760,6 +762,17 @@ export function buildHostServices(
       async get() {
         const configRow = await registry.getConfig(pluginId);
         return configRow?.configJson ?? {};
+      },
+      runtime: {
+        async get() {
+          return runtimeConfig.getRuntime(pluginId);
+        },
+        async set(params: { patch: Record<string, unknown> }) {
+          return runtimeConfig.setRuntime(pluginId, params.patch);
+        },
+        async unset(params: { key: string }) {
+          return runtimeConfig.unsetRuntime(pluginId, params.key);
+        },
       },
     },
 

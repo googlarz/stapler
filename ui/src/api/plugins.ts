@@ -420,4 +420,21 @@ export const pluginsApi = {
       params,
       renderEnvironment: renderEnvironment ?? undefined,
     }),
+
+  // ===========================================================================
+  // Plugin runtime config endpoints (operator inspect / clear)
+  // ===========================================================================
+
+  /**
+   * Fetch the current plugin-managed runtime configuration and revision.
+   */
+  getRuntimeConfig: (pluginId: string) =>
+    api.get<{ values: Record<string, unknown>; revision: string }>(`/plugins/${pluginId}/runtime-config`),
+
+  /**
+   * Clear all plugin-managed runtime configuration for a plugin.
+   * Restricted to instance admins.
+   */
+  clearRuntimeConfig: (pluginId: string) =>
+    api.delete<void>(`/plugins/${pluginId}/runtime-config`),
 };
