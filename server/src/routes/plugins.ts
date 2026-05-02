@@ -728,13 +728,19 @@ export function pluginRoutes(
    * Errors: 501 if tool dispatcher is not configured
    */
   router.get("/plugins/tools", async (req, res) => {
-    assertBoardOrgAccess(req);
+    assertAuthenticated(req);
 
     if (!toolDeps) {
       res.status(501).json({ error: "Plugin tool dispatch is not enabled" });
       return;
     }
 
+    // Plugin tools are instance-global by design: installation is gated by
+    // assertInstanceAdmin, so the registry is shared across all companies on
+    // the instance. Any authenticated actor (board or agent) sees the same
+    // tool list. Per-company isolation lives on the execute path via
+    // assertCompanyAccess + validateToolRunContextScope. If per-company plugin
+    // registration is ever added, this route must add a companyId filter.
     const pluginId = req.query.pluginId as string | undefined;
     const filter = pluginId ? { pluginId } : undefined;
     const tools = toolDeps.toolDispatcher.listToolsForAgent(filter);
@@ -762,7 +768,7 @@ export function pluginRoutes(
    * - 502 if the plugin worker is unavailable or the RPC call fails
    */
   router.post("/plugins/tools/execute", async (req, res) => {
-    assertBoardOrgAccess(req);
+    assertAuthenticated(req);
 
     if (!toolDeps) {
       res.status(501).json({ error: "Plugin tool dispatch is not enabled" });

@@ -101,6 +101,16 @@ function boardActor(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function agentActor(overrides: Record<string, unknown> = {}) {
+  return {
+    type: "agent",
+    agentId: agentA,
+    companyId: companyA,
+    source: "agent_key",
+    ...overrides,
+  };
+}
+
 function readyPlugin() {
   mockRegistry.getById.mockResolvedValue({
     id: pluginId,
@@ -541,5 +551,137 @@ describe.sequential("plugin tool and bridge authz", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ runId: "run-1", jobId: "job-1" });
     expect(scheduler.triggerJob).toHaveBeenCalledWith("job-1", "manual");
+  });
+});
+
+describe.sequential("plugin tool dispatch agent actor access", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("rejects unauthenticated requests to GET /plugins/tools with 401", async () => {
+    const listToolsForAgent = vi.fn().mockReturnValue([]);
+    const { app } = await createApp({ type: "none", source: "none" }, {}, {
+      toolDeps: {
+        toolDispatcher: { listToolsForAgent, getTool: vi.fn(), executeTool: vi.fn() },
+      },
+    });
+
+    const res = await request(app).get("/api/plugins/tools");
+
+    expect(res.status).toBe(401);
+    expect(listToolsForAgent).not.toHaveBeenCalled();
+  });
+
+  it("allows agent actors to list tools via GET /plugins/tools", async () => {
+    const listToolsForAgent = vi.fn().mockReturnValue([{ name: "paperclip.example:search" }]);
+    const { app } = await createApp(agentActor(), {}, {
+      toolDeps: {
+        toolDispatcher: { listToolsForAgent, getTool: vi.fn(), executeTool: vi.fn() },
+      },
+    });
+
+    const res = await request(app).get("/api/plugins/tools");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([{ name: "paperclip.example:search" }]);
+    expect(listToolsForAgent).toHaveBeenCalled();
+  });
+
+  it("allows board actors to list tools via GET /plugins/tools (no regression)", async () => {
+    const listToolsForAgent = vi.fn().mockReturnValue([]);
+    const { app } = await createApp(boardActor(), {}, {
+      toolDeps: {
+        toolDispatcher: { listToolsForAgent, getTool: vi.fn(), executeTool: vi.fn() },
+      },
+    });
+
+    const res = await request(app).get("/api/plugins/tools");
+
+    expect(res.status).toBe(200);
+    expect(listToolsForAgent).toHaveBeenCalled();
+  });
+
+  it("returns the same instance-global tool list to agents from any company on GET /plugins/tools", async () => {
+    const tool = { name: "paperclip.example:search" };
+    const listToolsForAgent = vi.fn().mockReturnValue([tool]);
+    const { app } = await createApp(agentActor({ companyId: companyB }), {}, {
+      toolDeps: {
+        toolDispatcher: { listToolsForAgent, getTool: vi.fn(), executeTool: vi.fn() },
+      },
+    });
+
+    const res = await request(app).get("/api/plugins/tools");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([tool]);
+    expect(listToolsForAgent).toHaveBeenCalled();
+  });
+
+  it("allows agent actors in-company to execute tools via POST /plugins/tools/execute", async () => {
+    const executeTool = vi.fn().mockResolvedValue({ content: "result" });
+    const { app } = await createApp(agentActor(), {}, {
+      db: createSelectQueueDb([
+        [{ companyId: companyA }],
+        [{ companyId: companyA, agentId: agentA }],
+        [{ companyId: companyA }],
+      ]),
+      toolDeps: {
+        toolDispatcher: {
+          listToolsForAgent: vi.fn(),
+          getTool: vi.fn(() => ({ name: "paperclip.example:search" })),
+          executeTool,
+        },
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/plugins/tools/execute")
+      .send({
+        tool: "paperclip.example:search",
+        parameters: { q: "test" },
+        runContext: {
+          agentId: agentA,
+          runId: runA,
+          companyId: companyA,
+          projectId: projectA,
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(executeTool).toHaveBeenCalledWith(
+      "paperclip.example:search",
+      { q: "test" },
+      { agentId: agentA, runId: runA, companyId: companyA, projectId: projectA },
+    );
+  });
+
+  it("rejects agent actors cross-company on POST /plugins/tools/execute with 403", async () => {
+    const executeTool = vi.fn();
+    const { app } = await createApp(agentActor({ companyId: companyA }), {}, {
+      toolDeps: {
+        toolDispatcher: {
+          listToolsForAgent: vi.fn(),
+          getTool: vi.fn(),
+          executeTool,
+        },
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/plugins/tools/execute")
+      .send({
+        tool: "paperclip.example:search",
+        parameters: {},
+        runContext: {
+          agentId: agentA,
+          runId: runA,
+          companyId: companyB,
+          projectId: projectA,
+        },
+      });
+
+    expect(res.status).toBe(403);
+    expect(executeTool).not.toHaveBeenCalled();
   });
 });
