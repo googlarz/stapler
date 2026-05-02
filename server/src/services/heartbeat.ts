@@ -152,6 +152,7 @@ const LIVENESS_BOOKKEEPING_ACTIVITY_ACTIONS = [
 ];
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const WAKE_COMMENT_IDS_KEY = "wakeCommentIds";
+const WAKE_INTERACTION_IDS_KEY = "wakeInteractionIds";
 const STAPLER_WAKE_PAYLOAD_KEY = "paperclipWake";
 const STAPLER_HARNESS_CHECKOUT_KEY = "paperclipHarnessCheckedOut";
 const DETACHED_PROCESS_ERROR_CODE = "process_detached";
@@ -1675,6 +1676,49 @@ function mergeWakeCommentIds(...values: Array<unknown>): string[] {
   return merged;
 }
 
+function extractWakeInteractionIds(
+  contextSnapshot: Record<string, unknown> | null | undefined,
+): string[] {
+  const raw = contextSnapshot?.[WAKE_INTERACTION_IDS_KEY];
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const entry of raw) {
+    const value = readNonEmptyString(entry);
+    if (!value || out.includes(value)) continue;
+    out.push(value);
+  }
+  return out;
+}
+
+function mergeWakeInteractionIds(...values: Array<unknown>): string[] {
+  const merged: string[] = [];
+  const append = (value: unknown) => {
+    const normalized = readNonEmptyString(value);
+    if (!normalized || merged.includes(normalized)) return;
+    merged.push(normalized);
+  };
+
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      for (const entry of value) append(entry);
+      continue;
+    }
+    if (typeof value === "object" && value !== null) {
+      const candidate = value as Record<string, unknown>;
+      const batched = extractWakeInteractionIds(candidate);
+      if (batched.length > 0) {
+        for (const entry of batched) append(entry);
+        continue;
+      }
+      append(candidate.interactionId);
+      continue;
+    }
+    append(value);
+  }
+
+  return merged;
+}
+
 function enrichWakeContextSnapshot(input: {
   contextSnapshot: Record<string, unknown>;
   reason: string | null;
@@ -1685,9 +1729,11 @@ function enrichWakeContextSnapshot(input: {
   const { contextSnapshot, reason, source, triggerDetail, payload } = input;
   const issueIdFromPayload = readNonEmptyString(payload?.["issueId"]);
   const commentIdFromPayload = readNonEmptyString(payload?.["commentId"]);
+  const interactionIdFromPayload = readNonEmptyString(payload?.["interactionId"]);
   const taskKey = deriveTaskKey(contextSnapshot, payload);
   const wakeCommentId = deriveCommentId(contextSnapshot, payload);
   const wakeCommentIds = mergeWakeCommentIds(contextSnapshot, commentIdFromPayload);
+  const wakeInteractionIds = mergeWakeInteractionIds(contextSnapshot, interactionIdFromPayload);
 
   if (!readNonEmptyString(contextSnapshot["wakeReason"]) && reason) {
     contextSnapshot.wakeReason = reason;
@@ -1714,6 +1760,10 @@ function enrichWakeContextSnapshot(input: {
     delete contextSnapshot[STAPLER_WAKE_PAYLOAD_KEY];
   } else if (!readNonEmptyString(contextSnapshot["wakeCommentId"]) && wakeCommentId) {
     contextSnapshot.wakeCommentId = wakeCommentId;
+  }
+  if (wakeInteractionIds.length > 0) {
+    contextSnapshot[WAKE_INTERACTION_IDS_KEY] = wakeInteractionIds;
+    contextSnapshot.interactionId = wakeInteractionIds[wakeInteractionIds.length - 1];
   }
   if (!readNonEmptyString(contextSnapshot["wakeSource"]) && source) {
     contextSnapshot.wakeSource = source;
@@ -1750,6 +1800,13 @@ export function mergeCoalescedContextSnapshot(
     // The merged context should carry canonical comment ids; the next wake will
     // regenerate any structured payload from those ids.
     delete merged[STAPLER_WAKE_PAYLOAD_KEY];
+  }
+  const mergedInteractionIds = mergeWakeInteractionIds(existing, incoming);
+  if (mergedInteractionIds.length > 0) {
+    merged[WAKE_INTERACTION_IDS_KEY] = mergedInteractionIds;
+    // Keep the scalar field pointing at the latest accepted interaction for
+    // backward compatibility with code that reads `interactionId` directly.
+    merged.interactionId = mergedInteractionIds[mergedInteractionIds.length - 1];
   }
   return merged;
 }
