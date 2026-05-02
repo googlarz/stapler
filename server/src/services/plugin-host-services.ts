@@ -851,6 +851,12 @@ export function buildHostServices(
       async resolve(params) {
         return secretsHandler.resolve(params);
       },
+      async write(params) {
+        return secretsHandler.write(params);
+      },
+      async delete(params) {
+        return secretsHandler.delete(params);
+      },
     },
 
     activity: {
