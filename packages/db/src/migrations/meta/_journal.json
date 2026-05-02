@@ -708,6 +708,13 @@
       "when": 1777747200000,
       "tag": "0100_plugin_config_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1777833600000,
+      "tag": "0101_heartbeat_liveness",
+      "breakpoints": true
     }
   ]
 }

@@ -763,6 +763,7 @@ const heartbeatRunIssueSummaryColumns = {
   lastOutputSeq: heartbeatRuns.lastOutputSeq,
   lastOutputStream: heartbeatRuns.lastOutputStream,
   lastOutputBytes: heartbeatRuns.lastOutputBytes,
+  lastLivenessAt: heartbeatRuns.lastLivenessAt,
   issueId: sql<string | null>`${heartbeatRuns.contextSnapshot} ->> 'issueId'`.as("issueId"),
 } as const;
 
@@ -3160,6 +3161,14 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     }
   }
 
+  async function touchRunLiveness(runId: string, at?: Date): Promise<void> {
+    const stamp = at ?? new Date();
+    await db
+      .update(heartbeatRuns)
+      .set({ lastLivenessAt: stamp, updatedAt: stamp })
+      .where(eq(heartbeatRuns.id, runId));
+  }
+
   async function appendRunEvent(
     run: typeof heartbeatRuns.$inferSelect,
     seq: number,
@@ -3196,6 +3205,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       message: sanitizedMessage,
       payload: sanitizedPayload,
     });
+
+    await touchRunLiveness(run.id);
 
     publishLiveEvent({
       companyId: run.companyId,
@@ -4817,7 +4828,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
   async function buildRunOutputSilence(
     run: Pick<
       typeof heartbeatRuns.$inferSelect,
-      "id" | "companyId" | "status" | "lastOutputAt" | "lastOutputSeq" | "lastOutputStream" | "processStartedAt" | "startedAt" | "createdAt"
+      "id" | "companyId" | "status" | "lastLivenessAt" | "lastOutputAt" | "lastOutputSeq" | "lastOutputStream" | "processStartedAt" | "startedAt" | "createdAt"
     >,
     now = new Date(),
   ) {
@@ -5642,6 +5653,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           lastOutputSeq: pendingOutputProgress.seq,
           lastOutputStream: pendingOutputProgress.stream,
           lastOutputBytes: pendingOutputProgress.bytes,
+          lastLivenessAt: pendingOutputProgress.at,
           updatedAt: new Date(),
         })
         .where(eq(heartbeatRuns.id, run.id));
@@ -7880,6 +7892,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     reconcileProductivityReviews,
 
     buildRunOutputSilence,
+
+    touchRunLiveness,
 
     tickTimers: async (now = new Date()) => {
       const allAgents = await db.select().from(agents);
