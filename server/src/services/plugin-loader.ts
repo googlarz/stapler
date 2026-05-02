@@ -931,8 +931,17 @@ export function pluginLoader(
     let raw: unknown;
 
     try {
+      // Append mtime as a query param so Node.js bypasses its module cache
+      // when the manifest file has been modified (e.g. during plugin dev).
+      let cacheBustedPath = manifestPath;
+      try {
+        const fileStat = await stat(manifestPath);
+        cacheBustedPath = `${manifestPath}?v=${fileStat.mtimeMs}`;
+      } catch {
+        // stat failed — fall back to the plain path (no cache-busting)
+      }
       // Dynamic import works for both .js (ESM) and .cjs (CJS) manifests
-      const mod = await import(manifestPath) as Record<string, unknown>;
+      const mod = await import(cacheBustedPath) as Record<string, unknown>;
       // The manifest may be the default export or the module itself
       raw = mod["default"] ?? mod;
     } catch (err) {
