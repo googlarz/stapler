@@ -88,3 +88,4 @@ export { delegationEdges } from "./delegation_edges.js";
 export { playbooks } from "./playbooks.js";
 export { playbookExperiments } from "./playbook_experiments.js";
 export { skillInvocations } from "./skill_invocations.js";
+export { issueCustomFields } from "./issue_custom_fields.js";

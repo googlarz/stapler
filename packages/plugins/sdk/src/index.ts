@@ -208,6 +208,8 @@ export type {
   PluginIssueAssigneeSummary,
   PluginIssueSubtree,
   PluginIssueSummariesClient,
+  IssueCustomField,
+  IssueCustomFieldsClient,
   PluginAgentsClient,
   PluginAgentSessionsClient,
   AgentSession,

@@ -46,6 +46,7 @@ import type {
   PluginWorkspace,
   ToolRunContext,
   ToolResult,
+  IssueCustomField,
 } from "./types.js";
 import type {
   PluginHealthDiagnostics,
@@ -915,6 +916,20 @@ export interface WorkerToHostMethods {
   "issues.documents.delete": [
     params: { issueId: string; key: string; companyId: string },
     result: void,
+  ];
+
+  // Issue custom fields (WS-4)
+  "issues.customFields.set": [
+    params: { companyId: string; issueId: string; key: string; value: string },
+    result: void,
+  ];
+  "issues.customFields.unset": [
+    params: { companyId: string; issueId: string; key: string },
+    result: void,
+  ];
+  "issues.customFields.listForIssue": [
+    params: { companyId: string; issueId: string },
+    result: IssueCustomField[],
   ];
 
   // Agents (read)

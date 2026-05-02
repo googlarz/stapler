@@ -241,4 +241,16 @@ export const issuesApi = {
   updateWorkProduct: (id: string, data: Record<string, unknown>) =>
     api.patch<IssueWorkProduct>(`/work-products/${id}`, data),
   deleteWorkProduct: (id: string) => api.delete<IssueWorkProduct>(`/work-products/${id}`),
+  listCustomFields: (id: string) => api.get<{ customFields: IssueCustomField[] }>(`/issues/${id}/custom-fields`),
 };
+
+export interface IssueCustomField {
+  pluginId: string;
+  pluginKey: string;
+  pluginDisplayName: string;
+  key: string;
+  type: "text" | "number" | "url" | "enum-ref";
+  label: string;
+  valueText: string | null;
+  valueNumber: number | null;
+}

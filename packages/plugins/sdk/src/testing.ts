@@ -1013,6 +1013,21 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
           };
         },
       },
+      customFields: {
+        async set(params) {
+          requireCapability(manifest, capabilitySet, "issue.custom-fields.write");
+          void params;
+        },
+        async unset(params) {
+          requireCapability(manifest, capabilitySet, "issue.custom-fields.write");
+          void params;
+        },
+        async listForIssue(params) {
+          requireCapability(manifest, capabilitySet, "issue.custom-fields.read");
+          void params;
+          return [];
+        },
+      },
     },
     agents: {
       async list(input) {
