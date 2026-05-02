@@ -77,6 +77,7 @@ import { executionWorkspaceService as executionWorkspaceServiceDirect } from "..
 import { feedbackService } from "../services/feedback.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import { environmentService } from "../services/environments.js";
+import { environmentRunOrchestrator } from "../services/environment-run-orchestrator.js";
 import {
   applyIssueExecutionPolicyTransition,
   normalizeIssueExecutionPolicy,
@@ -430,6 +431,9 @@ export function issueRoutes(
   };
   const feedbackExportService = opts?.feedbackExportService;
   const environmentsSvc = environmentService(db);
+  const envOrchestrator = environmentRunOrchestrator(db, {
+    pluginWorkerManager: opts.pluginWorkerManager,
+  });
   function withContentPath<T extends { id: string }>(attachment: T) {
     return {
       ...attachment,
@@ -2649,6 +2653,13 @@ export function issueRoutes(
 
       const becameTerminal =
         !["done", "cancelled"].includes(existing.status) && ["done", "cancelled"].includes(issue.status);
+      if (becameTerminal) {
+        envOrchestrator
+          .releaseForIssue({ issueId: issue.id, companyId: issue.companyId })
+          .catch((err) =>
+            logger.warn({ err, issueId: issue.id }, "failed to release environment leases on issue terminal status"),
+          );
+      }
       if (becameTerminal && issue.parentId) {
         const parent = await svc.getWakeableParentAfterChildCompletion(issue.parentId);
         if (parent) {
