@@ -7918,6 +7918,32 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
 
     cancelRun: (runId: string) => cancelRunInternal(runId),
 
+    /**
+     * Approve a run that is in `needs_review` state.
+     * Transitions it to `succeeded` so it proceeds normally.
+     */
+    approveRun: async (runId: string) => {
+      const run = await getRun(runId);
+      if (!run) throw notFound("Heartbeat run not found");
+      if (run.status !== "needs_review") return run;
+      return setRunStatus(run.id, "succeeded", { finishedAt: run.finishedAt ?? new Date() });
+    },
+
+    /**
+     * Reject a run that is in `needs_review` state.
+     * Transitions it to `failed` so post-mortem can fire.
+     */
+    rejectRun: async (runId: string) => {
+      const run = await getRun(runId);
+      if (!run) throw notFound("Heartbeat run not found");
+      if (run.status !== "needs_review") return run;
+      return setRunStatus(run.id, "failed", {
+        finishedAt: run.finishedAt ?? new Date(),
+        error: "Rejected by reviewer",
+        errorCode: "reviewer_rejected",
+      });
+    },
+
     cancelActiveForAgent: (agentId: string) => cancelActiveForAgentInternal(agentId),
 
     cancelBudgetScopeWork,
