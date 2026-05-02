@@ -231,7 +231,7 @@ export async function fetchClaudeQuota(token: string): Promise<QuotaWindow[]> {
   }
   if (body.seven_day != null) {
     windows.push({
-      label: "Current week (all models)",
+      label: "Weekly (all models)",
       usedPercent: toPercent(body.seven_day.utilization),
       resetsAt: body.seven_day.resets_at ?? null,
       valueLabel: null,
@@ -240,7 +240,7 @@ export async function fetchClaudeQuota(token: string): Promise<QuotaWindow[]> {
   }
   if (body.seven_day_sonnet != null) {
     windows.push({
-      label: "Current week (Sonnet only)",
+      label: "Weekly (Sonnet)",
       usedPercent: toPercent(body.seven_day_sonnet.utilization),
       resetsAt: body.seven_day_sonnet.resets_at ?? null,
       valueLabel: null,
@@ -249,7 +249,7 @@ export async function fetchClaudeQuota(token: string): Promise<QuotaWindow[]> {
   }
   if (body.seven_day_opus != null) {
     windows.push({
-      label: "Current week (Opus only)",
+      label: "Weekly (Opus)",
       usedPercent: toPercent(body.seven_day_opus.utilization),
       resetsAt: body.seven_day_opus.resets_at ?? null,
       valueLabel: null,
@@ -334,11 +334,14 @@ function percentFromLine(line: string): number | null {
 function isQuotaLabel(line: string): boolean {
   const normalized = normalizeForLabelSearch(line);
   return normalized === "currentsession"
-    || normalized === "currentweekallmodels"
-    || normalized === "currentweeksonnetonly"
-    || normalized === "currentweeksonnet"
-    || normalized === "currentweekopusonly"
-    || normalized === "currentweekopus"
+    || normalized === "currentweekallmodels" // upstream CLI heading
+    || normalized === "weeklyallmodels"      // our renamed label, round-trip safety
+    || normalized === "currentweeksonnetonly" // upstream CLI heading
+    || normalized === "currentweeksonnet"     // upstream CLI heading (older form)
+    || normalized === "weeklysonnet"          // our renamed label, round-trip safety
+    || normalized === "currentweekopusonly"   // upstream CLI heading
+    || normalized === "currentweekopus"       // upstream CLI heading (older form)
+    || normalized === "weeklyopus"            // our renamed label, round-trip safety
     || normalized === "extrausage";
 }
 
@@ -346,14 +349,17 @@ function canonicalQuotaLabel(line: string): string {
   switch (normalizeForLabelSearch(line)) {
     case "currentsession":
       return "Current session";
-    case "currentweekallmodels":
-      return "Current week (all models)";
-    case "currentweeksonnetonly":
-    case "currentweeksonnet":
-      return "Current week (Sonnet only)";
-    case "currentweekopusonly":
-    case "currentweekopus":
-      return "Current week (Opus only)";
+    case "currentweekallmodels": // upstream CLI heading
+    case "weeklyallmodels":      // our renamed label, round-trip safety
+      return "Weekly (all models)";
+    case "currentweeksonnetonly": // upstream CLI heading
+    case "currentweeksonnet":     // upstream CLI heading (older form)
+    case "weeklysonnet":          // our renamed label, round-trip safety
+      return "Weekly (Sonnet)";
+    case "currentweekopusonly": // upstream CLI heading
+    case "currentweekopus":     // upstream CLI heading (older form)
+    case "weeklyopus":          // our renamed label, round-trip safety
+      return "Weekly (Opus)";
     case "extrausage":
       return "Extra usage";
     default:
