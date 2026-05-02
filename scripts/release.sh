@@ -263,8 +263,8 @@ if [ "$dry_run" = true ]; then
   release_info "==> Step 6/7: Skipping npm verification in dry-run mode..."
 else
   release_info "==> Step 6/7: Confirming npm package availability..."
-  VERIFY_ATTEMPTS="${NPM_PUBLISH_VERIFY_ATTEMPTS:-12}"
-  VERIFY_DELAY_SECONDS="${NPM_PUBLISH_VERIFY_DELAY_SECONDS:-5}"
+  VERIFY_ATTEMPTS="${NPM_PUBLISH_VERIFY_ATTEMPTS:-24}"
+  VERIFY_DELAY_SECONDS="${NPM_PUBLISH_VERIFY_DELAY_SECONDS:-10}"
   MISSING_PUBLISHED_PACKAGES=""
 
   while IFS=$'\t' read -r _pkg_dir pkg_name pkg_version; do
