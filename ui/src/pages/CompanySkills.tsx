@@ -1051,7 +1051,7 @@ export function CompanySkills() {
       pushToast({
         tone: "success",
         title: "Skill removed",
-        body: `${skill.name} was removed from the company skill library.`,
+        body: `${deleteTargetDetail?.name ?? deleteTargetSkillId} was removed from the company skill library.`,
       });
     },
     onError: (error) => {

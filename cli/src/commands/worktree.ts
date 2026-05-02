@@ -51,7 +51,7 @@ import { ensureAgentJwtSecret, loadPaperclipEnvFile, mergePaperclipEnvEntries, r
 import { expandHomePrefix } from "../config/home.js";
 import type { PaperclipConfig } from "../config/schema.js";
 import { readConfig, resolveConfigPath, writeConfig } from "../config/store.js";
-import { printPaperclipCliBanner } from "../utils/banner.js";
+import { printStaplerCliBanner } from "../utils/banner.js";
 import { resolveRuntimeLikePath } from "../utils/path-resolver.js";
 import {
   buildWorktreeConfig,
@@ -1491,13 +1491,13 @@ async function runWorktreeInit(opts: WorktreeInitOptions): Promise<void> {
 }
 
 export async function worktreeInitCommand(opts: WorktreeInitOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree init ")));
   await runWorktreeInit(opts);
 }
 
 export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree:make ")));
 
   const name = resolveWorktreeMakeName(nameArg);
@@ -1710,7 +1710,7 @@ function worktreePathHasUncommittedChanges(worktreePath: string): boolean {
 }
 
 export async function worktreeCleanupCommand(nameArg: string, opts: WorktreeCleanupOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree:cleanup ")));
 
   const name = resolveWorktreeMakeName(nameArg);
@@ -3148,13 +3148,13 @@ async function runWorktreeReseed(opts: WorktreeReseedOptions): Promise<void> {
 }
 
 export async function worktreeReseedCommand(opts: WorktreeReseedOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree reseed ")));
   await runWorktreeReseed(opts);
 }
 
 export async function worktreeRepairCommand(opts: WorktreeRepairOptions): Promise<void> {
-  printPaperclipCliBanner();
+  printStaplerCliBanner();
   p.intro(pc.bgCyan(pc.black(" stapler worktree repair ")));
 
   const seedMode = opts.seedMode ?? "minimal";

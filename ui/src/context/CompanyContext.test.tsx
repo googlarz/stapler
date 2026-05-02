@@ -47,6 +47,7 @@ function makeCompany(id: string): Company {
     brandColor: null,
     logoAssetId: null,
     logoUrl: null,
+    defaultModel: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

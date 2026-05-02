@@ -54,7 +54,6 @@ const ORIGINAL_ENV = { ...process.env };
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const itEmbeddedPostgres = embeddedPostgresSupport.supported ? it : it.skip;
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
-const itEmbeddedPostgres = embeddedPostgresSupport.supported ? it : it.skip;
 
 if (!embeddedPostgresSupport.supported) {
   console.warn(
