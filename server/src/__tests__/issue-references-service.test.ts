@@ -9,7 +9,7 @@ import {
   issueDocuments,
   issueReferenceMentions,
   issues,
-} from "@paperclipai/db";
+} from "@stapler/db";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,

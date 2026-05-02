@@ -7,8 +7,8 @@ import {
   documents,
   issueDocuments,
   issues,
-} from "@paperclipai/db";
-import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@paperclipai/shared";
+} from "@stapler/db";
+import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@stapler/shared";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,

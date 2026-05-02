@@ -375,6 +375,29 @@ export function activityService(db: Db) {
         )
         .orderBy(desc(activityLog.createdAt)),
 
+    forRun: async (runId: string, action?: string) => {
+      const run = await db
+        .select({ companyId: heartbeatRuns.companyId })
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.id, runId))
+        .then((rows) => rows[0] ?? null);
+      if (!run) return [];
+
+      const conditions: ReturnType<typeof eq>[] = [
+        eq(activityLog.companyId, run.companyId),
+        eq(activityLog.runId, runId),
+      ];
+      if (action) {
+        conditions.push(eq(activityLog.action, action));
+      }
+
+      return db
+        .select()
+        .from(activityLog)
+        .where(and(...conditions))
+        .orderBy(asc(activityLog.createdAt));
+    },
+
     runsForIssue: async (companyId: string, issueId: string) => {
       scheduleRunLivenessBackfill(companyId, issueId);
       const runs = await db

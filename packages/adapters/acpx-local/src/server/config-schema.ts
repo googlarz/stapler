@@ -1,4 +1,4 @@
-import type { AdapterConfigSchema } from "@paperclipai/adapter-utils";
+import type { AdapterConfigSchema } from "@stapler/adapter-utils";
 import {
   DEFAULT_ACPX_LOCAL_AGENT,
   DEFAULT_ACPX_LOCAL_MODE,

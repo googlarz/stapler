@@ -1,12 +1,12 @@
 import { and, asc, desc, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
 import {
   DEFAULT_ISSUE_GRAPH_LIVENESS_AUTO_RECOVERY_LOOKBACK_HOURS,
   MAX_ISSUE_GRAPH_LIVENESS_AUTO_RECOVERY_LOOKBACK_HOURS,
   MIN_ISSUE_GRAPH_LIVENESS_AUTO_RECOVERY_LOOKBACK_HOURS,
   type IssueGraphLivenessAutoRecoveryPreview,
   type IssueGraphLivenessAutoRecoveryPreviewItem,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import {
   agents,
   agentWakeupRequests,
@@ -19,7 +19,7 @@ import {
   issueRelations,
   issueThreadInteractions,
   issues,
-} from "@paperclipai/db";
+} from "@stapler/db";
 import { parseObject, asBoolean, asNumber } from "../../adapters/utils.js";
 import { runningProcesses } from "../../adapters/index.js";
 import { forbidden, notFound } from "../../errors.js";

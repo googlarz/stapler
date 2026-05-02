@@ -30,7 +30,7 @@ packages/adapters/<name>/
       build-config.ts   # CreateConfigValues -> adapterConfig JSON for agent creation form
     cli/
       index.ts          # CLI exports: formatStdoutEvent
-      format-event.ts   # Colored terminal output for `paperclipai run --watch`
+      format-event.ts   # Colored terminal output for `stapler run --watch`
   package.json
   tsconfig.json
 ```
@@ -395,7 +395,7 @@ The component must support both `create` mode (using `values`/`set`) and `edit` 
 
 #### `cli/format-event.ts` — Terminal Formatter
 
-Pretty-prints stdout lines for `paperclipai run --watch`. Use `picocolors` for coloring.
+Pretty-prints stdout lines for `stapler run --watch`. Use `picocolors` for coloring.
 
 ```ts
 import pc from "picocolors";
@@ -548,7 +548,7 @@ Import from `@stapler/adapter-utils/server-utils`:
 ### Prompt Templates
 - Support `promptTemplate` for every run
 - Use `renderTemplate()` with the standard variable set
-- Default prompt should use `DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE` from `@paperclipai/adapter-utils/server-utils` so local adapters share Paperclip's execution contract: act in the same heartbeat, avoid planning-only exits unless requested, leave durable progress and a next action, use child issues instead of polling, mark blockers with owner/action, and respect governance boundaries.
+- Default prompt should use `DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE` from `@stapler/adapter-utils/server-utils` so local adapters share Paperclip's execution contract: act in the same heartbeat, avoid planning-only exits unless requested, leave durable progress and a next action, use child issues instead of polling, mark blockers with owner/action, and respect governance boundaries.
 
 ### Error Handling
 - Differentiate timeout vs process error vs parse failure

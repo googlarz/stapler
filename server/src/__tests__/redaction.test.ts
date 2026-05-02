@@ -90,7 +90,7 @@ describe("redaction", () => {
       command: "custom-acp --token ghp_example_secret env OPENAI_API_KEY=sk-live-example custom-acp",
       commandArgs: ["--safe", "ok", "--token", "ghp_arg_secret", "--api-key=sk-inline-example"],
       env: {
-        PAPERCLIP_RESOLVED_COMMAND: "env OPENAI_API_KEY=sk-live-example custom-acp --token ghp_example_secret",
+        STAPLER_RESOLVED_COMMAND: "env OPENAI_API_KEY=sk-live-example custom-acp --token ghp_example_secret",
         SAFE_VALUE: "visible",
       },
     };
@@ -108,7 +108,7 @@ describe("redaction", () => {
       `--api-key=${REDACTED_EVENT_VALUE}`,
     ]);
     expect(result?.env).toEqual({
-      PAPERCLIP_RESOLVED_COMMAND:
+      STAPLER_RESOLVED_COMMAND:
         `env OPENAI_API_KEY=${REDACTED_EVENT_VALUE} custom-acp --token ${REDACTED_EVENT_VALUE}`,
       SAFE_VALUE: "visible",
     });

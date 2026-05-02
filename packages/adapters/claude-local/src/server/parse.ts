@@ -7,6 +7,9 @@ import {
 } from "@stapler/adapter-utils/server-utils";
 
 const CLAUDE_AUTH_REQUIRED_RE = /(?:not\s+logged\s+in|please\s+log\s+in|please\s+run\s+`?claude\s+login`?|login\s+required|requires\s+login|unauthorized|authentication\s+required)/i;
+const CLAUDE_USAGE_LIMIT_RE =
+  /\byou'?ve\s+hit\s+your\s+(?:\w+\s+)?limit\b|\b(?:usage|rate)\s+limit\s+(?:reached|exceeded|hit)\b/i;
+const CLAUDE_RESET_TIME_RE = /resets\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:\(?(?:UTC|GMT)\)?)?/i;
 const URL_RE = /(https?:\/\/[^\s'"`<>()[\]{};,!?]+[^\s'"`<>()[\]{};,!.?:]+)/gi;
 
 const CLAUDE_TRANSIENT_UPSTREAM_RE =
@@ -380,4 +383,55 @@ export function isClaudeTransientUpstreamError(input: {
   const haystack = buildClaudeTransientHaystack(input);
   if (!haystack) return false;
   return CLAUDE_TRANSIENT_UPSTREAM_RE.test(haystack);
+}
+
+export function isClaudeUsageLimitResult(parsed: Record<string, unknown> | null | undefined): boolean {
+  if (!parsed) return false;
+  const resultText = asString(parsed.result, "").trim();
+  const allMessages = [resultText, ...extractClaudeErrorMessages(parsed)]
+    .map((msg) => msg.trim())
+    .filter(Boolean);
+
+  return allMessages.some((msg) => CLAUDE_USAGE_LIMIT_RE.test(msg));
+}
+
+export function extractClaudeUsageLimitReset(
+  parsed: Record<string, unknown> | null | undefined,
+  now = new Date(),
+): string | null {
+  if (!parsed) return null;
+  const resultText = asString(parsed.result, "").trim();
+  const allMessages = [resultText, ...extractClaudeErrorMessages(parsed)]
+    .map((msg) => msg.trim())
+    .filter(Boolean);
+
+  for (const message of allMessages) {
+    const match = message.match(CLAUDE_RESET_TIME_RE);
+    if (!match) continue;
+    const hourRaw = Number(match[1]);
+    const minuteRaw = match[2] ? Number(match[2]) : 0;
+    if (!Number.isFinite(hourRaw) || hourRaw < 1 || hourRaw > 23) continue;
+    if (!Number.isFinite(minuteRaw) || minuteRaw < 0 || minuteRaw > 59) continue;
+
+    const meridiem = match[3]?.toLowerCase();
+    let hour = hourRaw;
+    if (meridiem === "pm" && hour < 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+
+    const reset = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      hour,
+      minuteRaw,
+      0,
+      0,
+    ));
+    if (reset.getTime() <= now.getTime()) {
+      reset.setUTCDate(reset.getUTCDate() + 1);
+    }
+    return reset.toISOString();
+  }
+
+  return null;
 }

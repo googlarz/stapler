@@ -17,7 +17,7 @@ Set these shell variables for the rest of the guide:
 ```bash
 export AWS_REGION=us-east-1
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export PAPERCLIP_DOMAIN=paperclip.example.com   # your domain
+export STAPLER_DOMAIN=paperclip.example.com   # your domain
 export DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
 export AUTH_SECRET=$(openssl rand -base64 32)
 ```
@@ -273,7 +273,7 @@ Register the task definition using the template at `docker/ecs-task-definition.j
 sed -e "s|<ACCOUNT_ID>|$AWS_ACCOUNT_ID|g" \
     -e "s|<REGION>|$AWS_REGION|g" \
     -e "s|<EFS_ID>|$EFS_ID|g" \
-    -e "s|<DOMAIN>|$PAPERCLIP_DOMAIN|g" \
+    -e "s|<DOMAIN>|$STAPLER_DOMAIN|g" \
     docker/ecs-task-definition.json > /tmp/paperclip-task-def.json
 
 aws ecs register-task-definition \
@@ -286,7 +286,7 @@ Request a certificate (you must validate via DNS):
 
 ```bash
 CERT_ARN=$(aws acm request-certificate \
-  --domain-name $PAPERCLIP_DOMAIN \
+  --domain-name $STAPLER_DOMAIN \
   --validation-method DNS \
   --query 'CertificateArn' --output text)
 
@@ -349,7 +349,7 @@ HTTP_LISTENER_ARN=$(aws elbv2 create-listener \
 ```
 
 Point your DNS to the ALB:
-- Create a CNAME or ALIAS record for `$PAPERCLIP_DOMAIN` -> `$ALB_DNS`
+- Create a CNAME or ALIAS record for `$STAPLER_DOMAIN` -> `$ALB_DNS`
 
 ## 10. Create ECS Service
 
@@ -400,7 +400,7 @@ aws ecs describe-tasks --cluster paperclip --tasks $TASK_ARN \
 aws logs tail /ecs/paperclip --since 10m --follow
 
 # Hit the health endpoint
-curl -sf https://$PAPERCLIP_DOMAIN/api/health
+curl -sf https://$STAPLER_DOMAIN/api/health
 ```
 
 **Healthy indicators:**
@@ -415,7 +415,7 @@ After the first user has signed up (which grants admin role), lock down the inst
 ```bash
 # Disable public sign-up (prevents unauthorized users from creating accounts)
 # Add to the task definition environment section, then redeploy:
-#   { "name": "PAPERCLIP_AUTH_DISABLE_SIGN_UP", "value": "true" }
+#   { "name": "STAPLER_AUTH_DISABLE_SIGN_UP", "value": "true" }
 
 # Or update via Secrets Manager / task def override, then force new deployment
 aws ecs update-service \

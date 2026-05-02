@@ -1,11 +1,11 @@
 import { Router } from "express";
 import type { Request } from "express";
-import type { Db } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
 import {
   createIssueTreeHoldSchema,
   previewIssueTreeControlSchema,
   releaseIssueTreeHoldSchema,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import { validate } from "../middleware/validate.js";
 import { heartbeatService, issueService, issueTreeControlService, logActivity } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";

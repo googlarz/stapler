@@ -11,7 +11,7 @@ import {
   startSshEnvLabFixture,
   stopSshEnvLabFixture,
   type SshEnvironmentConfig,
-} from "@paperclipai/adapter-utils/ssh";
+} from "@stapler/adapter-utils/ssh";
 import {
   agents,
   companies,
@@ -21,8 +21,8 @@ import {
   environmentLeases,
   environments,
   heartbeatRuns,
-} from "@paperclipai/db";
-import type { Environment } from "@paperclipai/shared";
+} from "@stapler/db";
+import type { Environment } from "@stapler/shared";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
@@ -289,8 +289,8 @@ describeEmbeddedPostgres("environment runtime driver contract", () => {
     const fixture = await startSshEnvLabFixture({ statePath: path.join(fixtureRoot, "state.json") });
     const sshConfig = await buildSshEnvLabFixtureConfig(fixture);
     const runtimeApiUrl = await startHealthServer();
-    const previousCandidates = process.env.PAPERCLIP_RUNTIME_API_CANDIDATES_JSON;
-    process.env.PAPERCLIP_RUNTIME_API_CANDIDATES_JSON = JSON.stringify([runtimeApiUrl]);
+    const previousCandidates = process.env.STAPLER_RUNTIME_API_CANDIDATES_JSON;
+    process.env.STAPLER_RUNTIME_API_CANDIDATES_JSON = JSON.stringify([runtimeApiUrl]);
 
     await runContract({
       name: "ssh",
@@ -309,9 +309,9 @@ describeEmbeddedPostgres("environment runtime driver contract", () => {
       },
       setup: async () => async () => {
         if (previousCandidates === undefined) {
-          delete process.env.PAPERCLIP_RUNTIME_API_CANDIDATES_JSON;
+          delete process.env.STAPLER_RUNTIME_API_CANDIDATES_JSON;
         } else {
-          process.env.PAPERCLIP_RUNTIME_API_CANDIDATES_JSON = previousCandidates;
+          process.env.STAPLER_RUNTIME_API_CANDIDATES_JSON = previousCandidates;
         }
       },
     });

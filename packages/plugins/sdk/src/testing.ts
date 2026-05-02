@@ -721,6 +721,7 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
           completedAt: null,
           cancelledAt: null,
           hiddenAt: null,
+          scheduledFor: null,
           createdAt: now,
           updatedAt: now,
         };
@@ -1136,6 +1137,12 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
           status: input.status ?? "planned",
           parentId: input.parentId ?? null,
           ownerAgentId: input.ownerAgentId ?? null,
+          acceptanceCriteria: [],
+          targetDate: null,
+          verificationStatus: "not_started",
+          verificationAttempts: 0,
+          verifiedAt: null,
+          verificationIssueId: null,
           createdAt: now,
           updatedAt: now,
         };

@@ -842,6 +842,7 @@ export async function startServer(): Promise<StartedServer> {
         migrationSummary,
         heartbeatSchedulerEnabled: config.heartbeatSchedulerEnabled,
         heartbeatSchedulerIntervalMs: config.heartbeatSchedulerIntervalMs,
+        orphanReapStaleThresholdMs: config.orphanReapStaleThresholdMs,
         databaseBackupEnabled: config.databaseBackupEnabled,
         databaseBackupIntervalMinutes: config.databaseBackupIntervalMinutes,
         databaseBackupRetentionDays: config.databaseBackupRetentionDays,

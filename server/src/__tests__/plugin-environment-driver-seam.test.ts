@@ -10,7 +10,7 @@ import {
 } from "../../../packages/plugins/sdk/src/protocol.js";
 import { definePlugin } from "../../../packages/plugins/sdk/src/define-plugin.js";
 import { startWorkerRpcHost } from "../../../packages/plugins/sdk/src/worker-rpc-host.js";
-import { pluginManifestV1Schema, type PaperclipPluginManifestV1 } from "@paperclipai/shared";
+import { pluginManifestV1Schema, type PaperclipPluginManifestV1 } from "@stapler/shared";
 import { pluginCapabilityValidator } from "../services/plugin-capability-validator.js";
 
 const baseManifest: PaperclipPluginManifestV1 = {

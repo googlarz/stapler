@@ -195,6 +195,17 @@ export type BuiltInIssueOriginKind = (typeof ISSUE_ORIGIN_KINDS)[number];
 export type PluginIssueOriginKind = `plugin:${string}`;
 export type IssueOriginKind = BuiltInIssueOriginKind | PluginIssueOriginKind;
 
+export const GOAL_VERIFICATION_STATUSES = [
+  "not_started",
+  "pending",
+  "passed",
+  "failed",
+] as const;
+export type GoalVerificationStatus = (typeof GOAL_VERIFICATION_STATUSES)[number];
+
+/** Max auto verification cycles before we require manual retrigger. */
+export const MAX_GOAL_VERIFICATION_ATTEMPTS = 3;
+
 export const ISSUE_RELATION_TYPES = ["blocks"] as const;
 export type IssueRelationType = (typeof ISSUE_RELATION_TYPES)[number];
 
@@ -393,7 +404,7 @@ export type BudgetScopeType = (typeof BUDGET_SCOPE_TYPES)[number];
 export const BUDGET_METRICS = ["billed_cents"] as const;
 export type BudgetMetric = (typeof BUDGET_METRICS)[number];
 
-export const BUDGET_WINDOW_KINDS = ["calendar_month_utc", "lifetime"] as const;
+export const BUDGET_WINDOW_KINDS = ["calendar_day_utc", "calendar_month_utc", "lifetime"] as const;
 export type BudgetWindowKind = (typeof BUDGET_WINDOW_KINDS)[number];
 
 export const BUDGET_THRESHOLD_TYPES = ["soft", "hard"] as const;

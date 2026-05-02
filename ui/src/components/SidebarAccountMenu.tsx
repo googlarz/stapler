@@ -10,7 +10,7 @@ import {
   Sun,
   UserRoundPen,
 } from "lucide-react";
-import type { DeploymentMode } from "@paperclipai/shared";
+import type { DeploymentMode } from "@stapler/shared";
 import { Link } from "@/lib/router";
 import { authApi } from "@/api/auth";
 import { queryKeys } from "@/lib/queryKeys";

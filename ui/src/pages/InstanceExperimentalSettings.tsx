@@ -4,7 +4,7 @@ import { Clock, FlaskConical, Play, Search } from "lucide-react";
 import type {
   IssueGraphLivenessAutoRecoveryPreview,
   PatchInstanceExperimentalSettings,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";

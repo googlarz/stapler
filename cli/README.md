@@ -175,15 +175,15 @@ Paperclip handles the hard orchestration details correctly.
 Open source. Self-hosted. No Paperclip account required.
 
 ```bash
-npx paperclipai onboard --yes
+npx @googlarz/stapler onboard --yes
 ```
 
 That quickstart path now defaults to trusted local loopback mode for the fastest first run. To start in authenticated/private mode instead, choose a bind preset explicitly:
 
 ```bash
-npx paperclipai onboard --yes --bind lan
+npx @googlarz/stapler onboard --yes --bind lan
 # or:
-npx paperclipai onboard --yes --bind tailnet
+npx @googlarz/stapler onboard --yes --bind tailnet
 ```
 
 If you already have Paperclip configured, rerunning `onboard` keeps the existing config in place. Use `paperclipai configure` to edit settings.

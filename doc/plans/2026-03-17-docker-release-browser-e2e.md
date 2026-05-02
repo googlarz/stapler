@@ -12,8 +12,8 @@ HOST_PORT=3233 DATA_DIR=./data/release-smoke-stable PAPERCLIPAI_VERSION=latest .
 That is useful because it exercises the same public install surface users hit:
 
 - Docker
-- `npx paperclipai@canary`
-- `npx paperclipai@latest`
+- `npx @googlarz/stapler@canary`
+- `npx @googlarz/stapler@latest`
 - authenticated bootstrap flow
 
 But it still leaves the most important release questions to a human with a browser:

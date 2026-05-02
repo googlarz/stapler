@@ -1,4 +1,4 @@
-import type { IssueBlockerAttention, IssueRelationIssueSummary } from "@paperclipai/shared";
+import type { IssueBlockerAttention, IssueRelationIssueSummary } from "@stapler/shared";
 import { AlertTriangle } from "lucide-react";
 import { createIssueDetailPath } from "../lib/issueDetailBreadcrumb";
 import { IssueLinkQuicklook } from "./IssueLinkQuicklook";

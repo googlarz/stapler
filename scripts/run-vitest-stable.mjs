@@ -8,13 +8,13 @@ const repoRoot = process.cwd();
 const serverRoot = path.join(repoRoot, "server");
 const serverTestsDir = path.join(repoRoot, "server", "src", "__tests__");
 const nonServerProjects = [
-  "@paperclipai/shared",
-  "@paperclipai/db",
-  "@paperclipai/adapter-utils",
-  "@paperclipai/adapter-acpx-local",
-  "@paperclipai/adapter-codex-local",
-  "@paperclipai/adapter-opencode-local",
-  "@paperclipai/ui",
+  "@stapler/shared",
+  "@stapler/db",
+  "@stapler/adapter-utils",
+  "@stapler/adapter-acpx-local",
+  "@stapler/adapter-codex-local",
+  "@stapler/adapter-opencode-local",
+  "@stapler/ui",
   "paperclipai",
 ];
 const routeTestPattern = /[^/]*(?:route|routes|authz)[^/]*\.test\.ts$/;
@@ -83,11 +83,11 @@ function runVitest(args, label) {
   const testRoot = mkdtempSync(path.join(os.tmpdir(), `paperclip-vitest-${process.pid}-${invocationIndex}-`));
   const env = {
     ...process.env,
-    PAPERCLIP_HOME: path.join(testRoot, "home"),
-    PAPERCLIP_INSTANCE_ID: `vitest-${process.pid}-${invocationIndex}`,
+    STAPLER_HOME: path.join(testRoot, "home"),
+    STAPLER_INSTANCE_ID: `vitest-${process.pid}-${invocationIndex}`,
     TMPDIR: path.join(testRoot, "tmp"),
   };
-  mkdirSync(env.PAPERCLIP_HOME, { recursive: true });
+  mkdirSync(env.STAPLER_HOME, { recursive: true });
   mkdirSync(env.TMPDIR, { recursive: true });
   const result = spawnSync("pnpm", ["exec", "vitest", "run", ...args], {
     cwd: repoRoot,
@@ -117,7 +117,7 @@ for (const project of nonServerProjects) {
 }
 
 runVitest(
-  ["--project", "@paperclipai/server", ...excludeRouteArgs],
+  ["--project", "@stapler/server", ...excludeRouteArgs],
   `server suites excluding ${routeTests.length} serialized suites`,
 );
 
@@ -125,7 +125,7 @@ for (const routeTest of routeTests) {
   runVitest(
     [
       "--project",
-      "@paperclipai/server",
+      "@stapler/server",
       routeTest.repoPath,
       "--pool=forks",
       "--poolOptions.forks.isolate=true",

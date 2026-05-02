@@ -9,7 +9,7 @@ import type {
   FinanceByKind,
   FinanceEvent,
   QuotaWindow,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import { AlertTriangle, CheckCircle2, CreditCard, Landmark, ReceiptText, WalletCards } from "lucide-react";
 import { AccountingModelCard } from "@/components/AccountingModelCard";
 import { BillerSpendCard } from "@/components/BillerSpendCard";

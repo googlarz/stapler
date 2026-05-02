@@ -70,9 +70,9 @@ It:
 Users install canaries with:
 
 ```bash
-npx paperclipai@canary onboard
+npx @googlarz/stapler@canary onboard
 # or
-npx paperclipai@canary onboard --data-dir "$(mktemp -d /tmp/paperclip-canary.XXXXXX)"
+npx @googlarz/stapler@canary onboard --data-dir "$(mktemp -d /tmp/paperclip-canary.XXXXXX)"
 ```
 
 ### Stable
@@ -187,7 +187,7 @@ gh workflow run release-smoke.yml -f paperclip_version=latest
 
 Minimum checks:
 
-- `npx paperclipai@canary onboard` installs
+- `npx @googlarz/stapler@canary onboard` installs
 - onboarding completes without crashes
 - authenticated login works with the smoke credentials
 - the browser lands in onboarding on a fresh instance

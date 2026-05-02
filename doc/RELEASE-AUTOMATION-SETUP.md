@@ -211,7 +211,7 @@ After setup:
 Install-path check:
 
 ```bash
-npx paperclipai@canary onboard
+npx @googlarz/stapler@canary onboard
 ```
 
 ## 12. Verify the Stable Workflow

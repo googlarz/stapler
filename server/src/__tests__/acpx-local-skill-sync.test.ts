@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   listAcpxSkills,
   syncAcpxSkills,
-} from "@paperclipai/adapter-acpx-local/server";
+} from "@stapler/adapter-acpx-local/server";
 
 describe("acpx local skill sync", () => {
   const paperclipKey = "paperclipai/paperclip/paperclip";

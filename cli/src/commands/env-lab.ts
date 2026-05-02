@@ -8,7 +8,7 @@ import {
   readSshEnvLabFixtureStatus,
   startSshEnvLabFixture,
   stopSshEnvLabFixture,
-} from "@paperclipai/adapter-utils/ssh";
+} from "@stapler/adapter-utils/ssh";
 import { resolvePaperclipInstanceId, resolvePaperclipInstanceRoot } from "../config/home.js";
 
 export function resolveEnvLabSshStatePath(instanceId?: string): string {
@@ -138,7 +138,7 @@ export async function envLabDoctorCommand(opts: { instance?: string; json?: bool
     p.log.message(`State: ${pc.dim(status.statePath)}`);
   }
 
-  p.log.message(`Cleanup: ${pc.dim("pnpm paperclipai env-lab down")}`);
+  p.log.message(`Cleanup: ${pc.dim("pnpm stapler env-lab down")}`);
 }
 
 export function registerEnvLabCommands(program: Command) {

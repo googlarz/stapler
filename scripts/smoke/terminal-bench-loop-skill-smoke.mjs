@@ -9,9 +9,9 @@ const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..");
 function parseArgs(argv) {
   const parsed = {
     keep: false,
-    sourceIssueId: process.env.PAPERCLIP_TASK_ID ?? null,
-    projectId: process.env.PAPERCLIP_PROJECT_ID ?? null,
-    goalId: process.env.PAPERCLIP_GOAL_ID ?? null,
+    sourceIssueId: process.env.STAPLER_TASK_ID ?? null,
+    projectId: process.env.STAPLER_PROJECT_ID ?? null,
+    goalId: process.env.STAPLER_GOAL_ID ?? null,
     runKey: null,
   };
 
@@ -50,9 +50,9 @@ function parseArgs(argv) {
 function printUsage() {
   console.log(`
 Usage:
-  PAPERCLIP_API_URL=http://localhost:3100 \\
-  PAPERCLIP_API_KEY=... \\
-  PAPERCLIP_COMPANY_ID=... \\
+  STAPLER_API_URL=http://localhost:3100 \\
+  STAPLER_API_KEY=... \\
+  STAPLER_COMPANY_ID=... \\
   pnpm smoke:terminal-bench-loop-skill
 
 Options:
@@ -91,7 +91,7 @@ async function assertLocalSkillPackage() {
     "diagnosis",
     "blockedByIssueIds",
     "PAPERCLIPAI_CMD",
-    "PAPERCLIP_HARBOR_RUNNER_CONFIG",
+    "STAPLER_HARBOR_RUNNER_CONFIG",
   ]) {
     assert(markdown.includes(expected), `Skill smoke expected ${skillPath} to mention ${expected}`);
   }
@@ -129,10 +129,10 @@ function createApiClient({ apiUrl, apiKey, runId }) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const apiUrl = requireEnv("PAPERCLIP_API_URL");
-  const apiKey = requireEnv("PAPERCLIP_API_KEY");
-  const companyId = requireEnv("PAPERCLIP_COMPANY_ID");
-  const runId = process.env.PAPERCLIP_RUN_ID ?? null;
+  const apiUrl = requireEnv("STAPLER_API_URL");
+  const apiKey = requireEnv("STAPLER_API_KEY");
+  const companyId = requireEnv("STAPLER_COMPANY_ID");
+  const runId = process.env.STAPLER_RUN_ID ?? null;
   const api = createApiClient({ apiUrl, apiKey, runId });
 
   await assertLocalSkillPackage();
@@ -195,7 +195,7 @@ async function main() {
         `- Manifest: ${artifactRoot}/manifest.json`,
         `- Results JSONL: ${artifactRoot}/results.jsonl`,
         `- Harbor raw job folder: ${artifactRoot}/harbor/raw-job`,
-        "- Dispatch config: PAPERCLIP_HARBOR_RUNNER_CONFIG=<omitted - harness/setup no-dispatch smoke>",
+        "- Dispatch config: STAPLER_HARBOR_RUNNER_CONFIG=<omitted - harness/setup no-dispatch smoke>",
         "- Heartbeat-enabled agents: 0 (harness/setup no-dispatch; not a product signal)",
         "",
         "No benchmark process, Harbor job, model call, or provider call was started.",
@@ -312,7 +312,7 @@ async function main() {
     `Expected iteration issue to be in_review, got ${verifiedIteration.status}`,
   );
   assert(verifiedRunDoc.body.includes(`${artifactRoot}/results.jsonl`), "Expected run doc to include mocked results path");
-  assert(verifiedRunDoc.body.includes("PAPERCLIP_HARBOR_RUNNER_CONFIG"), "Expected run doc to record dispatch config");
+  assert(verifiedRunDoc.body.includes("STAPLER_HARBOR_RUNNER_CONFIG"), "Expected run doc to record dispatch config");
   assert(
     verifiedDiagnosisDoc.body.includes("Exact stop point") && verifiedDiagnosisDoc.body.includes("Next-action owner"),
     "Expected diagnosis doc to include exact stop point and next-action owner",

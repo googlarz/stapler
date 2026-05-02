@@ -43,18 +43,18 @@ run_isolated_worktree_init() {
     return 0
   fi
 
-  if command -v pnpm >/dev/null 2>&1 && pnpm paperclipai --help >/dev/null 2>&1; then
+  if command -v pnpm >/dev/null 2>&1 && pnpm stapler --help >/dev/null 2>&1; then
     (
       cd "$worktree_cwd"
-      pnpm paperclipai worktree init --force --seed-mode minimal --name "$worktree_name" --from-config "$source_config_path"
+      pnpm stapler worktree init --force --seed-mode minimal --name "$worktree_name" --from-config "$source_config_path"
     )
     return 0
   fi
 
-  if command -v paperclipai >/dev/null 2>&1; then
+  if command -v stapler >/dev/null 2>&1; then
     (
       cd "$worktree_cwd"
-      paperclipai worktree init --force --seed-mode minimal --name "$worktree_name" --from-config "$source_config_path"
+      stapler worktree init --force --seed-mode minimal --name "$worktree_name" --from-config "$source_config_path"
     )
     return 0
   fi
@@ -63,7 +63,7 @@ run_isolated_worktree_init() {
 }
 
 paperclipai_command_available() {
-  if command -v pnpm >/dev/null 2>&1 && pnpm paperclipai --help >/dev/null 2>&1; then
+  if command -v pnpm >/dev/null 2>&1 && pnpm stapler --help >/dev/null 2>&1; then
     return 0
   fi
 
@@ -73,7 +73,7 @@ paperclipai_command_available() {
     return 0
   fi
 
-  if command -v paperclipai >/dev/null 2>&1; then
+  if command -v stapler >/dev/null 2>&1; then
     return 0
   fi
 

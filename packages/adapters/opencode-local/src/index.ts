@@ -1,4 +1,4 @@
-import type { AdapterModelProfileDefinition } from "@paperclipai/adapter-utils";
+import type { AdapterModelProfileDefinition } from "@stapler/adapter-utils";
 
 export const type = "opencode_local";
 export const label = "OpenCode (local)";

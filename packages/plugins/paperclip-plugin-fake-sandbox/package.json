@@ -1,5 +1,5 @@
 {
-  "name": "@paperclipai/plugin-fake-sandbox",
+  "name": "@stapler/plugin-fake-sandbox",
   "version": "0.1.0",
   "description": "First-party deterministic fake sandbox provider plugin for Paperclip environments",
   "type": "module",
@@ -12,14 +12,14 @@
     "worker": "./dist/worker.js"
   },
   "scripts": {
-    "prebuild": "pnpm --filter @paperclipai/plugin-sdk ensure-build-deps",
+    "prebuild": "pnpm --filter @stapler/plugin-sdk ensure-build-deps",
     "build": "tsc",
     "clean": "rm -rf dist",
-    "typecheck": "pnpm --filter @paperclipai/plugin-sdk ensure-build-deps && tsc --noEmit",
+    "typecheck": "pnpm --filter @stapler/plugin-sdk ensure-build-deps && tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@paperclipai/plugin-sdk": "workspace:*"
+    "@stapler/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.6.0",

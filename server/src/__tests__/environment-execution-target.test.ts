@@ -16,8 +16,8 @@ import {
 describe("resolveEnvironmentExecutionTarget", () => {
   beforeEach(() => {
     mockResolveEnvironmentDriverConfigForRuntime.mockReset();
-    delete process.env.PAPERCLIP_API_URL;
-    delete process.env.PAPERCLIP_RUNTIME_API_URL;
+    delete process.env.STAPLER_API_URL;
+    delete process.env.STAPLER_RUNTIME_API_URL;
   });
 
   it("uses a bounded default cwd for sandbox targets when lease metadata omits remoteCwd", async () => {
@@ -60,8 +60,8 @@ describe("resolveEnvironmentExecutionTarget", () => {
   });
 
   it("prefers an explicit Paperclip API URL from lease metadata for sandbox targets", async () => {
-    process.env.PAPERCLIP_API_URL = "https://paperclip.example.test";
-    process.env.PAPERCLIP_RUNTIME_API_URL = "http://paperclip.example.test:3200";
+    process.env.STAPLER_API_URL = "https://paperclip.example.test";
+    process.env.STAPLER_RUNTIME_API_URL = "http://paperclip.example.test:3200";
     mockResolveEnvironmentDriverConfigForRuntime.mockResolvedValue({
       driver: "sandbox",
       config: {

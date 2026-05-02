@@ -8,7 +8,7 @@ Get Paperclip running locally in under 5 minutes.
 ## Quick Start (Recommended)
 
 ```sh
-npx paperclipai onboard --yes
+npx @googlarz/stapler onboard --yes
 ```
 
 This walks you through setup, configures your environment, and gets Paperclip running.
@@ -18,10 +18,10 @@ If you already have a Paperclip install, rerunning `onboard` keeps your current 
 To start Paperclip again later:
 
 ```sh
-npx paperclipai run
+npx @googlarz/stapler run
 ```
 
-> **Note:** If you used `npx` for setup, always use `npx paperclipai` to run commands. The `pnpm stapler` form only works inside a cloned copy of the Paperclip repository (see Local Development below).
+> **Note:** If you used `npx` for setup, always use `npx @googlarz/stapler` to run commands. The `pnpm stapler` form only works inside a cloned copy of the Paperclip repository (see Local Development below).
 
 ## Local Development
 

@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { environmentLeases } from "@paperclipai/db";
+import type { Db } from "@stapler/db";
+import { environmentLeases } from "@stapler/db";
 import type {
   Environment,
   EnvironmentLease,
@@ -8,13 +8,13 @@ import type {
   ExecutionWorkspace,
   PluginEnvironmentConfig,
   SandboxEnvironmentConfig,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import type {
   PluginEnvironmentExecuteResult,
   PluginEnvironmentLease,
   PluginEnvironmentRealizeWorkspaceResult,
-} from "@paperclipai/plugin-sdk";
-import { ensureSshWorkspaceReady, findReachablePaperclipApiUrlOverSsh } from "@paperclipai/adapter-utils/ssh";
+} from "@stapler/plugin-sdk";
+import { ensureSshWorkspaceReady, findReachablePaperclipApiUrlOverSsh } from "@stapler/adapter-utils/ssh";
 import { environmentService } from "./environments.js";
 import {
   parseEnvironmentDriverConfig,
@@ -228,7 +228,7 @@ function createSshEnvironmentDriver(db: Db): EnvironmentRuntimeDriver {
 
       const { remoteCwd } = await ensureSshWorkspaceReady(parsed.config);
       const candidateUrls = (() => {
-        const raw = process.env.PAPERCLIP_RUNTIME_API_CANDIDATES_JSON;
+        const raw = process.env.STAPLER_RUNTIME_API_CANDIDATES_JSON;
         if (!raw) return [];
         try {
           const parsed = JSON.parse(raw);

@@ -19,7 +19,7 @@ const sdkPackageJson = JSON.parse(readFileSync(sdkPackageJsonPath, "utf8"));
 const publishConfig = packageJson.publishConfig ?? {};
 const dependencies = {
   ...(packageJson.dependencies ?? {}),
-  "@paperclipai/plugin-sdk": sdkPackageJson.version,
+  "@stapler/plugin-sdk": sdkPackageJson.version,
 };
 
 const publishPackageJson = {

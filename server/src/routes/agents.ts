@@ -2823,6 +2823,7 @@ export function agentRoutes(
         name: agent.name,
         adapterType: agent.adapterType,
         adapterConfig: agent.adapterConfig,
+        role: agent.role ?? null,
       },
       config: runtimeConfig,
     });

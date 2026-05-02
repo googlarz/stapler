@@ -1492,13 +1492,13 @@ async function runWorktreeInit(opts: WorktreeInitOptions): Promise<void> {
 
 export async function worktreeInitCommand(opts: WorktreeInitOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree init ")));
+  p.intro(pc.bgCyan(pc.black(" stapler worktree init ")));
   await runWorktreeInit(opts);
 }
 
 export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree:make ")));
+  p.intro(pc.bgCyan(pc.black(" stapler worktree:make ")));
 
   const name = resolveWorktreeMakeName(nameArg);
   const startPoint = resolveWorktreeStartPoint(opts.startPoint);
@@ -1711,7 +1711,7 @@ function worktreePathHasUncommittedChanges(worktreePath: string): boolean {
 
 export async function worktreeCleanupCommand(nameArg: string, opts: WorktreeCleanupOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree:cleanup ")));
+  p.intro(pc.bgCyan(pc.black(" stapler worktree:cleanup ")));
 
   const name = resolveWorktreeMakeName(nameArg);
   const sourceCwd = process.cwd();
@@ -2542,7 +2542,7 @@ async function promptForSourceEndpoint(excludeWorktreePath?: string): Promise<Re
       hint: `${choice.worktree}${choice.isCurrent ? " (current)" : ""}`,
     }));
   if (choices.length === 0) {
-    throw new Error("No Paperclip worktrees were found. Run `paperclipai worktree:list` to inspect the repo worktrees.");
+    throw new Error("No Stapler worktrees were found. Run `stapler worktree:list` to inspect the repo worktrees.");
   }
   const selection = await p.select<string>({
     message: "Choose the source worktree to import from",
@@ -3149,13 +3149,13 @@ async function runWorktreeReseed(opts: WorktreeReseedOptions): Promise<void> {
 
 export async function worktreeReseedCommand(opts: WorktreeReseedOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree reseed ")));
+  p.intro(pc.bgCyan(pc.black(" stapler worktree reseed ")));
   await runWorktreeReseed(opts);
 }
 
 export async function worktreeRepairCommand(opts: WorktreeRepairOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree repair ")));
+  p.intro(pc.bgCyan(pc.black(" stapler worktree repair ")));
 
   const seedMode = opts.seedMode ?? "minimal";
   if (!isWorktreeSeedMode(seedMode)) {

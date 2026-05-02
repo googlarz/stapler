@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from "vitest";
-import type { Issue } from "@paperclipai/shared";
+import type { Issue } from "@stapler/shared";
 import {
   applyIssueFilters,
   countActiveIssueFilters,

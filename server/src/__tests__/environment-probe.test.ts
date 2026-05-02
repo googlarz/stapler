@@ -5,7 +5,7 @@ const mockProbePluginEnvironmentDriver = vi.hoisted(() => vi.fn());
 const mockProbePluginSandboxProviderDriver = vi.hoisted(() => vi.fn());
 const mockResolvePluginSandboxProviderDriverByKey = vi.hoisted(() => vi.fn());
 
-vi.mock("@paperclipai/adapter-utils/ssh", () => ({
+vi.mock("@stapler/adapter-utils/ssh", () => ({
   ensureSshWorkspaceReady: mockEnsureSshWorkspaceReady,
 }));
 

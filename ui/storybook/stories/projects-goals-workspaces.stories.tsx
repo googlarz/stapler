@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Goal, Project } from "@paperclipai/shared";
+import type { Goal, Project } from "@stapler/shared";
 import { Archive, Boxes, FolderGit2, GitBranch, Network, Play, RotateCcw, Square } from "lucide-react";
 import { GoalProperties } from "@/components/GoalProperties";
 import { GoalTree } from "@/components/GoalTree";

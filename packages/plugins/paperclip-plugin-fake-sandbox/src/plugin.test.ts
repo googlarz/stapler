@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertEnvironmentEventOrder,
   createEnvironmentTestHarness,
-} from "@paperclipai/plugin-sdk/testing";
+} from "@stapler/plugin-sdk/testing";
 import manifest from "./manifest.js";
 import plugin from "./plugin.js";
 
@@ -85,8 +85,8 @@ describe("fake sandbox provider plugin", () => {
   });
 
   it("does not expose host-only environment variables to executed commands", async () => {
-    const previousSecret = process.env.PAPERCLIP_FAKE_PLUGIN_HOST_SECRET;
-    process.env.PAPERCLIP_FAKE_PLUGIN_HOST_SECRET = "should-not-leak";
+    const previousSecret = process.env.STAPLER_FAKE_PLUGIN_HOST_SECRET;
+    process.env.STAPLER_FAKE_PLUGIN_HOST_SECRET = "should-not-leak";
     try {
       const definition = plugin.definition;
       const harness = createEnvironmentTestHarness({
@@ -116,7 +116,7 @@ describe("fake sandbox provider plugin", () => {
         ...base,
         lease,
         command: "sh",
-        args: ["-lc", "test -z \"${PAPERCLIP_FAKE_PLUGIN_HOST_SECRET+x}\" && printf \"$EXPLICIT_ONLY\""],
+        args: ["-lc", "test -z \"${STAPLER_FAKE_PLUGIN_HOST_SECRET+x}\" && printf \"$EXPLICIT_ONLY\""],
         cwd: realized.cwd,
         env: { EXPLICIT_ONLY: "visible" },
         timeoutMs: 10_000,
@@ -134,9 +134,9 @@ describe("fake sandbox provider plugin", () => {
       });
     } finally {
       if (previousSecret === undefined) {
-        delete process.env.PAPERCLIP_FAKE_PLUGIN_HOST_SECRET;
+        delete process.env.STAPLER_FAKE_PLUGIN_HOST_SECRET;
       } else {
-        process.env.PAPERCLIP_FAKE_PLUGIN_HOST_SECRET = previousSecret;
+        process.env.STAPLER_FAKE_PLUGIN_HOST_SECRET = previousSecret;
       }
     }
   });

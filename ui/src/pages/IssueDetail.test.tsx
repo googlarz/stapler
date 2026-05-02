@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Agent, Issue, IssueTreeControlPreview, IssueTreeHold } from "@paperclipai/shared";
+import type { Agent, Issue, IssueTreeControlPreview, IssueTreeHold } from "@stapler/shared";
 import { act, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

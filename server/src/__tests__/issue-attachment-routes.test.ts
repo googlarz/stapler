@@ -172,8 +172,8 @@ function makeAttachment(contentType: string, originalFilename: string) {
 
 describe("normalizeIssueAttachmentMaxBytes", () => {
   it("keeps the process-level attachment cap as the final cap", async () => {
-    const previous = process.env.PAPERCLIP_ATTACHMENT_MAX_BYTES;
-    process.env.PAPERCLIP_ATTACHMENT_MAX_BYTES = "5";
+    const previous = process.env.STAPLER_ATTACHMENT_MAX_BYTES;
+    process.env.STAPLER_ATTACHMENT_MAX_BYTES = "5";
     vi.resetModules();
     try {
       const { normalizeIssueAttachmentMaxBytes } = await import("../attachment-types.js");
@@ -182,9 +182,9 @@ describe("normalizeIssueAttachmentMaxBytes", () => {
       expect(normalizeIssueAttachmentMaxBytes(3)).toBe(3);
     } finally {
       if (previous === undefined) {
-        delete process.env.PAPERCLIP_ATTACHMENT_MAX_BYTES;
+        delete process.env.STAPLER_ATTACHMENT_MAX_BYTES;
       } else {
-        process.env.PAPERCLIP_ATTACHMENT_MAX_BYTES = previous;
+        process.env.STAPLER_ATTACHMENT_MAX_BYTES = previous;
       }
       vi.resetModules();
     }
@@ -194,7 +194,7 @@ describe("normalizeIssueAttachmentMaxBytes", () => {
 describe("issue attachment routes", () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.doUnmock("@paperclipai/shared/telemetry");
+    vi.doUnmock("@stapler/shared/telemetry");
     vi.doUnmock("../telemetry.js");
     vi.doUnmock("../services/issues.js");
     vi.doUnmock("../services/index.js");

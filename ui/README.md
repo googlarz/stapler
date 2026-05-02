@@ -11,8 +11,8 @@ The npm package contains the production build under `dist/`. It does not ship th
 Storybook config, stories, and fixtures live under `ui/storybook/`.
 
 ```sh
-pnpm --filter @paperclipai/ui storybook
-pnpm --filter @paperclipai/ui build-storybook
+pnpm --filter @stapler/ui storybook
+pnpm --filter @stapler/ui build-storybook
 ```
 
 ## Typical use

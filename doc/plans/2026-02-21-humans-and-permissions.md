@@ -17,7 +17,7 @@ Current V1 assumptions are centered on one board operator. We now need:
 
 - multi-human collaboration with per-user permissions
 - safe cloud deployment defaults (no accidental loginless production)
-- local mode that still feels instant (`npx paperclipai run` and go)
+- local mode that still feels instant (`npx @googlarz/stapler run` and go)
 - agent-to-human task delegation, including a human inbox
 - one user account with access to multiple companies in one deployment
 - instance admins who can manage company access across the instance

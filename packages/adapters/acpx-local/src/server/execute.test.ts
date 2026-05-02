@@ -193,12 +193,12 @@ describe("acpx_local runtime skill isolation", () => {
     await fs.writeFile(managedAuth, "{\"stale\":true}", "utf8");
 
     const previousCodexHome = process.env.CODEX_HOME;
-    const previousPaperclipHome = process.env.PAPERCLIP_HOME;
-    const previousPaperclipInstanceId = process.env.PAPERCLIP_INSTANCE_ID;
+    const previousPaperclipHome = process.env.STAPLER_HOME;
+    const previousPaperclipInstanceId = process.env.STAPLER_INSTANCE_ID;
     try {
       process.env.CODEX_HOME = sourceCodexHome;
-      process.env.PAPERCLIP_HOME = paperclipHome;
-      process.env.PAPERCLIP_INSTANCE_ID = paperclipInstanceId;
+      process.env.STAPLER_HOME = paperclipHome;
+      process.env.STAPLER_INSTANCE_ID = paperclipInstanceId;
       await runExecutor({
         agent: "codex",
         stateDir: path.join(root, "state"),
@@ -208,10 +208,10 @@ describe("acpx_local runtime skill isolation", () => {
     } finally {
       if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
       else process.env.CODEX_HOME = previousCodexHome;
-      if (previousPaperclipHome === undefined) delete process.env.PAPERCLIP_HOME;
-      else process.env.PAPERCLIP_HOME = previousPaperclipHome;
-      if (previousPaperclipInstanceId === undefined) delete process.env.PAPERCLIP_INSTANCE_ID;
-      else process.env.PAPERCLIP_INSTANCE_ID = previousPaperclipInstanceId;
+      if (previousPaperclipHome === undefined) delete process.env.STAPLER_HOME;
+      else process.env.STAPLER_HOME = previousPaperclipHome;
+      if (previousPaperclipInstanceId === undefined) delete process.env.STAPLER_INSTANCE_ID;
+      else process.env.STAPLER_INSTANCE_ID = previousPaperclipInstanceId;
     }
 
     const authStat = await fs.lstat(managedAuth);
@@ -230,12 +230,12 @@ describe("acpx_local runtime skill isolation", () => {
     await runExecutor({
       ...baseConfig,
       agent: "custom-a",
-      env: { PAPERCLIP_API_KEY: "old-key" },
+      env: { STAPLER_API_KEY: "old-key" },
     });
     await runExecutor({
       ...baseConfig,
       agent: "custom-b",
-      env: { PAPERCLIP_API_KEY: "new-key" },
+      env: { STAPLER_API_KEY: "new-key" },
     });
 
     const wrappers = await fs.readdir(path.join(stateDir, "wrappers"));
@@ -250,10 +250,10 @@ describe("acpx_local runtime skill isolation", () => {
     expect((await fs.stat(envPath)).mode & 0o777).toBe(0o600);
     expect((await fs.stat(wrapperPath)).mode & 0o777).toBe(0o700);
     expect(wrapper).toContain("node ./fake-acp.js");
-    expect(wrapper).not.toContain("PAPERCLIP_API_KEY");
+    expect(wrapper).not.toContain("STAPLER_API_KEY");
     expect(wrapper).not.toContain("new-key");
     expect(wrapper).not.toContain("old-key");
-    expect(env).toContain("PAPERCLIP_API_KEY='new-key'");
+    expect(env).toContain("STAPLER_API_KEY='new-key'");
     expect(env).not.toContain("old-key");
   });
 
@@ -269,7 +269,7 @@ describe("acpx_local runtime skill isolation", () => {
     await runExecutor({
       ...baseConfig,
       agent: "custom-a",
-      env: { PAPERCLIP_API_KEY: "old-key" },
+      env: { STAPLER_API_KEY: "old-key" },
     });
     const oldDate = new Date(Date.now() - 16 * 60 * 1000);
     await Promise.all(
@@ -281,7 +281,7 @@ describe("acpx_local runtime skill isolation", () => {
     await runExecutor({
       ...baseConfig,
       agent: "custom-b",
-      env: { PAPERCLIP_API_KEY: "new-key" },
+      env: { STAPLER_API_KEY: "new-key" },
     });
 
     const wrappers = await fs.readdir(wrappersDir);
@@ -302,11 +302,11 @@ describe("acpx_local runtime skill isolation", () => {
 
     await runExecutor({
       ...baseConfig,
-      env: { PAPERCLIP_API_KEY: "first-key" },
+      env: { STAPLER_API_KEY: "first-key" },
     });
     await runExecutor({
       ...baseConfig,
-      env: { PAPERCLIP_API_KEY: "second-key" },
+      env: { STAPLER_API_KEY: "second-key" },
     });
 
     const envFileNames = (await fs.readdir(path.join(stateDir, "wrappers"))).filter((name) => name.endsWith(".env"));
@@ -314,8 +314,8 @@ describe("acpx_local runtime skill isolation", () => {
     const envFiles = await Promise.all(
       envFileNames.map(async (name) => fs.readFile(path.join(stateDir, "wrappers", name), "utf8")),
     );
-    expect(envFiles.filter((contents) => contents.includes("PAPERCLIP_API_KEY='first-key'"))).toHaveLength(1);
-    expect(envFiles.filter((contents) => contents.includes("PAPERCLIP_API_KEY='second-key'"))).toHaveLength(1);
+    expect(envFiles.filter((contents) => contents.includes("STAPLER_API_KEY='first-key'"))).toHaveLength(1);
+    expect(envFiles.filter((contents) => contents.includes("STAPLER_API_KEY='second-key'"))).toHaveLength(1);
   });
 
   it("passes Paperclip env through the ACP agent wrapper instead of process.env", async () => {
@@ -330,7 +330,7 @@ describe("acpx_local runtime skill isolation", () => {
         startTurn: () => ({
           events: (async function* () {
             await Promise.resolve();
-            observedApiKeyDuringStream = process.env.PAPERCLIP_API_KEY;
+            observedApiKeyDuringStream = process.env.STAPLER_API_KEY;
             yield { type: "done", stopReason: "end_turn" };
           })(),
           result: Promise.resolve({ status: "completed", stopReason: "end_turn" }),
@@ -340,9 +340,9 @@ describe("acpx_local runtime skill isolation", () => {
       }) as never,
     });
 
-    const previousApiKey = process.env.PAPERCLIP_API_KEY;
+    const previousApiKey = process.env.STAPLER_API_KEY;
     try {
-      delete process.env.PAPERCLIP_API_KEY;
+      delete process.env.STAPLER_API_KEY;
       const result = await execute({
         runId: "run-1",
         agent: {
@@ -360,8 +360,8 @@ describe("acpx_local runtime skill isolation", () => {
       expect(result.exitCode).toBe(0);
       expect(observedApiKeyDuringStream).toBeUndefined();
     } finally {
-      if (previousApiKey === undefined) delete process.env.PAPERCLIP_API_KEY;
-      else process.env.PAPERCLIP_API_KEY = previousApiKey;
+      if (previousApiKey === undefined) delete process.env.STAPLER_API_KEY;
+      else process.env.STAPLER_API_KEY = previousApiKey;
     }
   });
 });

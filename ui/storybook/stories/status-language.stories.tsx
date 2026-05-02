@@ -1,11 +1,11 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { AGENT_STATUSES, ISSUE_PRIORITIES, ISSUE_STATUSES } from "@paperclipai/shared";
+import { AGENT_STATUSES, ISSUE_PRIORITIES, ISSUE_STATUSES } from "@stapler/shared";
 import type {
   IssueBlockerAttention,
   IssueProductivityReview,
   IssueRelationIssueSummary,
-} from "@paperclipai/shared";
+} from "@stapler/shared";
 import { Bot, CheckCircle2, Clock3, DollarSign, FolderKanban, Inbox, MessageSquare, Users } from "lucide-react";
 import { CopyText } from "@/components/CopyText";
 import { EmptyState } from "@/components/EmptyState";

@@ -7,7 +7,7 @@ import {
   applyPaperclipWorkspaceEnv,
   appendWithByteCap,
   buildInvocationEnvForLogs,
-  DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
+  DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE,
   materializePaperclipSkillCopy,
   renderPaperclipWakePrompt,
   runningProcesses,
@@ -54,7 +54,7 @@ describe("buildInvocationEnvForLogs", () => {
     );
 
     expect(loggedEnv.SAFE_VALUE).toBe("visible");
-    expect(loggedEnv.PAPERCLIP_RESOLVED_COMMAND).toBe(
+    expect(loggedEnv.STAPLER_RESOLVED_COMMAND).toBe(
       "env OPENAI_API_KEY=***REDACTED*** custom-acp --token ***REDACTED***",
     );
   });
@@ -334,17 +334,17 @@ describe("runChildProcess", () => {
 
 describe("renderPaperclipWakePrompt", () => {
   it("keeps the default local-agent prompt action-oriented", () => {
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("Start actionable work in this heartbeat");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("do not stop at a plan");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("Prefer the smallest verification that proves the change");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("Use child issues");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("instead of polling agents, sessions, or processes");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("Create child issues directly when you know what needs to be done");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("POST /api/issues/{issueId}/interactions");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("kind suggest_tasks, ask_user_questions, or request_confirmation");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("confirmation:{issueId}:plan:{revisionId}");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain("Wait for acceptance before creating implementation subtasks");
-    expect(DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE).toContain(
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("Start actionable work in this heartbeat");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("do not stop at a plan");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("Prefer the smallest verification that proves the change");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("Use child issues");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("instead of polling agents, sessions, or processes");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("Create child issues directly when you know what needs to be done");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("POST /api/issues/{issueId}/interactions");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("kind suggest_tasks, ask_user_questions, or request_confirmation");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("confirmation:{issueId}:plan:{revisionId}");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain("Wait for acceptance before creating implementation subtasks");
+    expect(DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE).toContain(
       "Respect budget, pause/cancel, approval gates, and company boundaries",
     );
   });
@@ -525,14 +525,14 @@ describe("applyPaperclipWorkspaceEnv", () => {
     );
 
     expect(env).toEqual({
-      PAPERCLIP_WORKSPACE_CWD: "/tmp/workspace",
-      PAPERCLIP_WORKSPACE_SOURCE: "project_primary",
-      PAPERCLIP_WORKSPACE_STRATEGY: "git_worktree",
-      PAPERCLIP_WORKSPACE_ID: "workspace-1",
-      PAPERCLIP_WORKSPACE_REPO_URL: "https://github.com/paperclipai/paperclip.git",
-      PAPERCLIP_WORKSPACE_REPO_REF: "main",
-      PAPERCLIP_WORKSPACE_BRANCH: "feature/test",
-      PAPERCLIP_WORKSPACE_WORKTREE_PATH: "/tmp/worktree",
+      STAPLER_WORKSPACE_CWD: "/tmp/workspace",
+      STAPLER_WORKSPACE_SOURCE: "project_primary",
+      STAPLER_WORKSPACE_STRATEGY: "git_worktree",
+      STAPLER_WORKSPACE_ID: "workspace-1",
+      STAPLER_WORKSPACE_REPO_URL: "https://github.com/paperclipai/paperclip.git",
+      STAPLER_WORKSPACE_REPO_REF: "main",
+      STAPLER_WORKSPACE_BRANCH: "feature/test",
+      STAPLER_WORKSPACE_WORKTREE_PATH: "/tmp/worktree",
       AGENT_HOME: "/tmp/agent-home",
     });
   });

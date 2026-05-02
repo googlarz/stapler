@@ -5,8 +5,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const baseUrl = (process.env.PAPERCLIP_PERF_BASE_URL || "http://localhost:3100").replace(/\/$/, "");
-const companyPrefix = process.env.PAPERCLIP_PERF_COMPANY_PREFIX;
+const baseUrl = (process.env.STAPLER_PERF_BASE_URL || "http://localhost:3100").replace(/\/$/, "");
+const companyPrefix = process.env.STAPLER_PERF_COMPANY_PREFIX;
 const url = companyPrefix
   ? `${baseUrl}/${companyPrefix}/tests/perf/long-thread`
   : `${baseUrl}/tests/perf/long-thread`;
@@ -31,7 +31,7 @@ function loadBoardToken() {
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-const boardToken = process.env.PAPERCLIP_PERF_BEARER_TOKEN || loadBoardToken();
+const boardToken = process.env.STAPLER_PERF_BEARER_TOKEN || loadBoardToken();
 
 if (boardToken) {
   await page.route(`${origin}/**`, async (route) => {

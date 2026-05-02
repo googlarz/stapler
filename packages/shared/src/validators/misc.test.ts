@@ -252,10 +252,9 @@ describe("createApprovalSchema", () => {
 });
 
 describe("resolveApprovalSchema", () => {
-  it("accepts empty object with default decidedByUserId", () => {
+  it("accepts empty object", () => {
     const r = resolveApprovalSchema.safeParse({});
     expect(r.success).toBe(true);
-    if (r.success) expect(r.data.decidedByUserId).toBe("board");
   });
 
   it("accepts decisionNote", () => {

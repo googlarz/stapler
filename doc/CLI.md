@@ -48,10 +48,10 @@ pnpm stapler allowed-hostname dotta-macbook-pro
 Bring up the default local SSH fixture for environment testing:
 
 ```sh
-pnpm paperclipai env-lab up
-pnpm paperclipai env-lab doctor
-pnpm paperclipai env-lab status --json
-pnpm paperclipai env-lab down
+pnpm stapler env-lab up
+pnpm stapler env-lab doctor
+pnpm stapler env-lab status --json
+pnpm stapler env-lab down
 ```
 
 All client commands support:

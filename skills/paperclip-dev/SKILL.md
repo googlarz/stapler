@@ -22,7 +22,7 @@ These are the most common commands. For full option tables and details, see `doc
 
 | Task | Command |
 |------|---------|
-| Start server (first time or normal) | `npx paperclipai run` |
+| Start server (first time or normal) | `npx @googlarz/stapler run` |
 | Dev mode with hot reload | `pnpm dev` |
 | Stop dev server | `pnpm dev:stop` |
 | Build | `pnpm build` |
@@ -30,11 +30,11 @@ These are the most common commands. For full option tables and details, see `doc
 | Run tests | `pnpm test` |
 | Run migrations | `pnpm db:migrate` |
 | Regenerate Drizzle client | `pnpm db:generate` |
-| Back up database | `npx paperclipai db:backup` |
-| Health check | `npx paperclipai doctor --repair` |
-| Print env vars | `npx paperclipai env` |
-| Trigger agent heartbeat | `npx paperclipai heartbeat run --agent-id <id>` |
-| Install agent skills locally | `npx paperclipai agent local-cli <agent> --company-id <id>` |
+| Back up database | `npx @googlarz/stapler db:backup` |
+| Health check | `npx @googlarz/stapler doctor --repair` |
+| Print env vars | `npx @googlarz/stapler env` |
+| Trigger agent heartbeat | `npx @googlarz/stapler heartbeat run --agent-id <id>` |
+| Install agent skills locally | `npx @googlarz/stapler agent local-cli <agent> --company-id <id>` |
 
 ## Pulling from Master
 
@@ -76,22 +76,22 @@ The CLI has two tiers (see `doc/DEVELOPING.md` for full option tables):
 
 ```bash
 # 1. Create a worktree for a feature
-npx paperclipai worktree:make my-feature --start-point origin/main
+npx @googlarz/stapler worktree:make my-feature --start-point origin/main
 
 # 2. Move into the worktree (path printed by worktree:make) and source the environment
 cd <worktree-path>
-eval "$(npx paperclipai worktree env)"
+eval "$(npx @googlarz/stapler worktree env)"
 
 # 3. Start the isolated Paperclip server
-npx paperclipai run
+npx @googlarz/stapler run
 
 # 4. Do your work
 
 # 5. When done, merge history back if needed
-npx paperclipai worktree:merge-history --from paperclip-my-feature --to current --apply
+npx @googlarz/stapler worktree:merge-history --from paperclip-my-feature --to current --apply
 
 # 6. Clean up
-npx paperclipai worktree:cleanup my-feature
+npx @googlarz/stapler worktree:cleanup my-feature
 ```
 
 ## Forks — Prefer Pushing to a User Fork
@@ -170,7 +170,7 @@ Only after completing Steps 1 and 2, run `gh pr create`. Use the template conten
 
 These rules exist because agents have caused real damage by improvising around CLI failures. Follow them exactly.
 
-1. **CLI is the only interface to worktrees and databases.** All worktree and database operations MUST go through `npx paperclipai` / `pnpm paperclipai` commands. You MUST NOT:
+1. **CLI is the only interface to worktrees and databases.** All worktree and database operations MUST go through `npx @googlarz/stapler` / `pnpm stapler` commands. You MUST NOT:
    - Run `pg_dump`, `pg_restore`, `psql`, `createdb`, `dropdb`, or any raw postgres commands
    - Manually set `DATABASE_URL` to point a worktree server at another instance's database
    - Run `rm -rf` on any `.paperclip/`, `.paperclip-worktrees/`, or `db/` directory
@@ -180,7 +180,7 @@ These rules exist because agents have caused real damage by improvising around C
 2. **If a CLI command fails, stop and report.** Do NOT attempt workarounds. If `worktree:make`, `worktree reseed`, `worktree init`, `worktree:cleanup`, or any other `paperclipai` command fails:
    - Report the exact error message in your task comment
    - Set the task to `blocked`
-   - Suggest running `npx paperclipai doctor --repair` or recreating the worktree from scratch
+   - Suggest running `npx @googlarz/stapler doctor --repair` or recreating the worktree from scratch
    - Do NOT try to manually replicate what the CLI does
 
 3. **Never share databases between instances.** Each worktree instance gets its own isolated database. Never override `DATABASE_URL` to point one instance at another's database. This destroys isolation and can corrupt production data.
@@ -189,16 +189,16 @@ These rules exist because agents have caused real damage by improvising around C
    ```bash
    # If the worktree already exists but has no running instance:
    cd <worktree-path>
-   eval "$(npx paperclipai worktree env)"
+   eval "$(npx @googlarz/stapler worktree env)"
    pnpm install && pnpm build
-   npx paperclipai run          # or pnpm dev
+   npx @googlarz/stapler run          # or pnpm dev
 
    # If the worktree needs a fresh database:
-   npx paperclipai worktree reseed --seed-mode full
+   npx @googlarz/stapler worktree reseed --seed-mode full
 
    # If the worktree is broken beyond repair:
-   npx paperclipai worktree:cleanup <name>
-   npx paperclipai worktree:make <name> --seed-mode full
+   npx @googlarz/stapler worktree:cleanup <name>
+   npx @googlarz/stapler worktree:make <name> --seed-mode full
    ```
    If any step fails, follow rule 2 — stop and report.
 
@@ -213,7 +213,7 @@ When an agent needs to start a dev server that outlives the current heartbeat �
 ```bash
 # 1. cd into the worktree (or main repo) and source the environment
 cd <worktree-path>
-eval "$(npx paperclipai worktree env)"   # skip if using the primary instance
+eval "$(npx @googlarz/stapler worktree env)"   # skip if using the primary instance
 
 # 2. Start the dev server in a named, detached tmux session
 tmux new-session -d -s <session-name> 'pnpm dev'
@@ -254,13 +254,13 @@ lsof -nP -iTCP:<port> -sTCP:LISTEN
 
 | Mistake | Fix |
 |---------|-----|
-| Server won't start | Run `npx paperclipai doctor --repair` to diagnose and auto-fix |
-| Forgetting to source worktree env | Run `eval "$(npx paperclipai worktree env)"` after cd-ing into the worktree |
+| Server won't start | Run `npx @googlarz/stapler doctor --repair` to diagnose and auto-fix |
+| Forgetting to source worktree env | Run `eval "$(npx @googlarz/stapler worktree env)"` after cd-ing into the worktree |
 | Stale dependencies after pull | Run `pnpm install && pnpm build` after pulling |
 | Schema out of date after pull | Run `pnpm db:generate && pnpm db:migrate` |
 | Reseeding while target DB is running | Stop the target server first, or use `--allow-live-target` |
 | Cleaning up with unmerged commits | Merge or push first, or use `--force` if intentionally discarding |
-| Running agents against wrong instance | Verify `PAPERCLIP_API_URL` points to the correct port |
+| Running agents against wrong instance | Verify `STAPLER_API_URL` points to the correct port |
 | CLI command fails | Do NOT work around it — report the error and block (see Hard Rules above) |
 | Agent tries manual postgres operations | NEVER do this — all DB ops go through the CLI (see Hard Rules above) |
 | Dev server dies between heartbeats | Launch in a detached `tmux` session — see "Persistent Dev Servers" above |

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import type { Issue } from "@paperclipai/shared";
+import type { Issue } from "@stapler/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { IssuesList } from "@/components/IssuesList";
 import { queryKeys } from "@/lib/queryKeys";

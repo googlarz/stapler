@@ -526,6 +526,174 @@
       "when": 1777384535070,
       "tag": "0074_striped_genesis",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1775836800000,
+      "tag": "0075_goal_acceptance_criteria",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1775923200000,
+      "tag": "0076_goal_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1776067200000,
+      "tag": "0077_agent_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1776153600000,
+      "tag": "0078_goal_verification_issue_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1776240000000,
+      "tag": "0079_company_default_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1776326400000,
+      "tag": "0080_company_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1776412800000,
+      "tag": "0081_outputs",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1776278400000,
+      "tag": "0082_scheduled_for",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1776278400000,
+      "tag": "0083_wiki_slugs",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1776364800000,
+      "tag": "0084_company_wiki_slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1776451200000,
+      "tag": "0085_memory_expires_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1776537600000,
+      "tag": "0086_memory_embeddings",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1776624000000,
+      "tag": "0087_project_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1776710400000,
+      "tag": "0088_evals",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1776796800000,
+      "tag": "0089_eval_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1776883200000,
+      "tag": "0090_run_scores",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1776969600000,
+      "tag": "0091_self_critique",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1777056000000,
+      "tag": "0092_config_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1777142400000,
+      "tag": "0093_org_learning",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1777228800000,
+      "tag": "0094_collab_learning",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1777315200000,
+      "tag": "0095_workflow_learning",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1777401600000,
+      "tag": "0096_skill_invocations",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1777488000000,
+      "tag": "0097_instance_skills",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1777574400000,
+      "tag": "0098_output_version_timestamp",
+      "breakpoints": true
     }
   ]
 }

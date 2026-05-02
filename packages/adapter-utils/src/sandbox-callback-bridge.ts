@@ -202,21 +202,21 @@ export function buildSandboxCallbackBridgeEnv(input: {
   maxBodyBytes?: number | null;
 }): Record<string, string> {
   return {
-    PAPERCLIP_API_BRIDGE_MODE: "queue_v1",
-    PAPERCLIP_BRIDGE_QUEUE_DIR: input.queueDir,
-    PAPERCLIP_BRIDGE_TOKEN: input.bridgeToken,
-    PAPERCLIP_BRIDGE_HOST: input.host?.trim() || "127.0.0.1",
-    PAPERCLIP_BRIDGE_PORT: String(input.port && input.port > 0 ? Math.trunc(input.port) : 0),
-    PAPERCLIP_BRIDGE_POLL_INTERVAL_MS: String(
+    STAPLER_API_BRIDGE_MODE: "queue_v1",
+    STAPLER_BRIDGE_QUEUE_DIR: input.queueDir,
+    STAPLER_BRIDGE_TOKEN: input.bridgeToken,
+    STAPLER_BRIDGE_HOST: input.host?.trim() || "127.0.0.1",
+    STAPLER_BRIDGE_PORT: String(input.port && input.port > 0 ? Math.trunc(input.port) : 0),
+    STAPLER_BRIDGE_POLL_INTERVAL_MS: String(
       normalizeTimeoutMs(input.pollIntervalMs, DEFAULT_BRIDGE_POLL_INTERVAL_MS),
     ),
-    PAPERCLIP_BRIDGE_RESPONSE_TIMEOUT_MS: String(
+    STAPLER_BRIDGE_RESPONSE_TIMEOUT_MS: String(
       normalizeTimeoutMs(input.responseTimeoutMs, DEFAULT_BRIDGE_RESPONSE_TIMEOUT_MS),
     ),
-    PAPERCLIP_BRIDGE_MAX_QUEUE_DEPTH: String(
+    STAPLER_BRIDGE_MAX_QUEUE_DEPTH: String(
       normalizeTimeoutMs(input.maxQueueDepth, DEFAULT_BRIDGE_MAX_QUEUE_DEPTH),
     ),
-    PAPERCLIP_BRIDGE_MAX_BODY_BYTES: String(
+    STAPLER_BRIDGE_MAX_BODY_BYTES: String(
       normalizeTimeoutMs(input.maxBodyBytes, DEFAULT_BRIDGE_MAX_BODY_BYTES),
     ),
   };
@@ -658,18 +658,18 @@ import { createServer } from "node:http";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-const queueDir = process.env.PAPERCLIP_BRIDGE_QUEUE_DIR;
-const bridgeToken = process.env.PAPERCLIP_BRIDGE_TOKEN;
-const host = process.env.PAPERCLIP_BRIDGE_HOST || "127.0.0.1";
-const port = Number(process.env.PAPERCLIP_BRIDGE_PORT || "0");
-const pollIntervalMs = Number(process.env.PAPERCLIP_BRIDGE_POLL_INTERVAL_MS || "100");
-const responseTimeoutMs = Number(process.env.PAPERCLIP_BRIDGE_RESPONSE_TIMEOUT_MS || "30000");
-const maxQueueDepth = Number(process.env.PAPERCLIP_BRIDGE_MAX_QUEUE_DEPTH || "${DEFAULT_BRIDGE_MAX_QUEUE_DEPTH}");
-const maxBodyBytes = Number(process.env.PAPERCLIP_BRIDGE_MAX_BODY_BYTES || "${DEFAULT_BRIDGE_MAX_BODY_BYTES}");
+const queueDir = process.env.STAPLER_BRIDGE_QUEUE_DIR;
+const bridgeToken = process.env.STAPLER_BRIDGE_TOKEN;
+const host = process.env.STAPLER_BRIDGE_HOST || "127.0.0.1";
+const port = Number(process.env.STAPLER_BRIDGE_PORT || "0");
+const pollIntervalMs = Number(process.env.STAPLER_BRIDGE_POLL_INTERVAL_MS || "100");
+const responseTimeoutMs = Number(process.env.STAPLER_BRIDGE_RESPONSE_TIMEOUT_MS || "30000");
+const maxQueueDepth = Number(process.env.STAPLER_BRIDGE_MAX_QUEUE_DEPTH || "${DEFAULT_BRIDGE_MAX_QUEUE_DEPTH}");
+const maxBodyBytes = Number(process.env.STAPLER_BRIDGE_MAX_BODY_BYTES || "${DEFAULT_BRIDGE_MAX_BODY_BYTES}");
 const allowedHeaders = new Set(${JSON.stringify([...DEFAULT_SANDBOX_CALLBACK_BRIDGE_HEADER_ALLOWLIST])});
 
 if (!queueDir || !bridgeToken) {
-  throw new Error("PAPERCLIP_BRIDGE_QUEUE_DIR and PAPERCLIP_BRIDGE_TOKEN are required.");
+  throw new Error("STAPLER_BRIDGE_QUEUE_DIR and STAPLER_BRIDGE_TOKEN are required.");
 }
 
 const requestsDir = path.posix.join(queueDir, "requests");

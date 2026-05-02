@@ -12,7 +12,7 @@
 // `process_detached` runs.
 //
 // Usage:
-//   pnpm --filter @paperclipai/server tsx scripts/reap-stuck-runs.ts \
+//   pnpm --filter @stapler/server tsx scripts/reap-stuck-runs.ts \
 //     [--apply] [--threshold-minutes 30] [--config /path/to/config.json]
 //
 // Default mode: dry-run (prints affected runs without changing the DB).
@@ -23,7 +23,7 @@ import {
   agents,
   createDb,
   heartbeatRuns,
-} from "@paperclipai/db";
+} from "@stapler/db";
 import { loadConfig } from "../src/config.js";
 import { heartbeatService } from "../src/services/heartbeat.js";
 
@@ -48,9 +48,9 @@ function hasFlag(flag: string): boolean {
 }
 
 function resolveDatabaseUrl(): string {
-  if (process.env.PAPERCLIP_CONFIG === undefined) {
+  if (process.env.STAPLER_CONFIG === undefined) {
     const overrideConfig = readArg("--config");
-    if (overrideConfig) process.env.PAPERCLIP_CONFIG = overrideConfig;
+    if (overrideConfig) process.env.STAPLER_CONFIG = overrideConfig;
   }
   const config = loadConfig();
   if (config.databaseUrl) return config.databaseUrl;

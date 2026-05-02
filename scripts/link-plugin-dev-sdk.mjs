@@ -22,7 +22,7 @@ try {
   if (stat.isSymbolicLink()) {
     rmSync(linkTarget, { force: true });
   } else {
-    console.log("  i Keeping existing installed @paperclipai/plugin-sdk directory in place");
+    console.log("  i Keeping existing installed @stapler/plugin-sdk directory in place");
     process.exit(0);
   }
 } catch {
@@ -32,4 +32,4 @@ try {
 const relativeSdkDir = relative(scopeDir, sdkDir);
 symlinkSync(relativeSdkDir, linkTarget, "dir");
 
-console.log(`  ✓ Linked local @paperclipai/plugin-sdk for ${packageDir}`);
+console.log(`  ✓ Linked local @stapler/plugin-sdk for ${packageDir}`);

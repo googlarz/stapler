@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AdapterExecutionContext } from "@paperclipai/adapter-utils";
+import type { AdapterExecutionContext } from "@stapler/adapter-utils";
 
-const DEFAULT_PAPERCLIP_INSTANCE_ID = "default";
+const DEFAULT_STAPLER_INSTANCE_ID = "default";
 const SEEDED_SHARED_FILES = [
   ".credentials.json",
   "credentials.json",
@@ -92,8 +92,8 @@ export function resolveManagedClaudeConfigSeedDir(
   env: NodeJS.ProcessEnv,
   companyId?: string,
 ): string {
-  const paperclipHome = nonEmpty(env.PAPERCLIP_HOME) ?? path.resolve(os.homedir(), ".paperclip");
-  const instanceId = nonEmpty(env.PAPERCLIP_INSTANCE_ID) ?? DEFAULT_PAPERCLIP_INSTANCE_ID;
+  const paperclipHome = nonEmpty(env.STAPLER_HOME) ?? path.resolve(os.homedir(), ".paperclip");
+  const instanceId = nonEmpty(env.STAPLER_INSTANCE_ID) ?? DEFAULT_STAPLER_INSTANCE_ID;
   return companyId
     ? path.resolve(paperclipHome, "instances", instanceId, "companies", companyId, "claude-config-seed")
     : path.resolve(paperclipHome, "instances", instanceId, "claude-config-seed");

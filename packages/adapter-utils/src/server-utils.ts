@@ -87,7 +87,7 @@ const MATERIALIZED_SKILL_SENTINEL = ".paperclip-materialized-skill.json";
 const MATERIALIZED_SKILL_LOCK_OWNER = "owner.json";
 const MATERIALIZED_SKILL_LOCK_STALE_MS = 30_000;
 
-export const DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE = [
+export const DEFAULT_STAPLER_AGENT_PROMPT_TEMPLATE = [
   "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
   "",
   "Execution contract:",
@@ -1681,7 +1681,7 @@ export async function runChildProcess(
     // Strip Claude Code nesting-guard env vars so spawned `claude` processes
     // don't refuse to start with "cannot be launched inside another session".
     // These vars leak in when the Paperclip server itself is started from
-    // within a Claude Code session (e.g. `npx paperclipai run` in a terminal
+    // within a Claude Code session (e.g. `npx @googlarz/stapler run` in a terminal
     // owned by Claude Code) or when cron inherits a contaminated shell env.
     const CLAUDE_CODE_NESTING_VARS = [
       "CLAUDECODE",

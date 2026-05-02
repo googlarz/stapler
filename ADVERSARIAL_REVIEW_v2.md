@@ -60,7 +60,7 @@ The page exposes a free-text URL input (`<input type="text">`) and immediately u
 - `server/src/routes/routines.ts:299,301` — reads `x-paperclip-signature`, `x-paperclip-timestamp`
 - `server/src/adapters/registry.ts:236` — documents `X-Paperclip-Run-Id: $STAPLER_RUN_ID` (mixed naming)
 
-All downstream integrations (OpenClaw gateway, third-party webhooks, custom adapters) that set `X-Paperclip-Run-Id` will silently fail if it is renamed without a compatibility shim. The issue is that the env-var was renamed (`PAPERCLIP_RUN_ID` → `STAPLER_RUN_ID`) but the wire header was not. This creates a confusing split: the environment variable says `STAPLER_RUN_ID` but the header instructions say to use `X-Paperclip-Run-Id`. Decision required: either rename the header (with an `X-Stapler-Run-Id` alias for a transition period) or document that the wire format is intentionally frozen.
+All downstream integrations (OpenClaw gateway, third-party webhooks, custom adapters) that set `X-Paperclip-Run-Id` will silently fail if it is renamed without a compatibility shim. The issue is that the env-var was renamed (`STAPLER_RUN_ID` → `STAPLER_RUN_ID`) but the wire header was not. This creates a confusing split: the environment variable says `STAPLER_RUN_ID` but the header instructions say to use `X-Paperclip-Run-Id`. Decision required: either rename the header (with an `X-Stapler-Run-Id` alias for a transition period) or document that the wire format is intentionally frozen.
 
 ### 4. `stapler_save_memory` Ollama tool: tags parameter declared as `type: "string"` (comma-delimited) but REST API expects `string[]`
 **File:** `packages/adapters/ollama-local/src/server/tools.ts` lines 258–261

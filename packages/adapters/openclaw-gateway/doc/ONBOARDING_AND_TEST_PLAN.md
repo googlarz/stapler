@@ -105,5 +105,5 @@ If full suite is too heavy locally, run at least:
 pnpm --filter @stapler/server test:run -- openclaw-gateway
 pnpm --filter @stapler/server typecheck
 pnpm --filter @stapler/ui typecheck
-pnpm --filter paperclipai typecheck
+pnpm --filter stapler typecheck
 ```

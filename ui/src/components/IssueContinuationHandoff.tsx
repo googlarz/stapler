@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { IssueDocument } from "@paperclipai/shared";
-import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@paperclipai/shared";
+import type { IssueDocument } from "@stapler/shared";
+import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@stapler/shared";
 import { Button } from "@/components/ui/button";
 import { cn, relativeTime } from "../lib/utils";
 import { MarkdownBody } from "./MarkdownBody";

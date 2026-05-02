@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { Agent, FeedbackVote, IssueComment } from "@paperclipai/shared";
+import type { Agent, FeedbackVote, IssueComment } from "@stapler/shared";
 import type { TranscriptEntry } from "@/adapters";
 import type { LiveRunForIssue } from "@/api/heartbeats";
 import { CommentThread } from "@/components/CommentThread";

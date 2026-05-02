@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { documents, issueDocuments, issues } from "@paperclipai/db";
-import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@paperclipai/shared";
+import type { Db } from "@stapler/db";
+import { documents, issueDocuments, issues } from "@stapler/db";
+import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@stapler/shared";
 import { documentService } from "./documents.js";
 
 export { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY };

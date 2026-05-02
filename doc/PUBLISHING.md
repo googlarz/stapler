@@ -140,7 +140,7 @@ Example:
 This keeps the default install path unchanged while allowing explicit installs with:
 
 ```bash
-npx paperclipai@canary onboard
+npx @googlarz/stapler@canary onboard
 ```
 
 The release script now verifies two things after a canary publish:
