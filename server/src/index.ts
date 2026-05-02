@@ -18,6 +18,8 @@ import {
   reconcilePendingMigrationHistory,
   formatDatabaseBackupResult,
   runDatabaseBackup,
+  buildEmbeddedPostgresFlags,
+  assertPgNotReachableOnInterfaces,
   authUsers,
   companies,
   companyMemberships,
@@ -73,6 +75,7 @@ type EmbeddedPostgresCtor = new (opts: {
   port: number;
   persistent: boolean;
   initdbFlags?: string[];
+  postgresFlags?: string[];
   onLog?: (message: unknown) => void;
   onError?: (message: unknown) => void;
 }) => EmbeddedPostgresInstance;
@@ -386,6 +389,7 @@ export async function startServer(): Promise<StartedServer> {
           port,
           persistent: true,
           initdbFlags: ["--encoding=UTF8", "--locale=C", "--lc-messages=C"],
+          postgresFlags: buildEmbeddedPostgresFlags(),
           onLog: appendEmbeddedPostgresLog,
           onError: appendEmbeddedPostgresLog,
         });
@@ -418,9 +422,15 @@ export async function startServer(): Promise<StartedServer> {
           });
         }
         embeddedPostgresStartedByThisProcess = true;
+        try {
+          await assertPgNotReachableOnInterfaces(port);
+        } catch (err) {
+          logger.error({ err, port }, "Embedded PostgreSQL lockdown assertion failed — database is reachable on a non-loopback interface");
+          throw err;
+        }
       }
     }
-  
+
     const embeddedAdminConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${port}/postgres`;
     const dbStatus = await ensurePostgresDatabase(embeddedAdminConnectionString, "paperclip");
     if (dbStatus === "created") {
