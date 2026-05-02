@@ -197,7 +197,12 @@ function shouldImplicitlyMoveCommentedIssueToTodo(input: {
   // Only human comments should implicitly reopen finished work.
   // Agent-authored comments remain communicative unless reopen was explicit.
   if (input.actorType !== "user") return false;
-  if (!isClosedIssueStatus(input.issueStatus) && input.issueStatus !== "blocked") return false;
+  // Done and cancelled issues require an explicit reopen: true signal — a
+  // board comment alone (including automated routine board comments) must not
+  // silently revert a terminal decision.  Only blocked issues auto-resume on
+  // a user comment because the user is typically acknowledging that the
+  // blocker has been resolved.
+  if (input.issueStatus !== "blocked") return false;
   if (typeof input.assigneeAgentId !== "string" || input.assigneeAgentId.length === 0) return false;
   return true;
 }
