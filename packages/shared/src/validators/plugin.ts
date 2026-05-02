@@ -101,7 +101,17 @@ export type PluginWebhookDeclarationInput = z.infer<typeof pluginWebhookDeclarat
  * @see PLUGIN_SPEC.md §11 — Agent Tools
  */
 export const pluginToolDeclarationSchema = z.object({
-  name: z.string().min(1),
+  // Tool names are namespaced at runtime as `<plugin-id>:<tool-name>` (see
+  // `plugin-tool-registry.ts` — `lastIndexOf(':')` is the only delimiter), so
+  // the bare name must not contain ':'. We additionally require a lowercase
+  // alnum allowlist to mirror `pluginEnvironmentDriverDeclarationSchema.driverKey`
+  // and to keep whitespace, control chars, path separators, and unicode
+  // lookalikes out of the registry key. PLA-58 surfaced a `cad:run_script` typo
+  // that this catches at install/upgrade.
+  name: z.string().min(1).regex(
+    /^[a-z0-9][a-z0-9._-]*$/,
+    "Tool name must start with a lowercase alphanumeric and contain only lowercase letters, digits, dots, hyphens, or underscores",
+  ),
   displayName: z.string().min(1),
   description: z.string().min(1),
   parametersSchema: jsonSchemaSchema,
