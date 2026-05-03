@@ -415,9 +415,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const shouldUseResumeDeltaPrompt = Boolean(sessionId) && wakePrompt.length > 0;
     const renderedPrompt = shouldUseResumeDeltaPrompt ? "" : renderTemplate(promptTemplate, templateData);
     const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+    const delegationPolicySection = sessionId
+      ? ""
+      : [
+          "## Delegation Policy",
+          "",
+          "When delegating tasks to sub-agents using the `task` tool, you MUST set `run_in_background=false`.",
+          "NEVER use run_in_background=true — background tasks cannot report results back to you.",
+          "Your process exits when you stop responding, so all delegated work must complete synchronously.",
+          "run_in_background=false is the only safe option for multi-agent coordination.",
+        ].join("\n");
     const prompt = joinPromptSections([
       instructionsPrefix,
       renderedBootstrapPrompt,
+      delegationPolicySection,
       wakePrompt,
       sessionHandoffNote,
       renderedPrompt,
@@ -545,6 +556,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       };
     };
 
+    const MAX_DELEGATION_CONTINUATIONS = 2;
+
     try {
       const initial = await runAttempt(sessionId);
       const initialFailed =
@@ -562,7 +575,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         return toResult(retry, true);
       }
 
-      return toResult(initial);
+      // If the run triggered a background delegation, resume the session so the
+      // agent can collect the sub-agent result. Cap at MAX_DELEGATION_CONTINUATIONS.
+      let current = initial;
+      for (let i = 0; i < MAX_DELEGATION_CONTINUATIONS; i++) {
+        if (!current.parsed.hasBackgroundDelegation) break;
+        const continuationSessionId = current.parsed.sessionId ?? sessionId;
+        if (!continuationSessionId) break;
+        await onLog("stdout", `[paperclip] Background delegation detected; resuming session "${continuationSessionId}".\n`);
+        current = await runAttempt(continuationSessionId);
+      }
+
+      return toResult(current);
     } finally {
       await Promise.all([
         paperclipBridge?.stop(),
