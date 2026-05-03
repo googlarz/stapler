@@ -1121,7 +1121,7 @@ export async function listPaperclipSkillEntries(
       const skillDir = path.join(root, entry.name);
       const required = await readSkillRequired(skillDir);
       return {
-        key: `paperclipai/paperclip/${entry.name}`,
+        key: `stapler/stapler/${entry.name}`,
         runtimeName: entry.name,
         source: skillDir,
         required,
@@ -1248,8 +1248,8 @@ export function buildPersistentSkillSnapshot(
   };
 }
 
-function normalizeConfiguredPaperclipRuntimeSkills(value: unknown): PaperclipSkillEntry[] {
-  if (!Array.isArray(value)) return [];
+function normalizeConfiguredPaperclipRuntimeSkills(value: unknown): PaperclipSkillEntry[] | null {
+  if (!Array.isArray(value)) return null;
   const out: PaperclipSkillEntry[] = [];
   for (const rawEntry of value) {
     const entry = parseObject(rawEntry);
@@ -1277,7 +1277,7 @@ export async function readPaperclipRuntimeSkillEntries(
   additionalCandidates: string[] = [],
 ): Promise<PaperclipSkillEntry[]> {
   const configuredEntries = normalizeConfiguredPaperclipRuntimeSkills(config.paperclipRuntimeSkills);
-  if (configuredEntries.length > 0) return configuredEntries;
+  if (configuredEntries !== null) return configuredEntries;
   return listPaperclipSkillEntries(moduleDir, additionalCandidates);
 }
 
