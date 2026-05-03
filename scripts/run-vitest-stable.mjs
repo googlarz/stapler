@@ -15,7 +15,7 @@ const nonServerProjects = [
   "@stapler/adapter-codex-local",
   "@stapler/adapter-opencode-local",
   "@stapler/ui",
-  "paperclipai",
+  "@stapler/adapter-claude-local",
 ];
 const routeTestPattern = /[^/]*(?:route|routes|authz)[^/]*\.test\.ts$/;
 const additionalSerializedServerTests = new Set([
