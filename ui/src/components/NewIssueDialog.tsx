@@ -367,6 +367,7 @@ export function NewIssueDialog() {
   const titleRef = useRef("");
   const descriptionRef = useRef("");
   const [titleHasText, setTitleHasText] = useState(false);
+  const [showTitleRequired, setShowTitleRequired] = useState(false);
   const [draftHasText, setDraftHasText] = useState(false);
   const [status, setStatus] = useState("todo");
   const [priority, setPriority] = useState("");
@@ -588,6 +589,7 @@ export function NewIssueDialog() {
     setTitle(nextTitle);
     setDescription(nextDescription);
     setTitleHasText(nextTitle.trim().length > 0);
+    if (nextTitle.trim().length > 0) setShowTitleRequired(false);
     setDraftHasText(nextTitle.trim().length > 0 || nextDescription.trim().length > 0);
   }, []);
 
@@ -635,6 +637,7 @@ export function NewIssueDialog() {
     const nextDraftHasText = nextTitleHasText || descriptionRef.current.trim().length > 0;
     setTitleHasText((current) => current === nextTitleHasText ? current : nextTitleHasText);
     setDraftHasText((current) => current === nextDraftHasText ? current : nextDraftHasText);
+    if (nextTitleHasText) setShowTitleRequired(false);
     queueDraftSave({ title: nextTitle });
   }, [queueDraftSave]);
 
@@ -866,7 +869,12 @@ export function NewIssueDialog() {
   function handleSubmit() {
     const currentTitle = titleRef.current.trim();
     const currentDescription = descriptionRef.current.trim();
-    if (!effectiveCompanyId || !currentTitle || createIssue.isPending) return;
+    if (!currentTitle) {
+      setShowTitleRequired(true);
+      return;
+    }
+    if (!effectiveCompanyId || createIssue.isPending) return;
+    setShowTitleRequired(false);
     const effectiveLane = assigneeSupportsCheapLane
       ? assigneeModelLane
       : assigneeModelLane === "cheap"
@@ -1247,6 +1255,11 @@ export function NewIssueDialog() {
               projectSelectorRef={projectSelectorRef}
               onChange={handleTitleChange}
             />
+            {showTitleRequired && (
+              <p className="mt-1 text-sm text-destructive">
+                <strong>Issue title is required</strong> — Please enter an issue title before creating
+              </p>
+            )}
           </div>
 
           <div className="px-4 pb-2">
@@ -1879,7 +1892,7 @@ export function NewIssueDialog() {
             <Button
               size="sm"
               className="min-w-[8.5rem] disabled:opacity-100"
-              disabled={!titleHasText || createIssue.isPending}
+              disabled={createIssue.isPending}
               onClick={handleSubmit}
               aria-busy={createIssue.isPending}
             >
